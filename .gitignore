@@ -1,0 +1,14 @@
+# Build outputs and local-only configuration
+bin/
+obj/
+local.settings.json
+Directory.Build.props
+*.dll
+*.pdb
+*.7z
+*.zip
+
+# Art and media are intentionally excluded from this source-only publication
+assets/**/*.png
+nexus-media/
+source-art/
