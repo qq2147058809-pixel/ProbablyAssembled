@@ -1,6 +1,6 @@
 using Il2Cpp;
 
-namespace ProbablyAssembled;
+namespace PCExpansion;
 
 /// <summary>
 /// 机箱物品的判断辅助。具体机箱物品（5 级 × 完好/损坏）由 Components 统一注册，

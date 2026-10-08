@@ -21,7 +21,7 @@ function Resolve-ProbablyStolenGameDir {
                 $source = $settingsPath
             }
             catch {
-                throw "无法读取本地配置 $settingsPath。请重新运行 configure.ps1。$($_.Exception.Message)"
+                throw "无法读取本地配置 $settingsPath。请检查JSON格式，或从local.settings.example.json重新创建local.settings.json并填写GameDir/StorageRoot。$($_.Exception.Message)"
             }
         }
     }
@@ -29,7 +29,7 @@ function Resolve-ProbablyStolenGameDir {
     if ([string]::IsNullOrWhiteSpace($candidate)) {
         throw @'
 尚未配置 Probably Stolen 游戏目录。请选择一种方式：
-1. 首次运行：.\configure.ps1 -GameDir "你的游戏目录"
+1. 复制local.settings.example.json为local.settings.json，填写GameDir和外部StorageRoot
 2. 临时指定：.\build.ps1 -GameDir "你的游戏目录"
 3. 设置环境变量 PROBABLY_STOLEN_GAME_DIR
 '@
@@ -44,4 +44,3 @@ function Resolve-ProbablyStolenGameDir {
     }
     return $resolved.TrimEnd('\', '/')
 }
-

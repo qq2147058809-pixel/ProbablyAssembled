@@ -1,14 +1,22 @@
-# Build outputs and local-only configuration
+# Source-only publication. Original artwork and local dependencies are excluded.
 bin/
 obj/
 local.settings.json
 Directory.Build.props
+.pcexpansion-deploy.lock
 *.dll
+*.exe
 *.pdb
-*.7z
 *.zip
-
-# Art and media are intentionally excluded from this source-only publication
-assets/**/*.png
+*.7z
+*.log
+*.tmp
+*.bak
+*.bak-*
+*.workspace.bak-*
+__pycache__/
+*.pyc
+assets/**
+!assets/.gitkeep
 nexus-media/
 source-art/

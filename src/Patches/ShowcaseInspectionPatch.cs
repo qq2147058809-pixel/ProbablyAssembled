@@ -2,7 +2,7 @@ using System;
 using HarmonyLib;
 using Il2Cpp;
 
-namespace ProbablyAssembled;
+namespace PCExpansion;
 
 /// <summary>原版检查先读取箱体状态；展示窗买家候选仍由随后原版流程决定。</summary>
 [HarmonyPatch(typeof(ShowcaseHelper), nameof(ShowcaseHelper.IsShowCaseContainSeriousContraband))]
@@ -15,7 +15,7 @@ internal static class ShowcaseCasePropertiesPatch
             var items = EmporiumEntry.Instance?.showcaseElement?.childItems;
             if (items == null) return;
             foreach (var item in items)
-                if (ComputerCase.IsCase(item)) CaseInteriorUI.SyncCaseForTrading(item);
+                if (ComputerCase.IsCase(item)) CaseEconomy.EvaluateCase(item);
         }
         catch (Exception ex) { Core.Log?.Warning("展示窗检查前同步机箱失败：" + ex.Message); }
     }

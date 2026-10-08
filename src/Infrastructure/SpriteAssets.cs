@@ -7,7 +7,7 @@ using Il2Cpp;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using UnityEngine;
 
-namespace ProbablyAssembled;
+namespace PCExpansion;
 
 /// <summary>
 /// 本 MOD 全部嵌入式 PNG 的统一入口；占格决定画布比例，PPU 自动计算。
@@ -42,26 +42,31 @@ internal static class SpriteAssets
         {
             var type = item.Owner;
             var state = item.Broken ? "_broken" : "";
-            var primary = "ProbablyAssembled.Assets." + type.Stem + "_t" + item.Tier + state + ".png";
+            var primary = "PCExpansion.Assets." + type.Stem + "_t" + item.Tier + state + ".png";
             var fallback = type.IsCase
-                ? "ProbablyAssembled.Assets." + (item.Broken ? "computer_case.png" : "computer_case_intact.png")
-                : "ProbablyAssembled.Assets." + type.Stem + "_t" + item.Tier + ".png";
+                ? "PCExpansion.Assets." + (item.Broken ? "computer_case.png" : "computer_case_intact.png")
+                : "PCExpansion.Assets." + type.Stem + "_t" + item.Tier + ".png";
             specs[item.SpriteKey] = new Spec(primary, fallback, type.Width, type.Height);
         }
 
-        // 拆机螺丝刀（非分级物品，单独登记）
-        specs[UnboxTool.SpriteKey] = new Spec(
-            "ProbablyAssembled.Assets.tool_screwdriver.png",
-            "ProbablyAssembled.Assets.tool_screwdriver.png", 1, 3);
         specs[ContactCard.SpriteKey] = new Spec(
-            "ProbablyAssembled.Assets.contact_card_0504.png",
-            "ProbablyAssembled.Assets.contact_card_0504.png", 2, 1);
+            "PCExpansion.Assets.contact_card_0504.png",
+            "PCExpansion.Assets.contact_card_0504.png", 2, 1);
+        specs[ComputerManual.SpriteKey] = new Spec(
+            "PCExpansion.Assets.computer_manual_icon.png",
+            "PCExpansion.Assets.computer_manual_icon.png", 2, 3);
+        specs[ComputerSign.SpriteKey] = new Spec(
+            "PCExpansion.Assets.computer_sign.png",
+            "PCExpansion.Assets.computer_sign.png", 2, 2);
         specs[LowerAssemblerNpc.SpriteKey] = new Spec(
-            "ProbablyAssembled.Assets.lower_assembler.png",
-            "ProbablyAssembled.Assets.lower_assembler.png", 18, 13);
+            "PCExpansion.Assets.lower_assembler.png",
+            "PCExpansion.Assets.lower_assembler.png", 18, 13);
+        specs[PhoneAssemblerNpc.SpriteKey] = new Spec(
+            "PCExpansion.Assets.phone_assembler.png",
+            "PCExpansion.Assets.phone_assembler.png", 18, 13);
         specs[UpperComputerBuyerNpc.SpriteKey] = new Spec(
-            "ProbablyAssembled.Assets.upper_computer_buyer.png",
-            "ProbablyAssembled.Assets.upper_computer_buyer.png", 18, 13);
+            "PCExpansion.Assets.upper_computer_buyer.png",
+            "PCExpansion.Assets.upper_computer_buyer.png", 18, 13);
         return specs;
     }
 
@@ -84,26 +89,40 @@ internal static class SpriteAssets
         Cache.Remove(key);
     }
 
-    internal static bool IsSpriteKey(string? rawKey) => Specs.ContainsKey(Core.Clean(rawKey));
+    internal static bool IsSpriteKey(string? rawKey) => Specs.ContainsKey(Core.Clean(rawKey)) || WorkroomComponentParts.IsSpriteKey(Core.Clean(rawKey));
+
+    internal static Sprite? PartArtwork(string artwork, int width, int height)
+    {
+        var resource = "PCExpansion.Assets." + artwork + ".png";
+        if (Assembly.GetExecutingAssembly().GetManifestResourceInfo(resource) == null) return null;
+        if (!Specs.ContainsKey(artwork)) Specs[artwork] = new Spec(resource, resource, width, height);
+        return Get(artwork);
+    }
 
     internal static Sprite? Get(string? rawKey)
     {
         var key = Core.Clean(rawKey);
+        if (WorkroomComponentParts.IsSpriteKey(key)) return WorkroomComponentParts.Sprite(key);
         if (!Specs.TryGetValue(key, out var spec)) return null;
         if (Cache.TryGetValue(key, out var cached) && cached != null) return cached;
+        Texture2D? texture = null;
+        Sprite? sprite = null;
+        var published = false;
         try
         {
             byte[]? bytes = LoadEmbedded(spec, out var usedResource);
             if (bytes == null) return null;
 
-            var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false)
+            texture = new Texture2D(2, 2, TextureFormat.RGBA32, false)
             {
                 name = key + "_texture",
                 filterMode = FilterMode.Point,
                 wrapMode = TextureWrapMode.Clamp,
                 anisoLevel = 0
             };
-            if (!ImageConversion.LoadImage(texture, new Il2CppStructArray<byte>(bytes), true))
+            // Native inventory Images alpha-test sprite pixels during hover/drag.
+            // Keep the shared texture readable so that test can sample transparent edges.
+            if (!ImageConversion.LoadImage(texture, new Il2CppStructArray<byte>(bytes), false))
             {
                 Core.Log?.Error("PNG 解码失败：" + usedResource);
                 return null;
@@ -115,12 +134,13 @@ internal static class SpriteAssets
             var pivot = PortraitPivots.TryGetValue(key, out var referencePivot)
                 ? referencePivot : new Vector2(0.5f, 0.5f);
             UnityEngine.Object.DontDestroyOnLoad(texture);
-            var sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
+            sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
                 pivot, pixelsPerUnit);
             sprite.name = key;
             UnityEngine.Object.DontDestroyOnLoad(sprite);
             Cache[key] = sprite;
-            if (key == LowerAssemblerNpc.SpriteKey || key == UpperComputerBuyerNpc.SpriteKey)
+            published = true;
+            if (key == LowerAssemblerNpc.SpriteKey || key == PhoneAssemblerNpc.SpriteKey || key == UpperComputerBuyerNpc.SpriteKey)
                 Core.Log?.Msg("[深空装机] NPC 立绘已加载：" + key + "，" + texture.width + "×" + texture.height +
                     "，PPU=" + pixelsPerUnit + "，Point 过滤，原版尺寸参照=" + PortraitWorldSizes.ContainsKey(key));
             Core.Debug("已加载贴图：" + key + "（" + texture.width + "×" + texture.height + "，来源=" + usedResource + "）");
@@ -130,6 +150,16 @@ internal static class SpriteAssets
         {
             Core.Log?.Error("贴图加载失败（" + key + "）：" + ex);
             return null;
+        }
+        finally
+        {
+            if (!published)
+            {
+                try { if (sprite != null) UnityEngine.Object.Destroy(sprite); }
+                catch (Exception ex) { Core.Log?.Warning("未发布贴图Sprite释放失败：" + ex.Message); }
+                try { if (texture != null) UnityEngine.Object.Destroy(texture); }
+                catch (Exception ex) { Core.Log?.Warning("未发布贴图Texture释放失败：" + ex.Message); }
+            }
         }
     }
 

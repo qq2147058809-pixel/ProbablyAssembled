@@ -1,8 +1,9 @@
 using System;
+using System.Collections.Generic;
 using HarmonyLib;
 using Il2Cpp;
 
-namespace ProbablyAssembled;
+namespace PCExpansion;
 
 /// <summary>上城区电脑收购商：通过原版展示窗访客流程触发，收购完好电脑商品并出售高阶破损机箱。</summary>
 internal static class UpperComputerBuyerNpc
@@ -14,6 +15,28 @@ internal static class UpperComputerBuyerNpc
     internal const string StockTag = "PCREPAIR_UPPER_BUYER_STOCK";
     private const string ShowcaseType = "PCREPAIR_COMPUTER_BUYER";
     private static readonly Random random = new();
+
+    [HarmonyPatch(typeof(TypeHelper), nameof(TypeHelper.GetTypeDisplayName))]
+    internal static class ShowcaseNamePatch
+    {
+        private static bool Prefix(string __0, ref string __result)
+        {
+            if (Core.Clean(__0) != ShowcaseType) return true;
+            __result = LanguageText.Get("showcase.pc_buyer.reason");
+            return false;
+        }
+    }
+
+    [HarmonyPatch(typeof(TypeHelper), nameof(TypeHelper.GetTypeColor))]
+    internal static class ShowcaseColorPatch
+    {
+        private static bool Prefix(string __0, ref UnityEngine.Color __result)
+        {
+            if (Core.Clean(__0) != ShowcaseType) return true;
+            __result = new UnityEngine.Color(0.34f, 0.65f, 0.34f, 1f);
+            return false;
+        }
+    }
 
     internal static bool IsBuyer(StoreClient? client) =>
         client != null && (client.IsTag(ClientTag) || Core.Clean(client.identifier) == Id);
@@ -42,7 +65,7 @@ internal static class UpperComputerBuyerNpc
             SpriteAssets.SetPortraitReference(SpriteKey, portraitReference);
 
         client.identifier = Id;
-        client.displayName = LanguageText.Get("上城区电脑收购商", "Uptown PC Buyer");
+        client.displayName = LanguageText.Get("text.e7abf8ee21e9");
         client.realName = client.displayName;
         client.spriteName = SpriteKey;
         client.clientFaction = StoreClient.FACTION_UPPER;
@@ -70,22 +93,13 @@ internal static class UpperComputerBuyerNpc
         client.isRequireVariety = false;
         client.isMultiBuyDisabled = false;
         // 原版直接把该值传给 Discount 的价值修正；负数才会让玩家买价下降。
-        client.wholesaleDiscount = -30;
+        client.wholesaleDiscount = -10;
     }
 
     private static void ApplyBuyerBudget(StoreClient client)
     {
         // 预算覆盖一台最高 T5 完整机的估值及小费，并留出额外配件收购空间。
-        long maxMachineValue = 0;
-        var caseType = Array.Find(Components.All, type => type.IsCase);
-        if (caseType != null) maxMachineValue += Components.ValueFor(caseType, Components.TierCount, false);
-        foreach (var slot in CaseInteriorUI.SlotTable)
-        {
-            var partType = Array.Find(Components.All, type => !type.IsCase && type.Tag == slot.Tag);
-            if (partType != null)
-                maxMachineValue += Components.ValueFor(partType, Components.TierCount, false);
-        }
-
+        long maxMachineValue = WorkroomMachineAssembly.MaximumMachineValue(5);
         var budget = checked((int)Math.Ceiling(maxMachineValue * 1.25 * 1.15 * 2.0));
         client.SetBudget(budget);
         client.OverrideBudget(budget);
@@ -98,20 +112,32 @@ internal static class UpperComputerBuyerNpc
     private static void ConfigureDialogue(StoreClient client)
     {
         var greeting = new Dialogue()
-            .SetText(client.displayName, LanguageText.Get("拿出点实在货我看看，不要T3以下的电子垃圾。",
-                "Show me the good stuff. I don't deal in anything below T3.") );
+            .SetText(client.displayName, LanguageText.Get("text.da4324746524") );
         var offer = new Dialogue()
-            .SetText(client.displayName, LanguageText.Get("我这有个没啥用的主机你想要就卖你了。",
-                "I've got a spare tower gathering dust. Make me an offer.") );
+            .SetText(client.displayName, LanguageText.Get("text.8d59d9e16dff") );
         greeting.isMainDialog = true;
         greeting.SetNextDialogue(offer);
         client.mainDialogue = greeting;
         client.isMainDialogueStarted = false;
         client.placedWrongItemWhenSellingToDialogue = new Dialogue().SetText(client.displayName,
-            LanguageText.Get("我只收完好的 T2 及以上电脑配件，以及标签合格的整机。",
-                "I only buy working T2+ PC parts and complete builds that meet my standards.") );
+            LanguageText.Get("text.c9eaa60d077e") );
         client.placeRightItemWhenSellingToDialogue = new Dialogue().SetText(client.displayName,
-            LanguageText.Get("这件可以，咱们谈个价吧。", "That'll do. Let's agree on a price.") );
+            LanguageText.Get("text.bb9a3627859b") );
+    }
+
+    private static Dialogue RefusalDialogue(StoreClient client, GameItem? item)
+    {
+        try
+        {
+            var spec = item == null ? null : Components.Find(Core.Clean(item.identifier));
+            if (spec != null && !spec.Owner.IsCase && WorkroomComponentParts.ConfigurationTier(item!) <= 2)
+                return new Dialogue().SetText(client.displayName,
+                    LanguageText.Get("text.2c6bd05e0f43") );
+        }
+        catch (Exception ex) { Core.Log?.Warning("读取电脑拒收原因失败，使用通用对白：" + ex.Message); }
+
+        return new Dialogue().SetText(client.displayName,
+            LanguageText.Get("text.c9eaa60d077e") );
     }
 
     private static bool IsAllowedPurchase(GameItem? item)
@@ -122,15 +148,18 @@ internal static class UpperComputerBuyerNpc
             if (Components.IsComponent(item))
             {
                 var component = Components.Find(Core.Clean(item.identifier));
+                if (component?.Owner.Tag == Components.MotherboardTag)
+                    return WorkroomMachineAssembly.AllowsBoardPurchase(WorkroomMachineAssembly.Read(item), component.Tier,
+                        component.Broken || item.IsTag(Components.BrokenTag), 3, 5);
                 return component != null && !component.Owner.IsCase && !component.Broken &&
-                       component.Tier >= 2 && !item.IsTag(Components.BrokenTag);
+                       WorkroomComponentParts.ConfigurationTier(item) >= 3 && !item.IsTag(Components.BrokenTag);
             }
 
             if (!ComputerCase.IsCase(item) || item.IsTag(Components.BrokenTag)) return false;
-            CaseInteriorUI.SyncCaseForTrading(item);
+            CaseEconomy.EvaluateCase(item);
             var label = CaseEconomy.MachineLabel(item);
             if (label != "整机" && label != "刀把机" && label != "性价比机器") return false;
-            return !HasBrokenContainedPart(item);
+            return !HasDisallowedContainedPart(item);
         }
         catch (Exception ex)
         {
@@ -177,21 +206,9 @@ internal static class UpperComputerBuyerNpc
         }
     }
 
-    private static bool HasBrokenContainedPart(GameItem caseItem)
+    private static bool HasDisallowedContainedPart(GameItem caseItem)
     {
-        for (var slotIndex = 0; slotIndex < CaseInteriorUI.SlotTable.Length; slotIndex++)
-        {
-            foreach (var type in Components.All)
-            {
-                if (type.IsCase) continue;
-                for (var tier = 1; tier <= Components.TierCount; tier++)
-                {
-                    var brokenId = "pcrepair." + type.Stem + "_t" + tier + "_broken";
-                    if (caseItem.IsTag(CaseInteriorUI.SlotTagPrefix + slotIndex + "_" + brokenId))
-                        return true;
-                }
-            }
-        }
+        foreach (var part in CaseEconomy.Parts(caseItem)) if (part.Broken || part.Tier < 3) return true;
         return false;
     }
 
@@ -206,6 +223,31 @@ internal static class UpperComputerBuyerNpc
         registry[Id] = Factory();
     }
 
+    internal static bool IsEligibleShowcaseItem(GameItem? item)
+    {
+        if (item == null) return false;
+        try
+        {
+            var spec = Components.Find(Core.Clean(item.identifier));
+            if (spec?.Owner.Tag == Components.MotherboardTag &&
+                WorkroomMachineAssembly.Read(item) is { } machine && machine.Kind == WorkroomMachineAssembly.Motherboard)
+            {
+                var assessment = WorkroomMachineAssembly.Assess(machine);
+                return !item.IsTag(Components.BrokenTag) && spec?.Broken == false && assessment.UpperShowcaseEligible;
+            }
+            if (spec != null && !spec.Owner.IsCase)
+                return WorkroomComponentParts.ConfigurationTier(item) >= 4 && IsAllowedPurchase(item);
+            // 招客与实际收购使用同一资格，不能用含低阶/破损件的机箱吸引收购商。
+            return ComputerCase.IsCase(item) && IsAllowedPurchase(item) &&
+                   CaseEconomy.HighestStoredPartTier(item) >= 4;
+        }
+        catch (Exception ex)
+        {
+            Core.Log?.Warning("电脑橱窗资格判断失败：" + ex.Message);
+            return false;
+        }
+    }
+
     private static bool HasEligibleT4OrHigherPartInShowcase()
     {
         try
@@ -214,16 +256,7 @@ internal static class UpperComputerBuyerNpc
             if (items == null) return false;
             foreach (var item in items)
             {
-                if (item == null) continue;
-                var spec = Components.Find(Core.Clean(item.identifier));
-                if (spec != null && !spec.Owner.IsCase && !spec.Broken && spec.Tier >= 4 &&
-                    !item.IsTag(Components.BrokenTag)) return true;
-                if (ComputerCase.IsCase(item) && !item.IsTag(Components.BrokenTag))
-                {
-                    CaseInteriorUI.SyncCaseForTrading(item);
-                    if (CaseEconomy.MachineLabel(item) != null &&
-                        CaseEconomy.HighestStoredPartTier(item) >= 4) return true;
-                }
+                if (IsEligibleShowcaseItem(item)) return true;
             }
         }
         catch (Exception ex)
@@ -243,18 +276,10 @@ internal static class UpperComputerBuyerNpc
 
             ConfigurePurchaseRules(client!);
             ApplyBuyerBudget(client!);
-            if (HasExistingStock()) return;
-
-            var tier = random.Next(4, 6);
-            var item = DirectoryMaster.Item("pcrepair.computer_case_t" + tier + "_broken", true);
-            if (item == null)
+            NpcStockOffers.Stock(store, client!, StockTag, "UPPER", () => new List<string>
             {
-                Core.Log?.Warning("上城区电脑收购商库存机箱尚未注册：T" + tier + " 破损机箱");
-                return;
-            }
-            item.EnableTag(StockTag, false);
-            store.AddDirectSellingItemToTable(item, false, false, false, 0);
-            Core.Log?.Msg("上城区电脑收购商库存已上柜：1 个 T" + tier + " 破损机箱，购买价享 30% 折扣。");
+                "pcrepair.computer_case_t" + random.Next(4, 6) + "_broken"
+            }, 1, 1, id => Components.Find(id) is { } spec && spec.Owner.IsCase && spec.Broken && spec.Tier >= 4);
         }
         catch (Exception ex)
         {
@@ -262,20 +287,14 @@ internal static class UpperComputerBuyerNpc
         }
     }
 
-    private static bool HasExistingStock()
+    [HarmonyPatch(typeof(PlayerStore), nameof(PlayerStore.LoadGame))]
+    internal static class StockLoadPatch
     {
-        try
+        [HarmonyPriority(Priority.Last)]
+        private static void Postfix(PlayerStore __instance, bool __runOriginal)
         {
-            var items = EmporiumEntry.Instance?.GetAllNonOwnedItem();
-            if (items == null) return false;
-            foreach (var item in items)
-                if (item != null && item.IsTag(StockTag)) return true;
+            if (__runOriginal && __instance.isClientArrived && IsBuyer(__instance.currentClientInstance?.storeClient)) AddStock();
         }
-        catch (Exception ex)
-        {
-            Core.Log?.Warning("检查上城区电脑收购商现有库存失败：" + ex.Message);
-        }
-        return false;
     }
 
     [HarmonyPatch(typeof(ShowcaseHelper), nameof(ShowcaseHelper.GetDisplayCaseType))]
@@ -352,7 +371,9 @@ internal static class UpperComputerBuyerNpc
     {
         private static void Postfix(StoreClient __instance, GameItem gameItem, ref bool __result)
         {
-            if (IsBuyer(__instance)) __result = !IsAllowedPurchase(gameItem);
+            if (!IsBuyer(__instance)) return;
+            __result = !IsAllowedPurchase(gameItem);
+            if (__result) __instance.placedWrongItemWhenSellingToDialogue = RefusalDialogue(__instance, gameItem);
         }
     }
 
@@ -371,7 +392,7 @@ internal static class UpperComputerBuyerNpc
         private static void Prefix(PlayerStore __instance, GameItem targetItem)
         {
             if (!IsBuyer(__instance.currentClientInstance?.storeClient) || targetItem == null) return;
-            if (ComputerCase.IsCase(targetItem)) CaseInteriorUI.SyncCaseForTrading(targetItem);
+            if (ComputerCase.IsCase(targetItem)) CaseEconomy.EvaluateCase(targetItem);
             RefreshPurchaseEligibility(targetItem);
         }
     }
@@ -382,7 +403,7 @@ internal static class UpperComputerBuyerNpc
         private static void Prefix(PlayerStore __instance, GameItem gameItem)
         {
             if (!IsBuyer(__instance.currentClientInstance?.storeClient) || gameItem == null) return;
-            if (ComputerCase.IsCase(gameItem)) CaseInteriorUI.SyncCaseForTrading(gameItem);
+            if (ComputerCase.IsCase(gameItem)) CaseEconomy.EvaluateCase(gameItem);
             RefreshPurchaseEligibility(gameItem);
         }
 
@@ -412,7 +433,12 @@ internal static class UpperComputerBuyerNpc
                 }
                 else if (__instance.IsTag(StockTag) && !__instance.IsAlreadyContainFeatureWithId("discount"))
                 {
-                    __instance.AddItemFeature(ItemFeatureList.Discount(-30));
+                    __instance.AddItemFeature(ItemFeatureList.Discount(-10));
+                }
+                else if (__instance.IsTag(StockTag))
+                {
+                    // Existing stock can retain the old 30% feature across saves.
+                    __instance.FindItemFeatureByID("discount")?.SetValueModifier(-10);
                 }
             }
             catch (Exception ex) { Core.Log?.Warning("同步上城区交易词条失败：" + ex.Message); }

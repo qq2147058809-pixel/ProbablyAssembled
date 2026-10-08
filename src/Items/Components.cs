@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using HarmonyLib;
 using Il2Cpp;
 
-namespace ProbablyAssembled;
+namespace PCExpansion;
 
 /// <summary>
 /// 分级物品体系：9 种类型（机箱 + 8 种配件）× 5 个等级（T1 最低 ~ T5 最高）× 完好/损坏。
@@ -38,72 +38,21 @@ internal static class Components
     {
         internal readonly string Stem;
         internal readonly string Tag;
-        internal readonly string NameZh;
-        internal string Name => LanguageText.Get(NameZh, EnglishName);
-        internal readonly string IntactDescZh;
-        internal string IntactDesc => LanguageText.Get(IntactDescZh, EnglishIntactDesc);
-        internal string BrokenDesc => LanguageText.Get(
-            IsCase ? "破损机箱，箱体已上锁；使用拆机螺丝刀打开并查看内部电脑配件。" : "损坏的" + NameZh + "，无法正常使用。",
-            IsCase ? "A damaged, locked PC case. Use the teardown screwdriver to open it and inspect the parts inside." : "A broken " + EnglishName + ". It will not work until repaired.");
-        internal string EnglishName => Tag switch
-        {
-            CaseTag => "PC Case", PsuTag => "Power Supply", MotherboardTag => "Motherboard",
-            HddTag => "Hard Drive", RamTag => "Memory Stick", GpuTag => "Graphics Card",
-            FanTag => "Case Fan", CpuTag => "CPU", CoolerTag => "CPU Cooler", _ => "PC Part"
-        };
-        internal string EnglishIntactDesc => Tag switch
-        {
-            CaseTag => "A sturdy PC case with room for its components.",
-            PsuTag => "A power supply that delivers power to the computer's components.",
-            MotherboardTag => "A motherboard that connects the CPU, memory, graphics card, and other core components.",
-            HddTag => "A mechanical hard drive for storing files and other data.",
-            RamTag => "A memory stick that gives running programs room to work.",
-            GpuTag => "A graphics card that renders images and sends them to the display.",
-            FanTag => "A case fan that moves air through the computer case.",
-            CpuTag => "A central processor that carries out the computer's instructions.",
-            CoolerTag => "A CPU cooler that draws heat away from the processor.",
-            _ => "A computer component in working condition."
-        };
+        internal string NameKey => "item.type." + Stem + ".name";
+        internal string Name => LanguageText.Get(NameKey);
+        internal string IntactDesc => LanguageText.Get("item.type." + Stem + ".intact");
+        internal string BrokenDesc => LanguageText.Get("item.type." + Stem + ".broken");
 
-        internal string EnglishFlavorText => Tag switch
-        {
-            CaseTag => "The little power light has a faint scuff around its edge. Someone must have checked it often.",
-            PsuTag => "The cable label is still tucked neatly under the strap, though the ink has faded at the fold.",
-            MotherboardTag => "The dust around the slots has been carefully wiped away, though one corner of the warranty sticker is peeling. Its last owner seems to have looked after it.",
-            HddTag => "An old capacity sticker clings to the casing. The numbers are still easy to read, even after a few trips through the drawer.",
-            RamTag => "The gold contacts are clean and bright. A tiny strip of label glue remains near one end.",
-            GpuTag => "A little dust is caught between the fan blades. It spins away with a gentle puff.",
-            FanTag => "One blade still has a faint fingerprint near the hub, left behind by someone who gave it a careful wipe.",
-            CpuTag => "The tiny markings on its top are still crisp; someone must have handled it with care.",
-            CoolerTag => "A soft grey thread is caught between two fins. It is the sort of thing you only notice in good light.",
-            _ => string.Empty
-        };
-
-        internal string ChineseFlavorText => Tag switch
-        {
-            CaseTag => "电源小灯边缘有一道浅浅的磨痕，看样子以前常有人伸手去按。",
-            PsuTag => "线材标签还整齐地收在束带下面，只是折痕处的字迹淡了些。",
-            MotherboardTag => "插槽边的灰擦得很干净，只有保修贴的一角翘着。上一任主人看起来挺爱惜它。",
-            HddTag => "外壳上还贴着旧容量标签，数字倒是清楚，像是在抽屉里翻过几回。",
-            RamTag => "金手指擦得很亮，塑料卡扣边上还留着一点点标签胶。",
-            GpuTag => "风扇叶片间卡着一小撮灰，轻轻一吹，灰尘打了个转。",
-            FanTag => "扇叶靠近轴心的地方留着一道浅浅的指印，像是刚被人仔细擦过。",
-            CpuTag => "顶盖上的小字还很清楚，上一任主人拿它时大概挺小心。",
-            CoolerTag => "两片散热鳍片之间夹着一根灰色细绒，得在光线好的时候才能看见。",
-            _ => string.Empty
-        };
         internal readonly string[] TierModels;
         internal readonly int Width, Height;
         internal readonly long BaseValue;
         internal readonly bool IsCase;
 
-        internal Type(string stem, string tag, string name, string intactDesc,
+        internal Type(string stem, string tag,
             int width, int height, long baseValue, bool isCase, params string[] tierModels)
         {
             Stem = stem;
             Tag = tag;
-            NameZh = name;
-            IntactDescZh = intactDesc;
             if (tierModels.Length != TierCount)
                 throw new ArgumentException("每种配件必须配置 T1 至 T5 五个型号。", nameof(tierModels));
             TierModels = tierModels;
@@ -116,33 +65,24 @@ internal static class Components
 
     internal static readonly Type[] All =
     {
-        new("computer_case", CaseTag, "电脑机箱",
-            "完好的电脑机箱，用于容纳和保护内部配件；双击可打开内部面板。", 4, 4, 200, true,
+        new("computer_case", CaseTag, 4, 4, 200, true,
             "MATREXX 30", "NZXT H5", "Corsair 4000D", "Lian Li O11 EVO", "Corsair 1000D"),
-        new("component_psu", PsuTag, "电源",
-            "为电脑各配件供电的电源。", 2, 2, 75, false,
+        new("component_psu", PsuTag, 2, 2, 75, false,
             "MWE 450", "Corsair CX650", "Seasonic GX-750", "Corsair RM850x", "Dark Power 13"),
-        new("component_motherboard", MotherboardTag, "主板",
-            "连接处理器、内存、显卡等核心配件的电脑主板。", 4, 4, 100, false,
+        new("component_motherboard", MotherboardTag, 4, 4, 100, false,
             "MSI H610M-G", "ASUS TUF B760", "MSI Z790 Tomahawk", "A-SUS R0G Z790-E", "ASUS R0G Z890 Hero"),
-        new("component_hdd", HddTag, "硬盘",
-            "用于存储文件和其他数据的机械硬盘。", 3, 1, 65, false,
-            "Seagate BarraCuda 1TB", "WD Blue 2TB", "Toshiba X300 4TB", "Seagate IronWolf 12TB", "WD Gold 22TB"),
-        new("component_ram", RamTag, "内存条",
-            "为正在运行的程序提供临时存储空间的内存条。", 1, 3, 55, false,
+        new("component_hdd", HddTag, 3, 1, 65, false,
+            "SSD-1 256GB", "SSD-2 512GB", "SSD-3 1TB", "SSD-4 2TB", "SSD-5 4TB"),
+        new("component_ram", RamTag, 1, 3, 55, false,
             "Kingston Beast 8GB", "Corsair Vengeance 16GB", "Kingston Renegade 32GB",
-            "G.SKILL Trident Z5 32GB", "Corsair Dominator 48GB"),
-        new("component_gpu", GpuTag, "显卡",
-            "负责图像处理和显示输出的独立显卡。", 2, 4, 130, false,
+            "G.SKILL Trident Z5 48GB", "Corsair Dominator 64GB"),
+        new("component_gpu", GpuTag, 2, 4, 130, false,
             "rux 3050", "rux 4060", "rux 4070", "rux 4080 SUPER", "rux 5090"),
-        new("component_fan", FanTag, "散热风扇",
-            "安装在机箱内、用于促进空气流动的散热风扇。", 2, 2, 30, false,
+        new("component_fan", FanTag, 2, 2, 30, false,
             "ARCTIC P12", "CM Mobius 120", "be quiet! Silent Wings 4", "Noctua A12x25", "Corsair QX120"),
-        new("component_cpu", CpuTag, "CPU",
-            "执行计算和指令处理工作的中央处理器。", 2, 2, 150, false,
+        new("component_cpu", CpuTag, 2, 2, 150, false,
             "Core i3-10100F", "Core i5-12400F", "Core i7-13700K", "Core i9-14900K", "Core Ultra 9 285K"),
-        new("component_cooler", CoolerTag, "CPU散热风扇",
-            "安装在处理器上、用于带走热量的 CPU 散热器。", 2, 2, 45, false,
+        new("component_cooler", CoolerTag, 2, 2, 45, false,
             "DeepCool AG400", "Thermalright PA120 SE", "Noctua NH-D15", "NZXT Kraken 360", "Corsair TITAN 360 LCD"),
     };
 
@@ -167,19 +107,18 @@ internal static class Components
             get
             {
                 var model = Owner.TierModels[Tier - 1];
-                return LanguageText.Get(
-                    Owner.NameZh + "·" + model + " T" + Tier + (Broken ? "（破损）" : ""),
-                    Owner.EnglishName + " · " + model + " T" + Tier + (Broken ? " (Broken)" : ""));
+                if (Owner.Tag == HddTag)
+                    return LanguageText.Get(Broken ? "item.display.broken" : "item.display.intact",
+                        WorkroomComponentTemplates.Text("ssd"), model, Tier);
+                return LanguageText.Get(Broken ? "item.display.broken" : "item.display.intact",
+                    LanguageText.Argument(Owner.NameKey), model, Tier);
             }
         }
 
-        internal string Desc => Broken ? Owner.BrokenDesc : Owner.IntactDesc;
+        internal string Desc => Owner.Tag == HddTag ? WorkroomComponentTemplates.Text(Broken ? "ssd_broken_description" : "ssd_description") :
+            Broken ? Owner.BrokenDesc : Owner.IntactDesc;
 
-        internal string FlavorText => Owner.Tag == MotherboardTag && Tier == TierCount
-            ? LanguageText.Get(
-                "散热片摸起来凉凉的，边缘还留着一枚旧标签的胶痕。这个型号大概在柜台上转过几次手。",
-                "The heatsinks feel cool to the touch, with a faint patch of old label glue along the edge. This board has probably changed hands a few times.")
-            : LanguageText.Get(Owner.ChineseFlavorText, Owner.EnglishFlavorText);
+        internal string FlavorText => ComponentFlavorText.Get(this);
 
         // T1 基础价 × 分档系数 {1, 1.55, 2.4, 3.7, 5.7}；破损件按完好价 20% 回收。
         internal long Value
@@ -189,16 +128,22 @@ internal static class Components
     }
 
     private static Dictionary<string, Item>? _itemsById;
+    private static readonly IReadOnlyList<Item> Definitions = CreateDefinitions();
+    private static readonly long[] RamPrices = { 55, 85, 145, 215, 285 };
     private static bool descriptionWriteProbeLogged;
 
-    internal static IEnumerable<Item> AllItems()
+    internal static IEnumerable<Item> AllItems() => Definitions;
+
+    private static IReadOnlyList<Item> CreateDefinitions()
     {
+        var items = new List<Item>();
         foreach (var t in All)
             for (var tier = 1; tier <= TierCount; tier++)
             {
-                yield return new Item(t, tier, false);
-                yield return new Item(t, tier, true);
+                items.Add(new Item(t, tier, false));
+                items.Add(new Item(t, tier, true));
             }
+        return items.AsReadOnly();
     }
 
     internal static Item? Find(string? id)
@@ -213,15 +158,6 @@ internal static class Components
 
     internal static bool IsComponent(GameItem? item) => item != null && item.IsTag(MarkerTag);
 
-    /// <summary>返回配件/机箱对应的类型标签；不是本 MOD 物品则返回 null。</summary>
-    internal static string? GetTag(GameItem? item)
-    {
-        if (item == null) return null;
-        foreach (var t in All)
-            if (item.IsTag(t.Tag)) return t.Tag;
-        return null;
-    }
-
     internal static GameItem Create(string id)
     {
         var spec = Find(id)
@@ -235,12 +171,22 @@ internal static class Components
         var templateId = spec.Owner.IsCase ? "machine_bay" : "common_electronic";
         var item = DirectoryMaster.Item(templateId, true);
         if (item == null) throw new InvalidOperationException("找不到原版物品模板：" + templateId);
+        try
+        {
         Apply(item, spec);
         // 损坏机箱 = 物资箱：生成时随机装填内部配件并上锁（SPAWNED 标记防止读档重掷）。
         if (spec.Owner.IsCase && spec.Broken)
             CaseUnboxing.EnsureLootAndLock(item, spec.Tier);
         item.onLoaded = (Il2CppSystem.Action<GameItem>)(loaded => Apply(loaded, spec));
         return item;
+        }
+        catch
+        {
+            // Crate contents can also fail during creation. Retain every failed
+            // template in the codec cleanup path rather than leaking a half item.
+            WorkroomItemCodec.Destroy(new WorkroomItemCodec.Candidate { Root = item, Nodes = new List<GameItem> { item } });
+            throw;
+        }
     }
 
     private static void Apply(GameItem item, Item spec)
@@ -249,16 +195,16 @@ internal static class Components
         item.identifier = spec.Id;
         item.identifierName = spec.DisplayName;
         item.SetName(spec.DisplayName);
-        var description = spec.Desc + ComponentRepair.RepairHint(spec);
+        var description = spec.Desc;
         var flavor = spec.FlavorText;
         if (string.IsNullOrWhiteSpace(description))
         {
-            description = LanguageText.Get(type.NameZh + "，电脑配件。", type.EnglishName + ". A computer component.");
+            description = LanguageText.Get("item.fallback.description", LanguageText.Argument(type.NameKey));
             Core.Log?.Warning("物品主描述为空，已应用备用说明：" + spec.Id + " / " + LanguageText.LocaleCode);
         }
         if (string.IsNullOrWhiteSpace(flavor))
         {
-            flavor = LanguageText.Get("边角留着一点旧标签的胶痕。", "A faint trace of old label glue remains near the edge.");
+            flavor = LanguageText.Get("item.fallback.flavor", LanguageText.Argument(type.NameKey));
             Core.Log?.Warning("物品浅灰描述为空，已应用备用文本：" + spec.Id + " / " + LanguageText.LocaleCode);
         }
         item.shortDescription = description;
@@ -297,6 +243,8 @@ internal static class Components
         item.spriteChanged = true;
         item.RemoveAllGameItemType();
         item.SetGameItemType(type.IsCase ? "MACHINE" : "MATERIAL");
+        // 原版类型列表负责提示中的方括号标签；创建和读档都追加，保留原有分类。
+        item.SetGameItemType(ComputerSuppliesType.Identifier);
         if (type.IsCase)
         {
             // 保留原版设备标记；CaseDropGuardPatch 阻止嵌套，双击由本 MOD 接管。
@@ -323,9 +271,10 @@ internal static class Components
             item.soundDragEnd = "module_drop";
         }
         item.EnableTag(type.Tag, false);
+        foreach (var tag in TierTags) item.DisableTag(tag, false);
         item.EnableTag(TierTags[spec.Tier - 1], false);
-        var luxuryEligible = !type.IsCase && IsLuxuryEligible(spec);
-        SetTradeProperties(item, luxuryEligible, !type.IsCase && spec.Tier == 5);
+        var highEndEligible = !type.IsCase && IsHighEndEligible(spec);
+        SetTradeProperties(item, highEndEligible, !type.IsCase && spec.Tier == 5);
         if (spec.Broken)
         {
             item.EnableTag(BrokenTag, false);
@@ -344,6 +293,12 @@ internal static class Components
         // 避免重启后退回空机箱基础价，直到再次打开面板才恢复。
         if (type.IsCase && !spec.Broken) CaseEconomy.EvaluateCase(item);
         else LowerAssemblerNpc.RefreshPurchaseEligibility(item);
+        WorkroomMachineAssembly.Refresh(item);
+        if (WorkroomComponentTemplates.TryWhole(spec.Id, out var family, out _, out _))
+        {
+            WorkroomComponentParts.EnsureSeed(item, family.Key);
+            WorkroomComponentParts.RefreshComposition(item);
+        }
     }
 
     internal static long ValueFor(Type type, int tier, bool broken)
@@ -356,23 +311,20 @@ internal static class Components
             4 => 3.7,
             _ => 5.7,
         };
-        var intact = (long)Math.Round(type.BaseValue * tierMultiplier);
+        var intact = type.Tag == RamTag ? RamPrices[Math.Clamp(tier,1,5)-1] :
+            (long)Math.Round(type.BaseValue * tierMultiplier);
         return broken ? Math.Max(1, (long)Math.Round(intact * 0.20)) : intact;
     }
 
-    /// <summary>T5 items remain luxury goods; at T4 only graphics cards and CPUs qualify.</summary>
-    internal static bool IsLuxuryEligible(Item spec) =>
+    /// <summary>T5 parts are high-end; at T4 only graphics cards and CPUs qualify.</summary>
+    internal static bool IsHighEndEligible(Item spec) =>
         spec.Tier >= 5 || (spec.Tier == 4 &&
             (spec.Owner.Tag == GpuTag || spec.Owner.Tag == CpuTag));
 
     /// <summary>Shared native type/status structure for loose parts and assembled cases.</summary>
-    internal static void SetTradeProperties(GameItem item, bool luxury, bool highContraband)
+    internal static void SetTradeProperties(GameItem item, bool highEnd, bool highContraband)
     {
-        if (luxury)
-        {
-            if (!item.IsGameItemType("LUXURY_ITEM")) item.SetGameItemType("LUXURY_ITEM");
-        }
-        else if (item.IsGameItemType("LUXURY_ITEM")) item.RemoveGameItemType("LUXURY_ITEM");
+        HighEndParts.Apply(item, highEnd);
 
         if (highContraband)
         {
@@ -403,12 +355,6 @@ internal static class Components
             if (item.IsTag(TierTags[i])) return i + 1;
         return 0;
     }
-
-    /// <summary>
-    /// 已开封物资箱的共价：按面板槽位标签累计内部配件价值（纯算术，不创建临时物品）。
-    /// </summary>
-    internal static long CaseContentsValue(GameItem caseItem)
-        => CaseEconomy.ContentsValue(caseItem);
 
     /// <summary>按 ID 把物品规格重新应用到物品实例上（用于损坏机箱切换为打开形态）。</summary>
     internal static void ApplySpec(GameItem item, string id)

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Il2Cpp;
 
-namespace ProbablyAssembled;
+namespace PCExpansion;
 
 /// <summary>配件分档价值、损坏回收、物资箱期望价和整机组装估价。</summary>
 internal static class CaseEconomy
@@ -13,37 +13,49 @@ internal static class CaseEconomy
     // Those outcomes average to 78% of purchase price, so price the case at EV / 0.78.
     private const double TargetAverageReturn = 0.78;
     internal const string MachinePriceFeatureId = "pcrepair.machine_profile";
-    private const string LegacyMachinePriceFeatureId = "pcrepair.machine_price";
 
     private static readonly (int Offset, double Weight)[] TierRolls =
     {
         (-2, 0.20), (-1, 0.34), (0, 0.45), (1, 0.01),
     };
 
+    // T5 crates are half of the expected T4/T5 crate mix. At 12% per slot,
+    // their 12 slots yield about 0.94 T5 parts; T4 crates yield about 0.08,
+    // for roughly 0.51 T5 parts per opening across an even T4/T5 mix.
+    private static readonly (int Offset, double Weight)[] Tier5CaseRolls =
+    {
+        (-2, 0.45), (-1, 0.43), (0, 0.11), (1, 0.01),
+    };
+
     internal sealed class PartRecord
     {
-        internal PartRecord(string typeTag, int tier, bool broken)
+        internal PartRecord(string typeTag, int tier, bool broken, long? value = null, List<PartRecord>? nested = null)
         {
             TypeTag = typeTag;
             Tier = tier;
             Broken = broken;
+            Value = value;
+            Nested = nested;
         }
 
         internal string TypeTag { get; }
         internal int Tier { get; }
         internal bool Broken { get; }
+        internal long? Value { get; }
+        internal List<PartRecord>? Nested { get; }
     }
 
     internal static int MinimumLootTier(int caseTier) =>
         Math.Max(1, Math.Clamp(caseTier, 1, Components.TierCount) - 2);
 
-    /// <summary>按物资箱等级窗口抽取配件档位；窗口为 [箱体 T-2, 箱体 T+1]，高一档仅 1%。</summary>
+    /// <summary>按物资箱等级窗口抽取配件档位；T5 箱单独降低 T5 出货占比。</summary>
     internal static int RollLootTier(int caseTier, Random random)
     {
         caseTier = Math.Clamp(caseTier, 1, Components.TierCount);
+        var rolls = GetTierRolls(caseTier);
         var roll = random.NextDouble();
         var cumulative = 0.0;
-        foreach (var entry in TierRolls)
+        foreach (var entry in rolls)
         {
             cumulative += entry.Weight;
             if (roll < cumulative)
@@ -57,14 +69,15 @@ internal static class CaseEconomy
     {
         tier = Math.Clamp(tier, 1, Components.TierCount);
         var expected = 0.0;
+        var rolls = GetTierRolls(tier);
 
-        foreach (var slot in CaseInteriorUI.SlotTable)
+        foreach (var slot in CaseContents.SlotTags)
         {
-            var type = FindType(slot.Tag);
+            var type = FindType(slot);
             if (type == null) continue;
 
             var averageTierValue = 0.0;
-            foreach (var entry in TierRolls)
+            foreach (var entry in rolls)
             {
                 var itemTier = Math.Clamp(tier + entry.Offset, 1, Components.TierCount);
                 var intact = Components.ValueFor(type, itemTier, false);
@@ -74,18 +87,15 @@ internal static class CaseEconomy
             expected += LootChance * averageTierValue;
         }
 
-        var emptyProbability = Math.Pow(1 - LootChance, CaseInteriorUI.SlotTable.Length);
+        var emptyProbability = Math.Pow(1 - LootChance, CaseContents.SlotTags.Length);
         var cpu = FindType(Components.CpuTag);
         if (cpu != null) expected += emptyProbability * Components.ValueFor(cpu, MinimumLootTier(tier), false);
 
         return Math.Max(1, (long)Math.Round(expected / TargetAverageReturn));
     }
 
-    /// <summary>按机箱槽位标签计算内部配件共价。</summary>
-    internal static long ContentsValue(GameItem caseItem)
-    {
-        return ContentsValue(ReadParts(caseItem));
-    }
+    private static (int Offset, double Weight)[] GetTierRolls(int caseTier) =>
+        caseTier == Components.TierCount ? Tier5CaseRolls : TierRolls;
 
     private static long ContentsValue(List<PartRecord> parts)
     {
@@ -93,62 +103,64 @@ internal static class CaseEconomy
         foreach (var part in parts)
         {
             var type = FindType(part.TypeTag);
-            if (type != null) total += Components.ValueFor(type, part.Tier, part.Broken);
+            if (type != null) total = checked(total + (part.Value ?? Components.ValueFor(type, part.Tier, part.Broken)));
         }
         return total;
     }
 
     /// <summary>
-    /// 关闭窗口、放入/取出配件或点击检测时刷新估价与标签。
+    /// 工作间装配、拆卸和交易检查时刷新估价与标签。
     /// 损坏机箱锁定时固定箱价，解锁后永远为 0；仅完好机箱可获得组装标签。
     /// </summary>
-    internal static void EvaluateCase(GameItem caseItem) => EvaluateCase(caseItem, null);
-
-    internal static void EvaluateCase(GameItem caseItem,
-        IReadOnlyList<CaseInteriorUI.CaseWindow.SlotEntry>? liveSlots)
+    internal static void EvaluateCase(GameItem caseItem)
     {
         if (!ComputerCase.IsCase(caseItem)) return;
+        var diagnosticStart = System.Diagnostics.Stopwatch.GetTimestamp();
         try
         {
             var tier = CaseUnboxing.TierOf(caseItem);
-            // Detached UI contents are included in our aggregate base price.
+            var machine = WorkroomMachineFacts.Read(caseItem);
+            // Stored contents are included in our aggregate base price.
             // Do not let native container/misc values count them a second time.
             caseItem.EnableTag("IGNORE_CHILD_VALUE", false);
             caseItem.lateUnitValue = 0;
-            if (caseItem.IsTag(Components.BrokenTag))
+            if (machine == null && caseItem.IsTag(Components.BrokenTag))
             {
                 caseItem.RemoveItemFeatureByID(MachinePriceFeatureId);
-                caseItem.RemoveItemFeatureByID(LegacyMachinePriceFeatureId);
                 Components.SetTradeProperties(caseItem, false, false);
                 caseItem.SetValue(caseItem.IsTag(CaseUnboxing.LockedTagName) ? CratePrice(tier) : 0);
+                LowerAssemblerNpc.RefreshCasePurchaseEligibility(caseItem, null, new List<PartRecord>());
                 return;
             }
 
             var caseType = FindType(Components.CaseTag);
-            var baseValue = caseType == null ? 0 : Components.ValueFor(caseType, tier, false);
-            var parts = liveSlots == null ? ReadParts(caseItem) : ReadParts(liveSlots);
-            var label = SelectMachineLabel(parts);
-            caseItem.SetValue(baseValue + ContentsValue(parts));
+            var baseValue = machine?.BodyValue ?? (caseType == null ? 0 : Components.ValueFor(caseType, tier, false));
+            var parts = machine != null ? new List<PartRecord>(machine.Parts) : ReadParts(caseItem);
+            var label = machine == null ? SelectMachineLabel(parts) :
+                machine.Complete ? SelectMachineLabel(parts) : null;
+            caseItem.SetValue(machine == null ? checked(baseValue + ContentsValue(parts)) : machine.Value);
             SetMachineProfileFeature(caseItem, label, MachineBonusPercent(label));
             var highestTier = 0;
-            var luxuryEligible = false;
+            var highEndEligible = false;
             foreach (var part in parts)
             {
                 highestTier = Math.Max(highestTier, part.Tier);
-                if (part.Tier >= 5 || (part.Tier == 4 &&
-                    (part.TypeTag == Components.GpuTag || part.TypeTag == Components.CpuTag)))
-                    luxuryEligible = true;
+                if (!part.Broken && (part.Tier >= 5 || (part.Tier == 4 &&
+                    (part.TypeTag == Components.GpuTag || part.TypeTag == Components.CpuTag))))
+                    highEndEligible = true;
             }
-            Components.SetTradeProperties(caseItem, luxuryEligible, highestTier == 5);
+            Components.SetTradeProperties(caseItem, highEndEligible && machine?.BodyBroken != true && !parts.Exists(p => p.Broken),
+                highestTier == 5 && machine?.BodyBroken != true && !parts.Exists(p => p.Broken));
+            LowerAssemblerNpc.RefreshCasePurchaseEligibility(caseItem, label, parts);
         }
         catch (Exception ex)
         {
+            caseItem.DisableTag(LowerAssemblerNpc.PurchaseTag, false);
             Core.Log?.Error("机箱价值评估失败：" + ex);
         }
         finally
         {
-            // 配件装入、取出、测试及关闭窗口后，原版收购清单读取的资格标签同步更新。
-            LowerAssemblerNpc.RefreshPurchaseEligibility(caseItem);
+            WorkroomFeedbackDiagnostics.CaseEvaluated(caseItem, diagnosticStart);
         }
     }
 
@@ -165,9 +177,6 @@ internal static class CaseEconomy
 
     private static void SetMachineProfileFeature(GameItem item, string? label, int percent)
     {
-        // Remove the previous hand-built feature. It lacks native initialization data and
-        // crashes GetFormattedActualModifier while the negotiation UI renders the item.
-        item.RemoveItemFeatureByID(LegacyMachinePriceFeatureId);
         if (percent <= 0 || string.IsNullOrEmpty(label))
         {
             item.RemoveItemFeatureByID(MachinePriceFeatureId);
@@ -192,9 +201,9 @@ internal static class CaseEconomy
         feature.SetValueModifier(percent);
         var display = label switch
         {
-            "整机" => LanguageText.Get("整机", "Complete PC"),
-            "刀把机" => LanguageText.Get("刀把机", "Bottleneck Build"),
-            "性价比机器" => LanguageText.Get("性价比机器", "Value Build"),
+            "整机" => LanguageText.Get("text.9c1b7c6f70ae"),
+            "刀把机" => LanguageText.Get("text.5c278353c0c4"),
+            "性价比机器" => LanguageText.Get("text.639bf4e1ec1f"),
             _ => label,
         };
         feature.SetPublicDisplay(display);
@@ -212,85 +221,17 @@ internal static class CaseEconomy
     internal static string? MachineLabel(GameItem caseItem)
     {
         if (!ComputerCase.IsCase(caseItem) || caseItem.IsTag(Components.BrokenTag)) return null;
-        return SelectMachineLabel(ReadParts(caseItem));
+        InspectCase(caseItem, out var label);
+        return label;
     }
 
-    internal static string? MachineLabel(IReadOnlyList<CaseInteriorUI.CaseWindow.SlotEntry> slots) =>
-        SelectMachineLabel(ReadParts(slots));
-
-    /// <summary>返回检测失败原因；null 表示至少每类一件、跨度合规且内存同档。</summary>
-    internal static string? ValidateBuild(IReadOnlyList<CaseInteriorUI.CaseWindow.SlotEntry> slots)
+    internal static List<PartRecord> InspectCase(GameItem caseItem, out string? label)
     {
-        var presentTypes = new HashSet<string>();
-        var partTiers = new List<int>();
-        int? ramTier = null;
-
-        foreach (var entry in slots)
-        {
-            var item = entry.Slot.childItem;
-            if (item == null) continue;
-            if (item.IsTag(Components.BrokenTag)) return LanguageText.Get("含有损坏配件", "Broken part detected");
-            var tier = Components.TierOf(item);
-            if (tier < 1) continue;
-            presentTypes.Add(entry.Tag);
-            partTiers.Add(tier);
-
-            if (entry.Tag == Components.RamTag)
-            {
-                if (ramTier.HasValue && ramTier.Value != tier) return LanguageText.Get("内存必须使用同一 T 度", "All memory sticks must be the same tier");
-                ramTier = tier;
-            }
-        }
-
-        var missing = new List<string>();
-        foreach (var type in Components.All)
-            if (!type.IsCase && !presentTypes.Contains(type.Tag)) missing.Add(type.Name);
-        if (missing.Count > 0)
-        {
-            var englishMissing = new List<string>();
-            foreach (var type in Components.All)
-                if (!type.IsCase && !presentTypes.Contains(type.Tag)) englishMissing.Add(type.EnglishName);
-            return LanguageText.Get("缺少 " + string.Join("、", missing), "Missing: " + string.Join(", ", englishMissing));
-        }
-        if (partTiers.Count == 0) return LanguageText.Get("没有可检测的配件", "No parts to test");
-
-        var min = partTiers[0];
-        var max = partTiers[0];
-        foreach (var tier in partTiers)
-        {
-            min = Math.Min(min, tier);
-            max = Math.Max(max, tier);
-        }
-        return max - min <= 3 ? null : LanguageText.Get("配件 T 度跨度超过三档", "Part tiers are more than three steps apart");
-    }
-
-    internal static string ValidationFailureEnglish(string localizedFailure)
-    {
-        if (!LanguageText.IsChinese) return localizedFailure;
-        // ValidateBuild returns English directly while English is active. This mapping covers
-        // the title path if the locale changes while an already-open window remains alive.
-        return localizedFailure switch
-        {
-            "含有损坏配件" => "Broken part detected",
-            "内存必须使用同一 T 度" => "All memory sticks must be the same tier",
-            "没有可检测的配件" => "No parts to test",
-            "配件 T 度跨度超过三档" => "Part tiers are more than three steps apart",
-            _ when localizedFailure.StartsWith("缺少 ", StringComparison.Ordinal) => "Some required parts are missing",
-            _ => localizedFailure
-        };
-    }
-
-    internal static string ValidationFailureShort(string failure)
-    {
-        if (failure == "含有损坏配件" || failure == "Broken part detected")
-            return LanguageText.Get("配件破损", "Broken parts");
-        if (failure.Contains("内存") || failure.Contains("memory sticks"))
-            return LanguageText.Get("内存不同档", "RAM mismatch");
-        if (failure.StartsWith("缺少 ", StringComparison.Ordinal) || failure.StartsWith("Missing:", StringComparison.Ordinal))
-            return LanguageText.Get("配件缺失", "Parts missing");
-        if (failure.Contains("跨度") || failure.Contains("three steps"))
-            return LanguageText.Get("跨度过大", "Tier gap");
-        return LanguageText.Get("检测失败", "Test failed");
+        var machine = WorkroomMachineFacts.Read(caseItem);
+        var parts = machine != null ? new List<PartRecord>(machine.Parts) : ReadParts(caseItem);
+        label = caseItem.IsTag(Components.BrokenTag) || (machine != null && !machine.Complete)
+            ? null : SelectMachineLabel(parts);
+        return parts;
     }
 
     private static string? SelectMachineLabel(List<PartRecord> parts)
@@ -305,7 +246,8 @@ internal static class CaseEconomy
 
         var highest = 0;
         foreach (var part in parts) highest = Math.Max(highest, part.Tier);
-        if (cpu <= highest - 2 && gpu <= highest - 2) return "刀把机";
+        // CPU 与显卡均比其他配件的最高档位低至少一档，即为刀把机。
+        if (cpu <= highest - 1 && gpu <= highest - 1) return "刀把机";
 
         var psu = HighestTier(parts, Components.PsuTag);
         if (psu > 0 && psu >= Math.Max(cpu, gpu) - 1)
@@ -363,39 +305,16 @@ internal static class CaseEconomy
 
     private static List<PartRecord> ReadParts(GameItem caseItem)
     {
+        if (WorkroomMachineFacts.Read(caseItem) is { } machine) return new List<PartRecord>(machine.Parts);
         var parts = new List<PartRecord>();
-        for (var i = 0; i < CaseInteriorUI.SlotTable.Length; i++)
+        foreach (var snapshot in WorkroomCrateContents.Read(caseItem))
         {
-            var slot = CaseInteriorUI.SlotTable[i];
-            var type = FindType(slot.Tag);
-            if (type == null) continue;
-            for (var tier = 1; tier <= Components.TierCount; tier++)
-            {
-                var id = "pcrepair." + type.Stem + "_t" + tier;
-                var broken = caseItem.IsTag(CaseInteriorUI.SlotTagPrefix + i + "_" + id + "_broken");
-                if (!broken && !caseItem.IsTag(CaseInteriorUI.SlotTagPrefix + i + "_" + id)) continue;
-                parts.Add(new PartRecord(type.Tag, tier, broken));
-                break;
-            }
+            var spec = Components.Find(snapshot.Identifier) ?? throw new InvalidOperationException("物资箱内容型号无效。");
+            parts.Add(new PartRecord(spec.Owner.Tag, spec.Tier, !WorkroomComponentAssembly.Intact(snapshot), snapshot.Value));
         }
         return parts;
     }
-
-    private static List<PartRecord> ReadParts(
-        IReadOnlyList<CaseInteriorUI.CaseWindow.SlotEntry> slots)
-    {
-        var parts = new List<PartRecord>();
-        foreach (var entry in slots)
-        {
-            var child = entry.Slot.childItem;
-            if (child == null) continue;
-            var spec = Components.Find(Core.Clean(child.identifier));
-            if (spec == null || spec.Owner.IsCase || spec.Owner.Tag != entry.Tag) continue;
-            parts.Add(new PartRecord(spec.Owner.Tag, spec.Tier,
-                spec.Broken || child.IsTag(Components.BrokenTag)));
-        }
-        return parts;
-    }
+    internal static List<PartRecord> Parts(GameItem caseItem) => ReadParts(caseItem);
 
     private static Components.Type? FindType(string tag)
     {

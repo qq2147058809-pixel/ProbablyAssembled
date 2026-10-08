@@ -1,13 +1,15 @@
 using System;
+using System.Collections.Generic;
 using HarmonyLib;
 using Il2Cpp;
 
-namespace ProbablyAssembled;
+namespace PCExpansion;
 
 /// <summary>0504 电话召来的装机佬：复用原版电话联系人冷却和现有电脑收购规则。</summary>
 internal static class PhoneAssemblerNpc
 {
     internal const string Id = "pcrepair.phone_assembler";
+    internal const string SpriteKey = "pcrepair.phone_assembler_sprite";
     internal const string ClientTag = "PCREPAIR_PHONE_ASSEMBLER";
     internal const string StockTag = "PCREPAIR_PHONE_ASSEMBLER_STOCK";
     internal const long PhoneNumber = 504;
@@ -28,7 +30,7 @@ internal static class PhoneAssemblerNpc
         {
             phoneClientType = StorePhoneClient.PhoneClientType.Supplier,
             phoneState = StorePhoneClient.PhoneState.Regular,
-            displayName = LanguageText.Get("装机佬", "PC Builder"),
+            displayName = LanguageText.Get("text.e419ca83983b"),
             locID = Id,
             dialogFuncId = DialogId,
             cooldownDuration = 3,
@@ -47,7 +49,7 @@ internal static class PhoneAssemblerNpc
             var existing = contacts[PhoneNumber];
             if (!IsPhoneContact(existing))
                 throw new InvalidOperationException("0504 已被原版或其他联系人占用，未覆盖既有电话联系人。");
-            existing.displayName = LanguageText.Get("装机佬", "PC Builder");
+            existing.displayName = LanguageText.Get("text.e419ca83983b");
             existing.dialogFuncId = DialogId;
             existing.cooldownDuration = 3;
             return existing;
@@ -66,12 +68,12 @@ internal static class PhoneAssemblerNpc
 
         var reference = SpriteDict.Instance?.GetSprite("wanted3");
         if (reference != null)
-            SpriteAssets.SetPortraitReference(LowerAssemblerNpc.SpriteKey, reference);
+            SpriteAssets.SetPortraitReference(SpriteKey, reference);
 
         client.identifier = Id;
-        client.displayName = LanguageText.Get("装机佬", "PC Builder");
+        client.displayName = LanguageText.Get("text.e419ca83983b");
         client.realName = client.displayName;
-        client.spriteName = LowerAssemblerNpc.SpriteKey;
+        client.spriteName = SpriteKey;
         client.clientFaction = StoreClient.FACTION_LOWER;
         client.clientIntent = StoreClient.ClientIntent.SELLNBUY;
         client.isMainDialogueStarted = false;
@@ -81,10 +83,9 @@ internal static class PhoneAssemblerNpc
         LowerAssemblerNpc.ConfigureTradeDialogue(client);
         LowerAssemblerNpc.ApplyAssemblerBudget(client, Budget);
 
-        var greeting = new Dialogue().SetText(client.displayName, LanguageText.Get("有啥好货都拿出来看看。", "Let's see what you've got.") );
+        var greeting = new Dialogue().SetText(client.displayName, LanguageText.Get("text.13aa4b2a3621") );
         var offerLine = new Dialogue().SetText(client.displayName,
-            LanguageText.Get("哥们我预算充足，我这里有几台机器你看看感不感兴趣。",
-                "I've got cash to spend and a few towers to sell. Anything catch your eye?") );
+            LanguageText.Get("text.a3ec80c70209") );
         greeting.isMainDialog = true;
         greeting.SetNextDialogue(offerLine);
         client.mainDialogue = greeting;
@@ -94,20 +95,16 @@ internal static class PhoneAssemblerNpc
     private static Dialogue GetCallDialog(StorePhoneClient contact)
     {
         if (contact.phoneState == StorePhoneClient.PhoneState.Cooldown)
-            return PhoneDialogList.GenericCooldown(LanguageText.Get("装机佬", "PC Builder"));
-        return new Dialogue().SetText(LanguageText.Get("装机佬", "PC Builder"),
-            LanguageText.Get("行，我这就带几台机器过去，咱们店里聊。", "Sure, I'll bring a few rigs over. See you at the shop.") );
+            return PhoneDialogList.GenericCooldown(LanguageText.Get("text.e419ca83983b"));
+        var greeting = new Dialogue().SetText(LanguageText.Get("text.e419ca83983b"),
+            LanguageText.Get("text.8b2de9772e65") );
+        var reply = new Dialogue().SetText(LanguageText.Get("text.e419ca83983b"),
+            LanguageText.Get("text.8bf853ae1d76") );
+        greeting.SetNextDialogue(reply);
+        return greeting;
     }
 
-    private static bool HasContactCard(PlayerStore? store)
-    {
-        try { return store != null && store.IsPlayerOwnThisItem(ContactCard.Id); }
-        catch (Exception ex)
-        {
-            Core.Log?.Warning("检查 0504 名片持有状态失败：" + ex.Message);
-            return false;
-        }
-    }
+    private static bool HasContactAccess(PlayerStore? store) => AssemblerContactAccess.HasUnlocked(store);
 
     private static bool IsAlreadyAtStore(PlayerStore? store)
     {
@@ -126,10 +123,9 @@ internal static class PhoneAssemblerNpc
         {
             if (number != PhoneNumber) return;
             var store = PlayerStore.Instance;
-            if (!HasContactCard(store))
+            if (!HasContactAccess(store))
             {
-                StoreUIManager.Instance?.Notify(LanguageText.Get("需要持有 0504 名片才能联系装机佬。",
-                    "You need the 0504 business card to call the PC Builder."), "#FFFFFF");
+                StoreUIManager.Instance?.Notify(LanguageText.Get("text.34ccec0329de"), "#FFFFFF");
                 return;
             }
 
@@ -149,7 +145,21 @@ internal static class PhoneAssemblerNpc
                 return;
             }
 
-            manager.AddNextClient(CreateClient());
+            var owner = store!.Pointer; var run = store.runID; var saveSlot = store.saveSlotId;
+            var client = CreateClient();
+            manager.AddNextClient(client);
+            var queued = false;
+            var stack = manager.clientStack;
+            if (stack != null)
+                foreach (var candidate in stack)
+                    if (candidate != null && candidate.Pointer == client.Pointer) { queued = true; break; }
+            if (!queued || !PlayerStore.IsInstanceExist() || PlayerStore.instance == null ||
+                PlayerStore.instance.Pointer != owner || PlayerStore.instance.runID != run ||
+                PlayerStore.instance.saveSlotId != saveSlot)
+            {
+                Core.Log?.Warning("0504 来客未确认进入当前队列，未消耗三天冷却。");
+                return;
+            }
             contact.UseService();
             Core.Log?.Msg("[深空装机] 0504 电话已接通，装机佬已加入来客队列，原版三天冷却已启动。");
         }
@@ -170,21 +180,21 @@ internal static class PhoneAssemblerNpc
             LowerAssemblerNpc.ConfigurePurchaseRules(client!);
             LowerAssemblerNpc.ConfigureTradeDialogue(client!);
             LowerAssemblerNpc.ApplyAssemblerBudget(client!, Budget);
-            if (HasExistingStock()) return;
-
-            for (var i = 0; i < 2; i++)
+            NpcStockOffers.Stock(store, client!, StockTag, "PHONE", () => new List<string>
             {
-                // T4+ parts cannot be repaired; keep both broken case offers in the repairable T1–T3 range.
-                var brokenTier = random.Next(1, 4);
-                AddOffer("pcrepair.computer_case_t" + brokenTier + "_broken");
-            }
-
-            var intactTier = random.Next(1, Components.TierCount + 1);
-            AddOffer("pcrepair.computer_case_t" + intactTier);
-            if (!store.IsPlayerOwnThisItem(UnboxTool.Id)) AddOffer(UnboxTool.Id);
-
-            Core.Log?.Msg("[深空装机] 电话装机佬库存已上柜：2 个 T1–T3 可维修破损机箱、1 个完好机箱" +
-                          (store.IsPlayerOwnThisItem(UnboxTool.Id) ? "。" : "、未持有的拆机螺丝刀。"));
+                "pcrepair.computer_case_t" + random.Next(1, 4) + "_broken",
+                "pcrepair.computer_case_t" + random.Next(1, 4) + "_broken",
+                "pcrepair.computer_case_t" + random.Next(1, Components.TierCount + 1)
+            }, 3, 3, id => Components.Find(id) is { } spec && spec.Owner.IsCase && (!spec.Broken || spec.Tier <= 3),
+                item =>
+                {
+                    if (item.FindItemFeatureByCategory("retailMarkUp") == null)
+                        item.AddItemFeature(ItemFeatureList.RetailMarkUp());
+                }, validate: plan =>
+                {
+                    if (!Components.Find(plan[0])!.Broken || !Components.Find(plan[1])!.Broken || Components.Find(plan[2])!.Broken)
+                        throw new InvalidOperationException("电话来客须供应两个低阶坏机箱和一个完好机箱。");
+                });
         }
         catch (Exception ex)
         {
@@ -192,29 +202,25 @@ internal static class PhoneAssemblerNpc
         }
     }
 
-    private static void AddOffer(string id)
+    [HarmonyPatch(typeof(SpriteDict), nameof(SpriteDict.GetSprite))]
+    internal static class PortraitSpritePatch
     {
-        var item = DirectoryMaster.Item(id, true);
-        if (item == null)
+        private static bool Prefix(string key, ref UnityEngine.Sprite __result)
         {
-            Core.Log?.Warning("电话装机佬库存物品尚未注册：" + id);
-            return;
+            if (Core.Clean(key) != SpriteKey) return true;
+            try
+            {
+                var sprite = SpriteAssets.Get(SpriteKey);
+                if (sprite == null) return true;
+                __result = sprite;
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Core.Log?.Warning("加载洛夕立绘失败：" + ex.Message);
+                return true;
+            }
         }
-        item.EnableTag(StockTag, false);
-        PlayerStore.Instance?.AddDirectSellingItemToTable(item, false, false, false, 0);
-    }
-
-    private static bool HasExistingStock()
-    {
-        try
-        {
-            var items = EmporiumEntry.Instance?.GetAllNonOwnedItem();
-            if (items == null) return false;
-            foreach (var item in items)
-                if (item != null && item.IsTag(StockTag)) return true;
-        }
-        catch (Exception ex) { Core.Log?.Warning("检查电话装机佬现有库存失败：" + ex.Message); }
-        return false;
     }
 
     [HarmonyPatch(typeof(StorePhoneClient), nameof(StorePhoneClient.InitPhoneClientDict))]
@@ -230,9 +236,14 @@ internal static class PhoneAssemblerNpc
     [HarmonyPatch(typeof(PlayerStore), nameof(PlayerStore.LoadGame))]
     internal static class PhoneClientLoadPatch
     {
-        private static void Postfix(PlayerStore __instance)
+        private static void Postfix(PlayerStore __instance, bool __runOriginal)
         {
-            try { EnsurePhoneContact(__instance.PhoneClientDict); }
+            if (!__runOriginal) return;
+            try
+            {
+                EnsurePhoneContact(__instance.PhoneClientDict);
+                if (__instance.isClientArrived && IsPhoneAssembler(__instance.currentClientInstance?.storeClient)) AddStock();
+            }
             catch (Exception ex) { Core.Log?.Error("读档后恢复 0504 电话联系人失败：" + ex); }
         }
     }
@@ -254,7 +265,21 @@ internal static class PhoneAssemblerNpc
         private static bool Prefix(StorePhoneClient __instance, ref string __result)
         {
             if (!IsPhoneContact(__instance)) return true;
-            __result = LanguageText.Get("装机佬", "PC Builder");
+            __result = LanguageText.Get("text.e419ca83983b");
+            return false;
+        }
+    }
+
+    // 夜间报告使用 StoreClient.identifier 作为 ClientName 本地化 key，
+    // 不读取访客实例的 displayName / realName。为电话装机佬补上专用名称映射，
+    // 让本体中文与独立英文补丁都能显示正确名称。
+    [HarmonyPatch(typeof(LocHelper), nameof(LocHelper.GetLocalizedClientName))]
+    internal static class PhoneClientReportNamePatch
+    {
+        private static bool Prefix(string key, ref string __result)
+        {
+            if (Core.Clean(key) != Id) return true;
+            __result = LanguageText.Get("text.e419ca83983b");
             return false;
         }
     }
@@ -264,7 +289,7 @@ internal static class PhoneAssemblerNpc
     {
         private static void Postfix(StorePhoneClient __instance, ref bool __result)
         {
-            if (IsPhoneContact(__instance)) __result = HasContactCard(PlayerStore.Instance);
+            if (IsPhoneContact(__instance)) __result = HasContactAccess(PlayerStore.Instance);
         }
     }
 
@@ -284,7 +309,7 @@ internal static class PhoneAssemblerNpc
     {
         private static bool Prefix(long number, ref bool __result)
         {
-            if (number != PhoneNumber || HasContactCard(PlayerStore.Instance)) return true;
+            if (number != PhoneNumber || HasContactAccess(PlayerStore.Instance)) return true;
             __result = false;
             return false;
         }
@@ -295,9 +320,8 @@ internal static class PhoneAssemblerNpc
     {
         private static bool Prefix(long currentNumber)
         {
-            if (currentNumber != PhoneNumber || HasContactCard(PlayerStore.Instance)) return true;
-            StoreUIManager.Instance?.Notify(LanguageText.Get("需要持有 0504 名片才能联系装机佬。",
-                "You need the 0504 business card to call the PC Builder."), "#FFFFFF");
+            if (currentNumber != PhoneNumber || HasContactAccess(PlayerStore.Instance)) return true;
+            StoreUIManager.Instance?.Notify(LanguageText.Get("text.34ccec0329de"), "#FFFFFF");
             return false;
         }
 

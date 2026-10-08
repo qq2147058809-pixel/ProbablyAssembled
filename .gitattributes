@@ -1,0 +1,12 @@
+# 文本在Git历史中统一换行；二进制贴图按原始字节保存。
+* text=auto
+*.cs text eol=lf
+*.ps1 text eol=lf
+*.py text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.csproj text eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary

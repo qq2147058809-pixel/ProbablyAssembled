@@ -2,7 +2,7 @@ using System;
 using HarmonyLib;
 using Il2Cpp;
 
-namespace ProbablyAssembled;
+namespace PCExpansion;
 
 /// <summary>0504 横版电脑配件名片：背包中的 2×1 文档物品。</summary>
 internal static class ContactCard
@@ -25,12 +25,10 @@ internal static class ContactCard
     private static void Apply(GameItem item)
     {
         item.identifier = Id;
-        var name = LanguageText.Get("0504 名片", "0504 Business Card");
+        var name = LanguageText.Get("text.b6755be8ccdb");
         item.identifierName = name;
         item.SetName(name);
-        item.shortDescription = LanguageText.Get(
-            "下城区装机佬的电话：0504。他那儿时不时能淘到好东西。",
-            "The lower-district builder's number: 0504. He usually has something worth a look.");
+        item.shortDescription = LanguageText.Get("text.e8ccfb408f51");
         item.longDescription = item.shortDescription;
         item.flavorText = "MONKEY · 0504";
         item.unitCount = 1;

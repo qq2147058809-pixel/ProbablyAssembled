@@ -1,0 +1,1192 @@
+{
+  "contract": "pcexpansion-computer-manual-v12",
+  "title": "电脑装机与交易手册",
+  "pages": [
+    {
+      "heading": "简介",
+      "elements": [
+        {
+          "type": "text",
+          "text": "在空间站，坏掉的电脑未必只值一堆废金属。机箱里可能藏着还能使用的配件，而缺件的机器也可能在修理和重新装配后卖出好价钱。",
+          "x": 0.127,
+          "y": 0.205,
+          "width": 0.78,
+          "height": 0.085,
+          "fontSize": 15.5,
+          "style": "body",
+          "align": "left"
+        },
+        {
+          "type": "text",
+          "text": "本版本仅支持新建存档；配件拆装与维修统一在工作间进行。",
+          "x": 0.127,
+          "y": 0.3,
+          "width": 0.76,
+          "height": 0.04,
+          "fontSize": 15.5,
+          "style": "body",
+          "align": "left"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.computer_case_t2_broken",
+          "x": 0.29,
+          "y": 0.36,
+          "width": 0.17,
+          "height": 0.155
+        },
+        {
+          "type": "text",
+          "text": "→",
+          "x": 0.485,
+          "y": 0.415,
+          "width": 0.055,
+          "height": 0.045,
+          "fontSize": 18,
+          "style": "arrow",
+          "align": "center"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.computer_case_t2",
+          "x": 0.59,
+          "y": 0.36,
+          "width": 0.17,
+          "height": 0.155
+        },
+        {
+          "type": "text",
+          "text": "破损机箱与完好机箱图示",
+          "x": 0.3,
+          "y": 0.515,
+          "width": 0.45,
+          "height": 0.03,
+          "fontSize": 11.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "text",
+          "text": "1. 修理方法",
+          "x": 0.127,
+          "y": 0.565,
+          "width": 0.48,
+          "height": 0.035,
+          "fontSize": 15.5,
+          "style": "blue",
+          "align": "left"
+        },
+        {
+          "type": "text",
+          "text": "- 拆开机箱\n- 可以修理的物品\n- 维修配方",
+          "x": 0.127,
+          "y": 0.605,
+          "width": 0.58,
+          "height": 0.105,
+          "fontSize": 15.5,
+          "style": "body",
+          "align": "left"
+        },
+        {
+          "type": "text",
+          "text": "2. 装机词条",
+          "x": 0.127,
+          "y": 0.73,
+          "width": 0.48,
+          "height": 0.035,
+          "fontSize": 15.5,
+          "style": "blue",
+          "align": "left"
+        },
+        {
+          "type": "text",
+          "text": "- 开机检测\n- 三种机型\n- 高端配件",
+          "x": 0.127,
+          "y": 0.77,
+          "width": 0.58,
+          "height": 0.105,
+          "fontSize": 15.5,
+          "style": "body",
+          "align": "left"
+        }
+      ]
+    },
+    {
+      "heading": "拆开机箱",
+      "elements": [
+        {
+          "type": "text",
+          "text": "破损机箱是一只上锁的物资箱，里面的配件可能完好，也可能损坏。",
+          "x": 0.127,
+          "y": 0.205,
+          "width": 0.79,
+          "height": 0.055,
+          "fontSize": 15.5,
+          "style": "body",
+          "align": "left"
+        },
+        {
+          "type": "text",
+          "text": "经储存箱送入工作间，放进机箱装配的本体格并点击拆卸。内部件一同返回库存；空间不足时不打开机箱。",
+          "x": 0.127,
+          "y": 0.27,
+          "width": 0.79,
+          "height": 0.075,
+          "fontSize": 15.5,
+          "style": "body",
+          "align": "left"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.computer_case_t2_broken",
+          "x": 0.36,
+          "y": 0.36,
+          "width": 0.075,
+          "height": 0.145
+        },
+        {
+          "type": "text",
+          "text": "→",
+          "x": 0.475,
+          "y": 0.405,
+          "width": 0.055,
+          "height": 0.045,
+          "fontSize": 18,
+          "style": "arrow",
+          "align": "center"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_gpu_t2",
+          "x": 0.56,
+          "y": 0.35,
+          "width": 0.18,
+          "height": 0.165
+        },
+        {
+          "type": "text",
+          "text": "破损机箱与内部配件示意",
+          "x": 0.31,
+          "y": 0.525,
+          "width": 0.46,
+          "height": 0.03,
+          "fontSize": 11.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "text",
+          "text": "内部物资在生成时固定，重新拆卸不会重抽。拆开后的空破损箱体价值为零，T1–T3可用材料维修。开封和拆装统一在工作间完成。",
+          "x": 0.127,
+          "y": 0.565,
+          "width": 0.78,
+          "height": 0.13,
+          "fontSize": 15.5,
+          "style": "body",
+          "align": "left"
+        }
+      ]
+    },
+    {
+      "heading": "可以修理的物品",
+      "elements": [
+        {
+          "type": "text",
+          "text": "T1–T3 主板、空机箱仍可修本体。六类配件先拆检；机体和部分模组可修，芯片和容量颗粒须更换。",
+          "x": 0.127,
+          "y": 0.205,
+          "width": 0.79,
+          "height": 0.055,
+          "fontSize": 15.5,
+          "style": "body",
+          "align": "left"
+        },
+        {
+          "type": "text",
+          "text": "CPU不可修。显卡芯片、固态主控和容量颗粒不可修；转子、导热、散热风扇与机体可现金维修。",
+          "x": 0.127,
+          "y": 0.265,
+          "width": 0.79,
+          "height": 0.055,
+          "fontSize": 15.5,
+          "style": "green",
+          "align": "left"
+        },
+        {
+          "type": "text",
+          "text": "回收坏CPU得电子；T4/T5裸板得电子、线缆、废金属，空箱得废金属、螺丝、打印耗材。须拆空解锁；每材料上限按T为1/1/2/2/3。",
+          "x": 0.127,
+          "y": 0.33,
+          "width": 0.79,
+          "height": 0.09,
+          "fontSize": 15,
+          "style": "body",
+          "align": "left"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_motherboard_t2_broken",
+          "x": 0.17,
+          "y": 0.445,
+          "width": 0.105,
+          "height": 0.145
+        },
+        {
+          "type": "text",
+          "text": "+",
+          "x": 0.285,
+          "y": 0.49,
+          "width": 0.045,
+          "height": 0.04,
+          "fontSize": 18,
+          "style": "arrow",
+          "align": "center"
+        },
+        {
+          "type": "icon",
+          "id": "vanilla:electronic1",
+          "x": 0.345,
+          "y": 0.46,
+          "width": 0.075,
+          "height": 0.09
+        },
+        {
+          "type": "text",
+          "text": "+",
+          "x": 0.425,
+          "y": 0.49,
+          "width": 0.045,
+          "height": 0.04,
+          "fontSize": 18,
+          "style": "arrow",
+          "align": "center"
+        },
+        {
+          "type": "icon",
+          "id": "vanilla:wire",
+          "x": 0.48,
+          "y": 0.46,
+          "width": 0.075,
+          "height": 0.09
+        },
+        {
+          "type": "text",
+          "text": "→",
+          "x": 0.57,
+          "y": 0.49,
+          "width": 0.055,
+          "height": 0.04,
+          "fontSize": 18,
+          "style": "arrow",
+          "align": "center"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_motherboard_t2",
+          "x": 0.66,
+          "y": 0.445,
+          "width": 0.105,
+          "height": 0.145
+        },
+        {
+          "type": "text",
+          "text": "T2 主板本体维修材料",
+          "x": 0.3,
+          "y": 0.595,
+          "width": 0.42,
+          "height": 0.028,
+          "fontSize": 11.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "text",
+          "text": "本体维修仅在工作间进行。材料齐全才一次扣取，不累计跨次进度；修后留在本体格，不会修复内部坏件。",
+          "x": 0.127,
+          "y": 0.645,
+          "width": 0.79,
+          "height": 0.075,
+          "fontSize": 15.5,
+          "style": "body",
+          "align": "left"
+        }
+      ]
+    },
+    {
+      "heading": "维修与单次回收",
+      "elements": [
+        {
+          "text": "主板、空机箱本体仅T1–T3可修；先拆空内部件。主板：电子零件，T2加线缆，T3再加螺丝。",
+          "type": "text",
+          "x": 0.127,
+          "align": "left",
+          "height": 0.085,
+          "fontSize": 15.0,
+          "width": 0.78,
+          "y": 0.205,
+          "style": "body"
+        },
+        {
+          "text": "机箱：废金属，T2加金属锭，T3再加打印耗材。材料齐全才一次扣取，不累计跨次进度。",
+          "type": "text",
+          "x": 0.127,
+          "align": "left",
+          "height": 0.085,
+          "fontSize": 15.0,
+          "width": 0.78,
+          "y": 0.302,
+          "style": "body"
+        },
+        {
+          "text": "六类机体、风扇转子、导热模组和散热风扇组件：现金维修，保存完好价的25%向下取整，非零至少1元。",
+          "type": "text",
+          "x": 0.127,
+          "align": "left",
+          "height": 0.085,
+          "fontSize": 15.0,
+          "width": 0.78,
+          "y": 0.399,
+          "style": "body"
+        },
+        {
+          "text": "电源功率模组含电容：电子零件＋线缆。T1/T2每种1份，T3/T4各2份，T5各3份；工作间优先，箱补足。",
+          "type": "text",
+          "x": 0.127,
+          "align": "left",
+          "height": 0.085,
+          "fontSize": 15.0,
+          "width": 0.78,
+          "y": 0.496,
+          "style": "body"
+        },
+        {
+          "text": "芯片、主控和容量颗粒不可修。显卡、内存、固态分别最多6/6/4组容量件，至少1组即可组装；容量按实物求和。",
+          "type": "text",
+          "x": 0.127,
+          "align": "left",
+          "height": 0.085,
+          "fontSize": 15.0,
+          "width": 0.78,
+          "y": 0.593,
+          "style": "body"
+        },
+        {
+          "text": "回收输入本次数量，含目标格；同物理规格、同状态可跨来源、价格和朝向凑批。工作间优先、箱补足；逐件当前实价合计的50%为预算。",
+          "type": "text",
+          "x": 0.127,
+          "align": "left",
+          "height": 0.085,
+          "fontSize": 15.0,
+          "width": 0.78,
+          "y": 0.69,
+          "style": "body"
+        },
+        {
+          "text": "数量、材料或空间不足不消费，余预算不累计。不可修坏件零价或单件回收无产物时，两次确认报废目标单件；正常空坏箱零价无材料。",
+          "type": "text",
+          "x": 0.127,
+          "align": "left",
+          "height": 0.085,
+          "fontSize": 15.0,
+          "width": 0.78,
+          "y": 0.787,
+          "style": "body"
+        }
+      ]
+    },
+    {
+      "heading": "开机检测",
+      "elements": [
+        {
+          "type": "text",
+          "text": "主板安装CPU、散热器、显卡、内存和固态，再装进机箱并加电源、风扇。缺件可组装保存，出售须检测通过。",
+          "x": 0.127,
+          "y": 0.205,
+          "width": 0.79,
+          "height": 0.078,
+          "fontSize": 15,
+          "style": "body",
+          "align": "left"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.computer_case_t2",
+          "x": 0.43,
+          "y": 0.292,
+          "width": 0.12,
+          "height": 0.11
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_psu_t2",
+          "x": 0.22,
+          "y": 0.405,
+          "width": 0.065,
+          "height": 0.072
+        },
+        {
+          "type": "text",
+          "text": "电源 T2",
+          "x": 0.18,
+          "y": 0.478,
+          "width": 0.15,
+          "height": 0.027,
+          "fontSize": 10.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_motherboard_t2",
+          "x": 0.4,
+          "y": 0.405,
+          "width": 0.065,
+          "height": 0.072
+        },
+        {
+          "type": "text",
+          "text": "主板 T2",
+          "x": 0.36000000000000004,
+          "y": 0.478,
+          "width": 0.15,
+          "height": 0.027,
+          "fontSize": 10.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_cpu_t2",
+          "x": 0.58,
+          "y": 0.405,
+          "width": 0.065,
+          "height": 0.072
+        },
+        {
+          "type": "text",
+          "text": "CPU T2",
+          "x": 0.5399999999999999,
+          "y": 0.478,
+          "width": 0.15,
+          "height": 0.027,
+          "fontSize": 10.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_gpu_t2",
+          "x": 0.76,
+          "y": 0.405,
+          "width": 0.065,
+          "height": 0.072
+        },
+        {
+          "type": "text",
+          "text": "显卡 T2",
+          "x": 0.72,
+          "y": 0.478,
+          "width": 0.15,
+          "height": 0.027,
+          "fontSize": 10.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_ram_t2",
+          "x": 0.22,
+          "y": 0.515,
+          "width": 0.065,
+          "height": 0.072
+        },
+        {
+          "type": "text",
+          "text": "内存条 T2",
+          "x": 0.18,
+          "y": 0.588,
+          "width": 0.15,
+          "height": 0.027,
+          "fontSize": 10.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_hdd_t2",
+          "x": 0.4,
+          "y": 0.515,
+          "width": 0.065,
+          "height": 0.072
+        },
+        {
+          "type": "text",
+          "text": "固态 T2",
+          "x": 0.36000000000000004,
+          "y": 0.588,
+          "width": 0.15,
+          "height": 0.027,
+          "fontSize": 10.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_fan_t2",
+          "x": 0.58,
+          "y": 0.515,
+          "width": 0.065,
+          "height": 0.072
+        },
+        {
+          "type": "text",
+          "text": "散热风扇 T2",
+          "x": 0.5399999999999999,
+          "y": 0.588,
+          "width": 0.15,
+          "height": 0.027,
+          "fontSize": 10.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_cooler_t2",
+          "x": 0.76,
+          "y": 0.515,
+          "width": 0.065,
+          "height": 0.072
+        },
+        {
+          "type": "text",
+          "text": "CPU散热器 T2",
+          "x": 0.72,
+          "y": 0.588,
+          "width": 0.15,
+          "height": 0.027,
+          "fontSize": 10.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "text",
+          "text": "完好机箱与八类配件图示",
+          "x": 0.32,
+          "y": 0.625,
+          "width": 0.45,
+          "height": 0.028,
+          "fontSize": 11.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "text",
+          "text": "检测通过还需满足三个条件：所有配件完好；安装多条内存时，内存等级相同；内部配件的最高与最低等级相差不超过三档。",
+          "x": 0.127,
+          "y": 0.675,
+          "width": 0.79,
+          "height": 0.07,
+          "fontSize": 15,
+          "style": "body",
+          "align": "left"
+        },
+        {
+          "type": "text",
+          "text": "主板固态位为1/1/1/2/2，接受全部T固态；整机至少一件存储。T4/T5支持双显卡，额外配件均检测。",
+          "x": 0.127,
+          "y": 0.765,
+          "width": 0.79,
+          "height": 0.065,
+          "fontSize": 15,
+          "style": "body",
+          "align": "left"
+        }
+      ]
+    },
+    {
+      "heading": "三种机型",
+      "elements": [
+        {
+          "type": "text",
+          "text": "整机",
+          "x": 0.127,
+          "y": 0.205,
+          "width": 0.45,
+          "height": 0.035,
+          "fontSize": 15.5,
+          "style": "blue",
+          "align": "left"
+        },
+        {
+          "type": "text",
+          "text": "加价 20%",
+          "x": 0.7,
+          "y": 0.205,
+          "width": 0.22,
+          "height": 0.035,
+          "fontSize": 15.5,
+          "style": "green",
+          "align": "center"
+        },
+        {
+          "type": "text",
+          "text": "检测合格，且未触发下方两种特殊搭配。",
+          "x": 0.127,
+          "y": 0.245,
+          "width": 0.78,
+          "height": 0.04,
+          "fontSize": 15.5,
+          "style": "body",
+          "align": "left"
+        },
+        {
+          "type": "text",
+          "text": "性价比机器",
+          "x": 0.127,
+          "y": 0.33,
+          "width": 0.48,
+          "height": 0.035,
+          "fontSize": 15.5,
+          "style": "blue",
+          "align": "left"
+        },
+        {
+          "type": "text",
+          "text": "加价 25%",
+          "x": 0.7,
+          "y": 0.33,
+          "width": 0.22,
+          "height": 0.035,
+          "fontSize": 15.5,
+          "style": "green",
+          "align": "center"
+        },
+        {
+          "type": "text",
+          "text": "除 CPU、显卡和电源外的配件，等级均低于 CPU 和显卡；电源不得比 CPU、显卡中的较高等级低超过一档。",
+          "x": 0.127,
+          "y": 0.37,
+          "width": 0.79,
+          "height": 0.075,
+          "fontSize": 15,
+          "style": "body",
+          "align": "left"
+        },
+        {
+          "type": "text",
+          "text": "刀把机",
+          "x": 0.127,
+          "y": 0.475,
+          "width": 0.48,
+          "height": 0.035,
+          "fontSize": 15.5,
+          "style": "blue",
+          "align": "left"
+        },
+        {
+          "type": "text",
+          "text": "加价 10%",
+          "x": 0.7,
+          "y": 0.475,
+          "width": 0.22,
+          "height": 0.035,
+          "fontSize": 15.5,
+          "style": "green",
+          "align": "center"
+        },
+        {
+          "type": "text",
+          "text": "CPU 和显卡均比其他内部配件的最高等级低至少一档。",
+          "x": 0.127,
+          "y": 0.515,
+          "width": 0.79,
+          "height": 0.045,
+          "fontSize": 15.5,
+          "style": "body",
+          "align": "left"
+        },
+        {
+          "type": "text",
+          "text": "三种机型只会取得其中一种。",
+          "x": 0.127,
+          "y": 0.6,
+          "width": 0.79,
+          "height": 0.04,
+          "fontSize": 15.5,
+          "style": "body",
+          "align": "left"
+        },
+        {
+          "type": "text",
+          "text": "提示：检测通过不代表所有商人都愿意收购。下层装机佬不收刀把机；上层电脑收购商还会检查箱内每一件配件的等级与状态。",
+          "x": 0.127,
+          "y": 0.67,
+          "width": 0.79,
+          "height": 0.075,
+          "fontSize": 15,
+          "style": "green",
+          "align": "left"
+        }
+      ]
+    },
+    {
+      "heading": "机型示例",
+      "elements": [
+        {
+          "type": "text",
+          "text": "性价比机器示例：CPU、显卡为 T3，电源及其余配件为 T2。",
+          "x": 0.127,
+          "y": 0.205,
+          "width": 0.79,
+          "height": 0.045,
+          "fontSize": 15,
+          "style": "body",
+          "align": "left"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_psu_t2",
+          "x": 0.22,
+          "y": 0.265,
+          "width": 0.065,
+          "height": 0.058
+        },
+        {
+          "type": "text",
+          "text": "电源 T2",
+          "x": 0.18,
+          "y": 0.323,
+          "width": 0.15,
+          "height": 0.027,
+          "fontSize": 10.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_motherboard_t2",
+          "x": 0.4,
+          "y": 0.265,
+          "width": 0.065,
+          "height": 0.058
+        },
+        {
+          "type": "text",
+          "text": "主板 T2",
+          "x": 0.36000000000000004,
+          "y": 0.323,
+          "width": 0.15,
+          "height": 0.027,
+          "fontSize": 10.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_cpu_t3",
+          "x": 0.58,
+          "y": 0.265,
+          "width": 0.065,
+          "height": 0.058
+        },
+        {
+          "type": "text",
+          "text": "CPU T3",
+          "x": 0.5399999999999999,
+          "y": 0.323,
+          "width": 0.15,
+          "height": 0.027,
+          "fontSize": 10.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_gpu_t3",
+          "x": 0.76,
+          "y": 0.265,
+          "width": 0.065,
+          "height": 0.058
+        },
+        {
+          "type": "text",
+          "text": "显卡 T3",
+          "x": 0.72,
+          "y": 0.323,
+          "width": 0.15,
+          "height": 0.027,
+          "fontSize": 10.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_ram_t2",
+          "x": 0.22,
+          "y": 0.355,
+          "width": 0.065,
+          "height": 0.058
+        },
+        {
+          "type": "text",
+          "text": "内存条 T2",
+          "x": 0.18,
+          "y": 0.413,
+          "width": 0.15,
+          "height": 0.027,
+          "fontSize": 10.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_hdd_t2",
+          "x": 0.4,
+          "y": 0.355,
+          "width": 0.065,
+          "height": 0.058
+        },
+        {
+          "type": "text",
+          "text": "固态 T2",
+          "x": 0.36000000000000004,
+          "y": 0.413,
+          "width": 0.15,
+          "height": 0.027,
+          "fontSize": 10.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_fan_t2",
+          "x": 0.58,
+          "y": 0.355,
+          "width": 0.065,
+          "height": 0.058
+        },
+        {
+          "type": "text",
+          "text": "散热风扇 T2",
+          "x": 0.5399999999999999,
+          "y": 0.413,
+          "width": 0.15,
+          "height": 0.027,
+          "fontSize": 10.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_cooler_t2",
+          "x": 0.76,
+          "y": 0.355,
+          "width": 0.065,
+          "height": 0.058
+        },
+        {
+          "type": "text",
+          "text": "CPU散热器 T2",
+          "x": 0.72,
+          "y": 0.413,
+          "width": 0.15,
+          "height": 0.027,
+          "fontSize": 10.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "text",
+          "text": "性价比机器配件图示",
+          "x": 0.32,
+          "y": 0.46,
+          "width": 0.45,
+          "height": 0.028,
+          "fontSize": 11.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "text",
+          "text": "刀把机示例：CPU、显卡为 T2，其余配件为 T3；只有一个核心配件偏低时不会触发刀把机。",
+          "x": 0.127,
+          "y": 0.51,
+          "width": 0.79,
+          "height": 0.065,
+          "fontSize": 15,
+          "style": "body",
+          "align": "left"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_psu_t3",
+          "x": 0.22,
+          "y": 0.585,
+          "width": 0.065,
+          "height": 0.058
+        },
+        {
+          "type": "text",
+          "text": "电源 T3",
+          "x": 0.18,
+          "y": 0.643,
+          "width": 0.15,
+          "height": 0.027,
+          "fontSize": 10.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_motherboard_t3",
+          "x": 0.4,
+          "y": 0.585,
+          "width": 0.065,
+          "height": 0.058
+        },
+        {
+          "type": "text",
+          "text": "主板 T3",
+          "x": 0.36000000000000004,
+          "y": 0.643,
+          "width": 0.15,
+          "height": 0.027,
+          "fontSize": 10.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_cpu_t2",
+          "x": 0.58,
+          "y": 0.585,
+          "width": 0.065,
+          "height": 0.058
+        },
+        {
+          "type": "text",
+          "text": "CPU T2",
+          "x": 0.5399999999999999,
+          "y": 0.643,
+          "width": 0.15,
+          "height": 0.027,
+          "fontSize": 10.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_gpu_t2",
+          "x": 0.76,
+          "y": 0.585,
+          "width": 0.065,
+          "height": 0.058
+        },
+        {
+          "type": "text",
+          "text": "显卡 T2",
+          "x": 0.72,
+          "y": 0.643,
+          "width": 0.15,
+          "height": 0.027,
+          "fontSize": 10.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_ram_t3",
+          "x": 0.22,
+          "y": 0.675,
+          "width": 0.065,
+          "height": 0.058
+        },
+        {
+          "type": "text",
+          "text": "内存条 T3",
+          "x": 0.18,
+          "y": 0.7330000000000001,
+          "width": 0.15,
+          "height": 0.027,
+          "fontSize": 10.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_hdd_t3",
+          "x": 0.4,
+          "y": 0.675,
+          "width": 0.065,
+          "height": 0.058
+        },
+        {
+          "type": "text",
+          "text": "固态 T3",
+          "x": 0.36000000000000004,
+          "y": 0.7330000000000001,
+          "width": 0.15,
+          "height": 0.027,
+          "fontSize": 10.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_fan_t3",
+          "x": 0.58,
+          "y": 0.675,
+          "width": 0.065,
+          "height": 0.058
+        },
+        {
+          "type": "text",
+          "text": "散热风扇 T3",
+          "x": 0.5399999999999999,
+          "y": 0.7330000000000001,
+          "width": 0.15,
+          "height": 0.027,
+          "fontSize": 10.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_cooler_t3",
+          "x": 0.76,
+          "y": 0.675,
+          "width": 0.065,
+          "height": 0.058
+        },
+        {
+          "type": "text",
+          "text": "CPU散热器 T3",
+          "x": 0.72,
+          "y": 0.7330000000000001,
+          "width": 0.15,
+          "height": 0.027,
+          "fontSize": 10.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "text",
+          "text": "刀把机配件图示",
+          "x": 0.36,
+          "y": 0.78,
+          "width": 0.38,
+          "height": 0.028,
+          "fontSize": 11.5,
+          "style": "caption",
+          "align": "center"
+        }
+      ]
+    },
+    {
+      "heading": "高端配件",
+      "elements": [
+        {
+          "type": "text",
+          "text": "T4 CPU、显卡及T5完好配件高端加价20%。配置T只看性能件，容量组与通用件不降T；主板机箱检查实际内部件。",
+          "x": 0.127,
+          "y": 0.205,
+          "width": 0.79,
+          "height": 0.065,
+          "fontSize": 15,
+          "style": "body",
+          "align": "left"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_cpu_t4",
+          "x": 0.34,
+          "y": 0.305,
+          "width": 0.085,
+          "height": 0.125
+        },
+        {
+          "type": "text",
+          "text": "T4 CPU",
+          "x": 0.30000000000000004,
+          "y": 0.432,
+          "width": 0.15,
+          "height": 0.027,
+          "fontSize": 11.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_gpu_t4",
+          "x": 0.51,
+          "y": 0.305,
+          "width": 0.085,
+          "height": 0.125
+        },
+        {
+          "type": "text",
+          "text": "T4 显卡",
+          "x": 0.47000000000000003,
+          "y": 0.432,
+          "width": 0.15,
+          "height": 0.027,
+          "fontSize": 11.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "icon",
+          "id": "pcrepair.component_gpu_t5",
+          "x": 0.68,
+          "y": 0.305,
+          "width": 0.085,
+          "height": 0.125
+        },
+        {
+          "type": "text",
+          "text": "T5 显卡",
+          "x": 0.64,
+          "y": 0.432,
+          "width": 0.15,
+          "height": 0.027,
+          "fontSize": 11.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "text",
+          "text": "高端配件图示",
+          "x": 0.39,
+          "y": 0.47,
+          "width": 0.25,
+          "height": 0.028,
+          "fontSize": 11.5,
+          "style": "caption",
+          "align": "center"
+        },
+        {
+          "type": "text",
+          "text": "将高端配件装入完好机箱，机箱商品继承一次这项加价；装入多件不会重复叠加，取出最后一件时撤销。空机箱和破损物资箱不会继承。",
+          "x": 0.127,
+          "y": 0.52,
+          "width": 0.79,
+          "height": 0.085,
+          "fontSize": 15,
+          "style": "body",
+          "align": "left"
+        },
+        {
+          "type": "text",
+          "text": "高端配件加价可与机型加价共同生效，但属于不同计价阶段，不能把两个百分比直接相加当成最终成交涨幅。实际成交仍受原版交易条件影响。",
+          "x": 0.127,
+          "y": 0.65,
+          "width": 0.79,
+          "height": 0.09,
+          "fontSize": 15,
+          "style": "green",
+          "align": "left"
+        }
+      ]
+    }
+  ]
+}

@@ -3,25 +3,21 @@ using System.Collections.Generic;
 using HarmonyLib;
 using Il2Cpp;
 
-namespace ProbablyAssembled;
+namespace PCExpansion;
 
-/// <summary>把电脑物品接入原版街区拾荒掉落和上门拾荒客库存。</summary>
+/// <summary>把破损电脑物品接入原版街区拾荒掉落。</summary>
 internal static class ScavengingIntegration
 {
     private const string ModId = "pcrepairmod";
     private const string DumpingGroundGroupId = "dumpingGroundTG";
     private const string JunkTableId = "junkTable";
     private const string BrokenComputerTableId = "pcrepairmod.broken_computer_parts";
-    private const string DoorScavengerStockedTag = "PCREPAIR_DOOR_SCAVENGER_STOCKED";
-    private const string ThiefComponentStockedTag = "PCREPAIR_THIEF_COMPONENT_STOCKED";
     private const float JunkWeightReduction = 0.10f;
-    private static readonly Random random = new();
     private static bool lootPoolRegistered;
     private static float originalJunkTableWeight = float.NaN;
     private static int scavengingActions;
     private static int scavengingRolls;
     private static int computerRolls;
-
     private static void RegisterBrokenComputerLoot()
     {
         if (lootPoolRegistered) return;
@@ -52,16 +48,13 @@ internal static class ScavengingIntegration
                     }
                 }
 
-                if (originalJunkTableWeight <= 0)
+                if (!float.IsFinite(originalJunkTableWeight) || originalJunkTableWeight <= 0)
                     throw new InvalidOperationException("原版垃圾表 junkTable 不存在或权重无效。");
             }
 
             var computerGroupWeight = originalJunkTableWeight * JunkWeightReduction;
             var reducedJunkWeight = originalJunkTableWeight - computerGroupWeight;
 
-            // ClearTable/AddEntry modify an existing table; RegisterTable is
-            // required to create this custom table in LootRegistry's journal.
-            LootRegistry.ClearTable(ModId, BrokenComputerTableId);
             var entries = new Il2CppSystem.Collections.Generic.List<LootEntry>();
             var expectedIds = new HashSet<string>(StringComparer.Ordinal);
             foreach (var item in Components.AllItems())
@@ -77,7 +70,13 @@ internal static class ScavengingIntegration
             if (expectedIds.Count == 0) return;
             stage = "注册自定义物品表";
             var entryEnumerable = new Il2CppSystem.Collections.Generic.IEnumerable<LootEntry>(entries.Pointer);
+            // The native journal persists across vanilla reloads. Register only
+            // creates a missing table; repeated registrations do not replace it.
+            // Seed it first, then refill it so every journal replay ends complete.
             LootRegistry.RegisterTable(ModId, BrokenComputerTableId, entryEnumerable);
+            LootRegistry.ClearTable(ModId, BrokenComputerTableId);
+            foreach (var entry in entries)
+                LootRegistry.AddEntry(ModId, BrokenComputerTableId, entry.id, entry.weight);
             // Make retries idempotent if vanilla loading completed in stages.
             stage = "注册拾荒组引用";
             LootRegistry.SetGroupWeight(ModId, DumpingGroundGroupId, JunkTableId, reducedJunkWeight);
@@ -141,110 +140,6 @@ internal static class ScavengingIntegration
         }
     }
 
-    private static void AddDoorScavengerStock(StoreClient? client)
-    {
-        if (client == null) return;
-        var clientId = Core.Clean(client.identifier);
-        if (clientId != "scavGeneral" && clientId != "scavCrate") return;
-        if (client.IsTag(DoorScavengerStockedTag)) return;
-
-        try
-        {
-            var store = PlayerStore.Instance;
-            if (store == null) return;
-
-            var pool = new List<Components.Item>();
-            foreach (var item in Components.AllItems())
-                if (!item.Owner.IsCase && item.Tier <= 2) pool.Add(item);
-            if (pool.Count == 0) return;
-
-            // 每位上门拾荒客随机带 1–2 件，完好/损坏和 T1/T2 都在同一个抽选池中。
-            var selectedCount = random.Next(1, Math.Min(2, pool.Count) + 1);
-            for (var i = pool.Count - 1; i > 0; i--)
-            {
-                var j = random.Next(i + 1);
-                (pool[i], pool[j]) = (pool[j], pool[i]);
-            }
-
-            var offers = new List<GameItem>(selectedCount);
-            for (var i = 0; i < selectedCount; i++)
-            {
-                var item = DirectoryMaster.Item(pool[i].Id, true);
-                if (item == null)
-                {
-                    Core.Log?.Warning("拾荒客配件尚未注册，跳过本次库存追加：" + pool[i].Id);
-                    return;
-                }
-                offers.Add(item);
-            }
-
-            foreach (var item in offers)
-                store.AddDirectSellingItemToTable(item, false, false, false, 0);
-
-            client.AddTag(DoorScavengerStockedTag);
-            Core.Log?.Msg("[深空装机] 原版上门拾荒客本次额外带来 " + offers.Count +
-                          " 件随机 T1/T2 电脑配件（完好或损坏）。");
-        }
-        catch (Exception ex)
-        {
-            Core.Log?.Error("为原版上门拾荒客追加电脑配件失败：" + ex);
-        }
-    }
-
-    private static void AddThiefComponentStock(StoreClient? client)
-    {
-        if (client == null) return;
-
-        var clientId = Core.Clean(client.identifier);
-        var isThiefVisitor = clientId == "thief" || clientId == "pettyThief" || clientId == "foodThief" ||
-                             clientId.StartsWith("thiefGeneric", StringComparison.Ordinal);
-        if (!isThiefVisitor || client.IsTag(ThiefComponentStockedTag)) return;
-
-        try
-        {
-            var store = PlayerStore.Instance;
-            if (store == null) return;
-
-            var pool = new List<Components.Item>();
-            foreach (var item in Components.AllItems())
-            {
-                // 小偷只带 T4/T5 配件；完好与破损配件都可抽中，任何机箱都排除。
-                if (item.Owner.IsCase || item.Tier < 4 || item.Tier > 5) continue;
-                pool.Add(item);
-            }
-            if (pool.Count == 0) return;
-
-            var selectedCount = random.Next(1, Math.Min(2, pool.Count) + 1);
-            for (var i = pool.Count - 1; i > 0; i--)
-            {
-                var j = random.Next(i + 1);
-                (pool[i], pool[j]) = (pool[j], pool[i]);
-            }
-
-            var offers = new List<GameItem>(selectedCount);
-            for (var i = 0; i < selectedCount; i++)
-            {
-                var item = DirectoryMaster.Item(pool[i].Id, true);
-                if (item == null)
-                {
-                    Core.Log?.Warning("小偷高阶配件尚未注册，取消本次追加：" + pool[i].Id);
-                    return;
-                }
-                offers.Add(item);
-            }
-
-            foreach (var item in offers)
-                store.AddDirectSellingItemToTable(item, false, false, false, 0);
-
-            client.AddTag(ThiefComponentStockedTag);
-            Core.Log?.Msg("[深空装机] 原版小偷本次额外携带 " + offers.Count + " 件随机 T4/T5 电脑配件（完好或破损，不含机箱）。");
-        }
-        catch (Exception ex)
-        {
-            Core.Log?.Error("为原版小偷追加 T4/T5 电脑配件失败：" + ex);
-        }
-    }
-
     // Register when the vanilla tables are ready; retry before the player invokes
     // the actual dumping-ground scavenging action if initialization was delayed.
     [HarmonyPatch(typeof(LootRegistry), nameof(LootRegistry.OnVanillaLoaded))]
@@ -305,13 +200,4 @@ internal static class ScavengingIntegration
         }
     }
 
-    [HarmonyPatch(typeof(StoreClient), nameof(StoreClient.OnIntroduced))]
-    internal static class DoorScavengerStockPatch
-    {
-        private static void Postfix(StoreClient __instance)
-        {
-            AddDoorScavengerStock(__instance);
-            AddThiefComponentStock(__instance);
-        }
-    }
 }
