@@ -6,11 +6,12 @@ using Il2Cpp;
 
 namespace PCExpansion;
 
-/// <summary>Only runs created with this save contract may load or write. No migration.</summary>
+/// <summary>Loads marked saves from the 1.0 generation onward. No migration.</summary>
 internal static class SaveGeneration
 {
     private const string Key = "pcexpansion.save-generation";
     private const string Contract = "1.0";
+    private static readonly Version MinimumContract = new(1, 0);
     private static IntPtr owner;
     private static string? run;
     private static string? expectedRun;
@@ -20,8 +21,13 @@ internal static class SaveGeneration
     internal static bool Decoding => decoding > 0;
     private static long noticeAt;
 
-    private static bool HasContract(PlayerStore? store) => store != null && store.modData != null &&
-        store.modData.ContainsKey(Key) && store.modData[Key] == Contract;
+    private static bool HasContract(PlayerStore? store)
+    {
+        if (store?.modData == null || !store.modData.ContainsKey(Key)) return false;
+        var value = store.modData[Key];
+        return Version.TryParse(value, out var version) && version != null &&
+            version.CompareTo(MinimumContract) >= 0;
+    }
 
     internal static bool IsSupported(PlayerStore? store)
     {
@@ -49,7 +55,7 @@ internal static class SaveGeneration
         }
         catch (Exception ex)
         {
-            Core.Log?.Warning("读取存档版本失败，已停止加载：" + ex.Message);
+            Core.Log?.Warning("读取存档标记失败，已停止加载：" + ex.Message);
             return Reject();
         }
     }
@@ -84,7 +90,7 @@ internal static class SaveGeneration
             var message = LanguageText.Get("save.unsupported");
             Core.Log?.Warning(message);
             try { StoreUIManager.Instance?.Notify(message, "#FFFFFF"); }
-            catch (Exception ex) { Core.Debug("存档版本提示暂不可显示：" + ex.Message); }
+            catch (Exception ex) { Core.Debug("存档校验提示暂不可显示：" + ex.Message); }
         }
         return false;
     }

@@ -140,6 +140,24 @@ internal static class UpperComputerBuyerNpc
             LanguageText.Get("text.c9eaa60d077e") );
     }
 
+    private static bool HasLowTierPurchasePart(GameItem? item)
+    {
+        if (item == null) return false;
+        if (ComputerCase.IsCase(item))
+        {
+            // 外壳档位不参与资格判断；只检查机箱内的实际配件。
+            foreach (var part in CaseEconomy.Parts(item)) if (part.Tier is 1 or 2) return true;
+            return false;
+        }
+        if (!Components.IsComponent(item)) return false;
+        if (WorkroomMachineAssembly.Read(item) is { } machine)
+        {
+            foreach (var part in WorkroomMachineAssembly.Flatten(machine)) if (part.Tier is 1 or 2) return true;
+            return false;
+        }
+        return WorkroomComponentParts.ConfigurationTier(item) is 1 or 2;
+    }
+
     private static bool IsAllowedPurchase(GameItem? item)
     {
         if (item == null) return false;
@@ -362,7 +380,18 @@ internal static class UpperComputerBuyerNpc
     {
         private static void Postfix(StoreClient __instance, GameItem gameItem, ref bool __result)
         {
-            if (IsBuyer(__instance)) __result = IsAllowedPurchase(gameItem);
+            if (!IsBuyer(__instance)) return;
+            try
+            {
+                __result = IsAllowedPurchase(gameItem);
+                // 原生摆货在 IsClientBuyingThisItem=false 时直接读取拒收对白。
+                if (!__result && HasLowTierPurchasePart(gameItem))
+                    __instance.placedWrongItemWhenSellingToDialogue = new Dialogue().SetText(
+                        __instance.displayName, LanguageText.Get("npc.refusal.upper.low_tier"));
+                else if (!__result)
+                    __instance.placedWrongItemWhenSellingToDialogue = RefusalDialogue(__instance, gameItem);
+            }
+            catch (Exception ex) { Core.Log?.Warning("上城区电脑拒收对白生成失败：" + ex.Message); }
         }
     }
 
@@ -389,11 +418,30 @@ internal static class UpperComputerBuyerNpc
     [HarmonyPatch(typeof(PlayerStore), nameof(PlayerStore.PlacedItemForSelling))]
     internal static class SaleEligibilityPatch
     {
-        private static void Prefix(PlayerStore __instance, GameItem targetItem)
+        private static void Prefix(PlayerStore __instance, GameItem targetItem, out bool __state)
         {
+            __state = false;
             if (!IsBuyer(__instance.currentClientInstance?.storeClient) || targetItem == null) return;
             if (ComputerCase.IsCase(targetItem)) CaseEconomy.EvaluateCase(targetItem);
             RefreshPurchaseEligibility(targetItem);
+            try { __state = !IsAllowedPurchase(targetItem) && HasLowTierPurchasePart(targetItem); }
+            catch (Exception ex) { Core.Log?.Warning("上城区拒收原因读取失败：" + ex.Message); }
+        }
+
+        private static void Postfix(PlayerStore __instance, GameItem targetItem, bool __state)
+        {
+            if (!__state) return;
+            try
+            {
+                var client = __instance.currentClientInstance?.storeClient;
+                if (!IsBuyer(client) || client!.clientIntent != StoreClient.ClientIntent.SELLNBUY) return;
+                var dialogue = new Dialogue().SetText(client.displayName,
+                    LanguageText.Get("npc.refusal.upper.low_tier"));
+                var shown = DialogUIManager.Instance?.StartDialogue(dialogue, true) == true;
+                Core.Log?.Msg("[电脑拒收对白] " + Core.Clean(targetItem.identifier) +
+                    "，npc.refusal.upper.low_tier，已显示=" + shown);
+            }
+            catch (Exception ex) { Core.Log?.Warning("上城区拒收对白显示失败：" + ex.Message); }
         }
     }
 

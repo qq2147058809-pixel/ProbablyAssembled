@@ -389,8 +389,14 @@ internal static class WorkroomItemCodec
             root["uniqueId"] = 0; root["uuid"] = 0L;
             if (copy[nameof(Snapshot.Nodes)] is not JsonArray nodes || nodes[0] is not JsonObject node ||
                 node[nameof(Node.Scalars)] is not JsonObject scalars || node[nameof(Node.Features)] is not JsonArray features ||
+                node[nameof(Node.ModifiedState)] is not JsonObject modifiedState ||
                 !StackInteger(scalars["uniqueId"], original.UniqueId) || !StackInteger(scalars["unitCount"], 1)) return null;
             node[nameof(Node.UniqueId)] = 0; node[nameof(Node.Uuid)] = 0L; scalars["uniqueId"] = 0;
+            // Some native items carry disabled, empty tags while otherwise
+            // identical items omit them. Ignore only these exact defaults in
+            // the comparison copy; the saved snapshot stays untouched.
+            IgnoreCatalogDefaultTag(modifiedState, "BOUGHT_PRICE_TAG");
+            IgnoreCatalogDefaultTag(modifiedState, "WINE_SCORE_INT");
             foreach (var feature in features)
             {
                 if (feature is not JsonObject featureObject || featureObject[nameof(Feature.Scalars)] is not JsonObject fields) return null;
@@ -446,6 +452,21 @@ internal static class WorkroomItemCodec
 
     private static bool StackLong(JsonNode? value, long expected) => value is JsonValue number &&
         number.TryGetValue<long>(out var actual) && actual == expected;
+
+    private static void IgnoreCatalogDefaultTag(JsonObject modifiedState, string name)
+    {
+        if (modifiedState[name] is not JsonObject tag || tag.Count != 9 ||
+            tag["identifier"] is not JsonValue identifier || !identifier.TryGetValue<string>(out var id) || id != name ||
+            tag["identifierName"] is not JsonValue identifierName ||
+            !identifierName.TryGetValue<string>(out var displayName) || displayName != "TYPE-STRING_" + name ||
+            tag["valueEnabled"] is not JsonValue enabled || !enabled.TryGetValue<bool>(out var isEnabled) || isEnabled ||
+            tag["internalValueString"] is not JsonValue text || !text.TryGetValue<string>(out var stringValue) || stringValue != "" ||
+            !StackInteger(tag["valueInt"], 0) || !StackLong(tag["valueLong"], 0) ||
+            tag["valueFloat"] is not JsonValue floatValue || !floatValue.TryGetValue<float>(out var single) || single != 0 ||
+            tag["valueDouble"] is not JsonValue doubleValue || !doubleValue.TryGetValue<double>(out var twice) || twice != 0 ||
+            tag["valueBool"] is not JsonValue boolean || !boolean.TryGetValue<bool>(out var boolValue) || boolValue) return;
+        modifiedState.Remove(name);
+    }
 
     private static bool NormalizeStackPosition(JsonObject root, Snapshot item)
     {

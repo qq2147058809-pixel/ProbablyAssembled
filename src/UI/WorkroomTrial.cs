@@ -46,7 +46,7 @@ internal static class WorkroomTrial
     internal static void ClearRoomSelection(long epoch) => view?.ClearRoomSelection(epoch);
     internal static bool HitShopStorage(Vector2 point) => view != null &&
         flow.Current == WorkroomTransition.Stage.Home && !BlocksNativeInput &&
-        Time.timeScale > 0 && WorkroomGameAdapter.AtStore() && view.HitShopStorage(point);
+        Time.timeScale > 0 && WorkroomGameAdapter.AtStore() && view.HitShopStorageDrop(point);
     internal static bool HitShopStorageWindow(Vector2 point) => view != null && !cleanupPending &&
         flow.Current == WorkroomTransition.Stage.Home && view.HitStorageWindow(point);
     internal static void NotifyStorage()

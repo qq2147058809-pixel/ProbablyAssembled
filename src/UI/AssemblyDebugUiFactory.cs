@@ -98,7 +98,9 @@ internal static class AssemblyDebugUi
         label.font = font;
         label.fontSharedMaterial = font.material;
         label.text = text;
-        label.fontSize = size;
+        // Workroom-owned text only: preserve every panel and button rectangle.
+        label.fontSize = size * 1.25f;
+        label.fontStyle = FontStyles.Bold;
         label.enableAutoSizing = false;
         label.enableWordWrapping = false;
         label.richText = false;

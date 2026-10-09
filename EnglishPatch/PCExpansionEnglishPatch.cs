@@ -12,11 +12,11 @@ using System.Text;
 using System.Text.Json;
 using MelonLoader;
 
-[assembly: AssemblyVersion("0.1.0.0")]
-[assembly: AssemblyFileVersion("0.1.0.0")]
+[assembly: AssemblyVersion("1.1.0.0")]
+[assembly: AssemblyFileVersion("1.1.0.0")]
 [assembly: AssemblyCompany("阿铭")]
 [assembly: AssemblyMetadata("Author", "阿铭")]
-[assembly: MelonInfo(typeof(PCExpansionEnglishPatch.Patch), "PC expansion English Patch", "0.1.0", "阿铭", "")]
+[assembly: MelonInfo(typeof(PCExpansionEnglishPatch.Patch), "PC expansion English Patch", "1.1.0", "阿铭", "")]
 [assembly: MelonGame("Questing Goose Studio", "Probably Stolen")]
 
 namespace PCExpansionEnglishPatch;

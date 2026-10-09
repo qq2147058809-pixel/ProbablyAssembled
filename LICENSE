@@ -1,0 +1,50 @@
+PC expansion 源码使用许可 / Source Code License
+版本 / Version: 2026-10-09
+
+Copyright © 2026 阿铭。保留所有权利。All rights reserved.
+
+中文
+
+1. 适用范围
+本许可仅适用于本仓库中由阿铭创作并发布的 PC expansion 源代码。项目文档中的版权信息另见 COPYRIGHT.md；游戏、第三方素材及未公开美术不属于本许可授权范围。
+
+2. 使用、修改与分发
+除法律另有规定或作者事先书面许可外，不得将本源码的全部或任何部分用于其他项目，不得复制、修改、改编、发布、再分发或作商业用途。作者的书面许可应明确获准行为及范围；本文件本身不预先授予这些权利。
+
+公开仓库允许依 GitHub 服务条款，在 GitHub 上查看及 Fork 仓库所需的有限操作。查看或 Fork 不等于取得在其他项目中使用、修改或分发代码的许可。
+
+3. 获准使用后的署名义务
+获准使用全部或部分源码制作或发布 Mod，包括修改或改编源码时，须在至少一处玩家可见的位置清楚注明：
+- 原作者：阿铭
+- 原项目：PC expansion
+- 源码仓库：https://github.com/qq2147058809-pixel/ProbablyAssembled
+
+发布页说明、随 Mod 提供的说明文件或游戏内鸣谢均可。只在源码注释、提交记录或开发者私下记录中署名，不满足此要求。复制或分发获准使用的源码时，须保留上述版权声明和本许可文件。署名本身不代替作者的事先书面许可。
+
+4. 未授予的权利
+本许可不授予对游戏代码、游戏内素材、商标、其他第三方内容或本项目未公开美术资源的权利。相关权利归各自权利人所有。
+
+如需申请书面许可，可通过 https://www.nexusmods.com/probablystolen/mods/385 或 https://afdian.com/a/aming567 联系作者。
+
+English
+
+1. Scope
+This license applies only to PC expansion source code created and published by 阿铭 in this repository. See COPYRIGHT.md for the copyright notice covering project documentation. Game content, third-party material, and unpublished artwork are outside this license.
+
+2. Use, modification, and distribution
+Except where applicable law provides otherwise or the author gives prior written permission, you may not use any part of the source code in another project, copy it, modify or adapt it, publish or redistribute it, or use it commercially. The author's written permission must specify the authorized acts and scope. This file does not grant those rights in advance.
+
+A public repository permits the limited actions necessary to view and fork it on GitHub under GitHub's terms. Viewing or forking does not authorize use, modification, or distribution of the code in another project.
+
+3. Attribution after permission
+If you are authorized to use all or part of this source code to make or publish a mod, including modified or adapted code, you must clearly credit the following in at least one player-visible location:
+- Original author: 阿铭
+- Original project: PC expansion
+- Source repository: https://github.com/qq2147058809-pixel/ProbablyAssembled
+
+The public mod description, documentation distributed with the mod, or in-game acknowledgements may be used. Source comments, commit history, or private developer records alone do not satisfy this condition. When copying or distributing authorized source code, retain the copyright notice above and this license file. Attribution alone does not replace prior written permission.
+
+4. Rights not granted
+This license grants no rights to game code or assets, trademarks, other third-party content, or this project's unpublished artwork. Those rights belong to their respective owners.
+
+To request written permission, contact the author through https://www.nexusmods.com/probablystolen/mods/385 or https://afdian.com/a/aming567 .

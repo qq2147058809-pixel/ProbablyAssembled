@@ -17,7 +17,7 @@ function Assert-PCExpansionComputerManual {
         if (($taskNames | Sort-Object) -join ',' -ne 'contract,pages') { throw '手册根字段不匹配或重复。' }
         if ($taskRoot.GetProperty('contract').GetString() -cne $taskVersion) { throw '英文手册版本契约错误。' }
         $taskPages = $taskRoot.GetProperty('pages')
-        if ($taskPages.ValueKind -ne [System.Text.Json.JsonValueKind]::Array -or $taskPages.GetArrayLength() -ne 8) { throw '英文手册必须是完整八页。' }
+        if ($taskPages.ValueKind -ne [System.Text.Json.JsonValueKind]::Array -or $taskPages.GetArrayLength() -ne 10) { throw '英文手册必须是完整十页。' }
         $taskComponentsSource = [IO.File]::ReadAllText((Join-Path $ProjectDir 'src\Items\Components.cs'))
         $taskStems = @([regex]::Matches($taskComponentsSource, 'new\("(computer_case|component_[a-z]+)"') | ForEach-Object { $_.Groups[1].Value })
         if ($taskStems.Count -ne 9) { throw '无法识别正式配件目录。' }
@@ -28,7 +28,7 @@ function Assert-PCExpansionComputerManual {
                 [void]$taskIds.Add("pcrepair.${taskStem}_t${taskTier}_broken")
             }
         }
-        $taskHeadings = @('Introduction','Opening a Case','What Can Be Repaired?','Repair and Batch Recycling','Power-on Check','Three PC Build Profiles','Build Examples','High-End Parts')
+        $taskHeadings = @('Introduction','Introduction (Continued)','Opening a Case','What Can Be Repaired?','Repair and Single-Batch Recycling','Repair and Single-Batch Recycling (Continued)','Power-on Check','Three PC Build Profiles','Build Examples','High-End Parts')
         $taskPageIndex = 0
         foreach ($taskPage in $taskPages.EnumerateArray()) {
             if ($taskPage.ValueKind -ne [System.Text.Json.JsonValueKind]::Object) { throw '每页必须为对象。' }
@@ -54,5 +54,5 @@ function Assert-PCExpansionComputerManual {
         if ($taskContract.ManualContractVersion -cne $taskVersion) { throw '英文补丁缺少配套手册契约。' }
     } finally { $taskDocument.Dispose() }
     if (-not [IO.File]::Exists((Join-Path $ProjectDir 'assets\icons\computer_manual_icon.png'))) { throw '缺少电脑手册封面。' }
-    Write-Host "电脑手册核对通过：$taskVersion、完整八页英文、当前配图ID/PNG及原生中文布局契约一致。"
+    Write-Host "电脑手册核对通过：$taskVersion、完整十页英文、当前配图ID/PNG及原生中文布局契约一致。"
 }

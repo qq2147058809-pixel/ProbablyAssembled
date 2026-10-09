@@ -138,7 +138,8 @@ internal static class CaseEconomy
             var parts = machine != null ? new List<PartRecord>(machine.Parts) : ReadParts(caseItem);
             var label = machine == null ? SelectMachineLabel(parts) :
                 machine.Complete ? SelectMachineLabel(parts) : null;
-            caseItem.SetValue(machine == null ? checked(baseValue + ContentsValue(parts)) : machine.Value);
+            var normalValue = machine == null ? checked(baseValue + ContentsValue(parts)) : machine.Value;
+            caseItem.SetValue(checked(normalValue + MarketEvents.AddedCaseValue(parts)));
             SetMachineProfileFeature(caseItem, label, MachineBonusPercent(label));
             var highestTier = 0;
             var highEndEligible = false;

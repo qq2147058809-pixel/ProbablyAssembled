@@ -430,9 +430,7 @@ internal static class WorkroomStorage
                 { failed += candidates.Count - index; break; }
                 var candidate = candidates[index];
                 if (!candidate.Unchanged) { failed++; continue; }
-                var showcase = EmporiumEntry.Instance?.showcaseElement;
-                if (candidate.Home.Pointer == showcase?.Pointer ||
-                    !Sources().Any(source => source.Pointer == candidate.Home.Pointer) ||
+                if (!Sources().Any(source => source.Pointer == candidate.Home.Pointer) ||
                     !GeneralHelper.IsItemOwned(candidate.Item) || !AcceptsIdentifier(candidate.Item.identifier))
                 { skipped++; continue; }
                 if (Store(candidate.Item)) moved++; else failed++;

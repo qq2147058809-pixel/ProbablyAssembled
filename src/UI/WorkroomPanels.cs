@@ -138,7 +138,7 @@ internal sealed class WorkroomPanels : IDisposable
         AssemblyDebugUi.Place(title.gameObject, 16, 0, width-90, 40);
         AssemblyDebugUi.Place(closeButton, width-46, 6, 38, 28);
         AssemblyDebugUi.Place(context.gameObject, 16, 42, width-32, 18);
-        AssemblyDebugUi.Place(footer, 16, height-12, width-32, 12);
+        AssemblyDebugUi.Place(footer, 16, height-17, width-32, 17);
         footer.GetComponent<TextMeshProUGUI>().text = WorkroomStorage.Text("window_hint");
         title.text = Name(kind);
         context.text = LanguageText.Get(inRoom ? "workroom.layout.context.room" : "workroom.layout.context.shop");
@@ -186,7 +186,7 @@ internal sealed class WorkroomPanels : IDisposable
         AssemblyDebugUi.Place(context.gameObject, 16, 42, 508, 18);
         var footerText = AssemblyDebugUi.Text(face.transform, "CloseHint", LanguageText.Get("workroom.layout.close_hint"), font, 9);
         footer = footerText.gameObject;
-        AssemblyDebugUi.Place(footer, 16, WorkroomStorageUi.Height-12, 508, 12);
+        AssemblyDebugUi.Place(footer, 16, WorkroomStorageUi.Height-17, 508, 17);
         storage = new WorkroomStorageUi(canvas, face, font);
         components = new WorkroomComponentUi(canvas, reference.transform, font);
         machines = new WorkroomMachineUi(canvas, reference.transform, font);

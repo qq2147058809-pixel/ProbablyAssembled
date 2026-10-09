@@ -17,6 +17,7 @@ internal sealed class WorkroomInventoryUi
         internal GameObject Root = null!;
         internal Image Icon = null!;
         internal TextMeshProUGUI Count = null!;
+        internal GameObject Selection = null!;
     }
     private sealed class GroupView
     {
@@ -26,7 +27,6 @@ internal sealed class WorkroomInventoryUi
     private GameObject grid, ghostRoot, bandRoot, groupGhostRoot;
     private Canvas canvas;
     private TMP_FontAsset font;
-    private TextMeshProUGUI label;
     private Image ghost;
     private readonly Dictionary<string, ItemView> icons = new();
     private readonly WorkroomItemInfo information = new();
@@ -60,8 +60,6 @@ internal sealed class WorkroomInventoryUi
     internal WorkroomInventoryUi(Canvas canvas, Transform parent, TMP_FontAsset font)
     {
         this.canvas = canvas; this.font = font;
-        var hints = WorkroomStorage.Text("selection_hint", 0) + WorkroomStorage.Text("room_hint") + "0123456789";
-        AssemblyDebugFonts.Prepare(hints, hints);
         grid = AssemblyDebugUi.Image(parent, "WorkingInventory", new Color(.09f,.11f,.14f,.82f), false).gameObject;
         AssemblyDebugUi.Place(grid, 375, 508, WorkroomStorageState.Columns*Cell, WorkroomStorageState.Rows*Cell);
         for (var x = 0; x <= WorkroomStorageState.Columns; x++)
@@ -70,8 +68,6 @@ internal sealed class WorkroomInventoryUi
         for (var y = 0; y <= WorkroomStorageState.Rows; y++)
             AssemblyDebugUi.Place(AssemblyDebugUi.Image(grid.transform, "Row"+y, new Color(.34f,.32f,.36f,.75f), false).gameObject,
                 0, y*Cell, WorkroomStorageState.Columns*Cell, 1);
-        label = AssemblyDebugUi.Text(parent, "InventoryHint", WorkroomStorage.Text("room_hint"), font, 15);
-        AssemblyDebugUi.Place(label.gameObject, 373, 650, 548, 32);
         ghostRoot = AssemblyDebugUi.New("InventoryDragPreview", canvas.transform);
         ghostRoot.SetActive(false);
         ghost = AssemblyDebugUi.Image(ghostRoot.transform, "ItemIcon", new Color(1,1,1,.7f), false);
@@ -94,8 +90,6 @@ internal sealed class WorkroomInventoryUi
         if (!interactive || !WorkroomStorage.State.Ready) { Cancel(); return; }
         var point = panels.HitWindow(Input.mousePosition) ? null : GridPoint(Input.mousePosition);
         var hovered = point.HasValue ? WorkroomStorage.State.RoomItems.LastOrDefault(item => Hit(item, point.Value)) : null;
-        label.text = Environment.TickCount64 < WorkroomStorage.MessageUntil ? WorkroomStorage.Message :
-            hovered?.Item.Name ?? (HasSelection ? WorkroomStorage.Text("selection_hint", selected.Count) : WorkroomStorage.Text("room_hint"));
         if (clickEpoch != WorkroomStorage.State.Epoch || clickRevision != WorkroomStorage.State.Revision ||
             Input.GetKeyDown(KeyCode.Escape) || (Input.GetMouseButtonDown(0) && hovered == null)) ResetClicks();
         if (Input.GetKeyDown(KeyCode.Escape) && OwnsEscape)
@@ -255,6 +249,7 @@ internal sealed class WorkroomInventoryUi
                 WorkroomStorage.StoreRoomGroup(command, generation);
                 PruneSelection(); PaintSelection();
             }
+            else WorkroomStorage.Notify("invalid_position");
             // A group has no room formation placement or rotation. A missed
             // target/header release keeps every record at its original place.
         }
@@ -316,6 +311,7 @@ internal sealed class WorkroomInventoryUi
         if (Input.GetMouseButtonUp(0))
         {
             bandPending = banding = false; bandRoot.SetActive(false);
+            Core.Log?.Msg($"[工作间框选] selected={selected.Count}; frame={Time.frameCount}");
             PaintSelection(); return;
         }
         if (!Input.GetMouseButton(0)) Cancel();
@@ -369,7 +365,9 @@ internal sealed class WorkroomInventoryUi
                 var image = AssemblyDebugUi.Image(root.transform, "ItemIcon", Color.white, false); image.preserveAspect = true;
                 var count = AssemblyDebugUi.Text(root.transform, "Quantity", "", font, 12, true);
                 AssemblyDebugUi.Place(count.gameObject, 2, 0, 80, 16);
-                view = new ItemView { Root = root, Icon = image, Count = count }; icons[item.Id] = view;
+                var selection = AssemblyDebugUi.Image(root.transform, "Selected", new Color(.28f,.65f,.91f,.27f), false).gameObject;
+                AssemblyDebugUi.Stretch(selection); selection.SetActive(false);
+                view = new ItemView { Root = root, Icon = image, Count = count, Selection = selection }; icons[item.Id] = view;
             }
             AssemblyDebugUi.Place(view.Root, item.X*Cell, item.Y*Cell, item.Item.Footprint.Width*Cell, item.Item.Footprint.Height*Cell);
             view.Icon.sprite = Icon(item.Item);
@@ -402,6 +400,8 @@ internal sealed class WorkroomInventoryUi
             if (!WorkroomUiCleanup.IsAlive(background)) continue;
             background.color = HasSelection && selected.Contains(pair.Key)
                 ? new Color(.22f,.48f,.64f,.85f) : new Color(.2f,.27f,.29f,.5f);
+            WorkroomUiCleanup.Deactivate(pair.Value.Selection);
+            if (HasSelection && selected.Contains(pair.Key)) pair.Value.Selection.SetActive(true);
         }
         paintedVersion = selectionVersion; paintedRevision = state.Revision; paintedEpoch = state.Epoch;
     }
@@ -479,11 +479,6 @@ internal sealed class WorkroomInventoryUi
         });
         cleanup.Run("inventory.band", () => { WorkroomUiCleanup.Deactivate(bandRoot); bandRoot = null!; });
         cleanup.Run("inventory.group", () => { WorkroomUiCleanup.Deactivate(groupGhostRoot); groupGhostRoot = null!; });
-        cleanup.Run("inventory.hint", () =>
-        {
-            if (WorkroomUiCleanup.IsAlive(label)) WorkroomUiCleanup.Deactivate(label.gameObject);
-            label = null!;
-        });
         cleanup.Run("inventory.information", information.Dispose);
         cleanup.ThrowIfFailed();
         canvas = null!; font = null!;

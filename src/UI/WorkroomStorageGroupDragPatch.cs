@@ -87,6 +87,7 @@ internal static class WorkroomStorageGroupDragPatch
             if (accepts && release && complete)
                 WorkroomStorage.StoreShopGroup(candidates, epoch, __instance.Pointer);
             else if (!complete) WorkroomStorage.Notify("source_changed");
+            else if (!accepts && release) WorkroomStorage.Notify("invalid_position");
         }
         catch (Exception ex)
         {

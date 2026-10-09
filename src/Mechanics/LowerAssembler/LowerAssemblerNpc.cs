@@ -133,6 +133,10 @@ internal static class LowerAssemblerNpc
     internal static bool IsAssembler(StoreClient? client) =>
         IsLowerAssembler(client) || PhoneAssemblerNpc.IsPhoneAssembler(client);
 
+    private static bool UsesStillPortrait(StoreClient? client) =>
+        IsAssembler(client) || UpperComputerBuyerNpc.IsBuyer(client) ||
+        SecuritySeizureMerchant.IsMerchant(client);
+
     internal static bool IsAllowedAssemblerPurchase(GameItem? item)
     {
         try { return PurchaseRefusalReason(item) == null; }
@@ -476,7 +480,21 @@ internal static class LowerAssemblerNpc
         {
             try
             {
-                if (IsAssembler(__instance)) __result = IsAllowedAssemblerPurchase(gameItem);
+                if (!IsAssembler(__instance)) return;
+                __result = IsAllowedAssemblerPurchase(gameItem);
+                // 摆货流程在拒收检查之前读取此对白；按当前物品刷新，避免沿用上一件的原因。
+                if (!__result && gameItem != null && ComputerCase.IsCase(gameItem) &&
+                    CaseEconomy.MachineLabel(gameItem) == "刀把机")
+                {
+                    var key = PhoneAssemblerNpc.IsPhoneAssembler(__instance)
+                        ? "npc.refusal.vesper.bottleneck" : "npc.refusal.lower.bottleneck";
+                    __instance.placedWrongItemWhenSellingToDialogue = new Dialogue()
+                        .SetText(__instance.displayName, LanguageText.Get(key));
+                }
+                else if (!__result)
+                {
+                    __instance.placedWrongItemWhenSellingToDialogue = RefusalDialogue(__instance, gameItem);
+                }
             }
             catch (Exception ex) { Core.Log?.Warning("电脑收购资格判断失败：" + ex.Message); }
         }
@@ -485,21 +503,40 @@ internal static class LowerAssemblerNpc
     [HarmonyPatch(typeof(PlayerStore), nameof(PlayerStore.PlacedItemForSelling))]
     internal static class PurchaseDiagnosticsPatch
     {
-        private static void Prefix(PlayerStore __instance, GameItem targetItem)
+        private static void Prefix(PlayerStore __instance, GameItem targetItem, out string? __state)
         {
+            __state = null;
             try
             {
                 var client = __instance.currentClientInstance?.storeClient;
                 if (!IsAssembler(client) || targetItem == null) return;
                 if (ComputerCase.IsCase(targetItem)) CaseEconomy.EvaluateCase(targetItem);
                 RefreshPurchaseEligibility(targetItem);
+                var reason = PurchaseRefusalReason(targetItem);
+                if (reason == "刀把机")
+                    __state = PhoneAssemblerNpc.IsPhoneAssembler(client)
+                        ? "npc.refusal.vesper.bottleneck" : "npc.refusal.lower.bottleneck";
                 Core.Log?.Msg("[深空装机] 装机佬收购检查：" + Core.Clean(targetItem.identifier) +
-                    "，资格=" + (PurchaseRefusalReason(targetItem) ?? "符合") +
+                    "，资格=" + (reason ?? "符合") +
                     "，原版收购标签=" + targetItem.IsTag(PurchaseTag) +
                     "，剩余预算=" + client!.clientBudget +
                     "，机型=" + (ComputerCase.IsCase(targetItem) ? CaseEconomy.MachineLabel(targetItem) ?? "无" : "散件"));
             }
             catch (Exception ex) { Core.Log?.Warning("装机佬收购诊断失败：" + ex.Message); }
+        }
+
+        private static void Postfix(PlayerStore __instance, GameItem targetItem, string? __state)
+        {
+            if (__state == null) return;
+            try
+            {
+                var client = __instance.currentClientInstance?.storeClient;
+                if (!IsAssembler(client) || client!.clientIntent != StoreClient.ClientIntent.SELLNBUY) return;
+                var dialogue = new Dialogue().SetText(client.displayName, LanguageText.Get(__state));
+                var shown = DialogUIManager.Instance?.StartDialogue(dialogue, true) == true;
+                Core.Log?.Msg("[电脑拒收对白] " + Core.Clean(targetItem.identifier) + "，" + __state + "，已显示=" + shown);
+            }
+            catch (Exception ex) { Core.Log?.Warning("装机佬拒收对白显示失败：" + ex.Message); }
         }
     }
 
@@ -548,7 +585,7 @@ internal static class LowerAssemblerNpc
             try
             {
                 var client = PlayerStore.Instance?.currentClientInstance?.storeClient;
-                if (!IsAssembler(client) && !UpperComputerBuyerNpc.IsBuyer(client)) return true;
+                if (!UsesStillPortrait(client)) return true;
                 __instance.idleDecisionClient = client;
                 __instance.idleSuppressed = true;
                 __instance.idleShakeHorizontal = false;
@@ -575,7 +612,7 @@ internal static class LowerAssemblerNpc
                 var animator = StoreClientMono.Instance?.idleAnimator;
                 if (animator == null || animator.Pointer != __instance.Pointer) return true;
                 var client = PlayerStore.Instance?.currentClientInstance?.storeClient;
-                if (!IsAssembler(client) && !UpperComputerBuyerNpc.IsBuyer(client)) return true;
+                if (!UsesStillPortrait(client)) return true;
                 __instance.Freeze();
                 return false;
             }

@@ -67,6 +67,15 @@ internal static class SpriteAssets
         specs[UpperComputerBuyerNpc.SpriteKey] = new Spec(
             "PCExpansion.Assets.upper_computer_buyer.png",
             "PCExpansion.Assets.upper_computer_buyer.png", 18, 13);
+        specs[SecuritySeizureMerchant.SpriteKey] = new Spec(
+            "PCExpansion.Assets.jiang_bai.png",
+            "PCExpansion.Assets.upper_computer_buyer.png", 18, 13);
+        specs[SecuritySeizureBoxes.LargeSpriteKey] = new Spec(
+            "PCExpansion.Assets.security_seizure_large.png",
+            "PCExpansion.Assets.workroom_storage_chest.png", 10, 3);
+        specs[SecuritySeizureBoxes.SmallSpriteKey] = new Spec(
+            "PCExpansion.Assets.security_seizure_small.png",
+            "PCExpansion.Assets.workroom_storage_chest.png", 5, 3);
         return specs;
     }
 
@@ -140,7 +149,8 @@ internal static class SpriteAssets
             UnityEngine.Object.DontDestroyOnLoad(sprite);
             Cache[key] = sprite;
             published = true;
-            if (key == LowerAssemblerNpc.SpriteKey || key == PhoneAssemblerNpc.SpriteKey || key == UpperComputerBuyerNpc.SpriteKey)
+            if (key == LowerAssemblerNpc.SpriteKey || key == PhoneAssemblerNpc.SpriteKey ||
+                key == UpperComputerBuyerNpc.SpriteKey || key == SecuritySeizureMerchant.SpriteKey)
                 Core.Log?.Msg("[深空装机] NPC 立绘已加载：" + key + "，" + texture.width + "×" + texture.height +
                     "，PPU=" + pixelsPerUnit + "，Point 过滤，原版尺寸参照=" + PortraitWorldSizes.ContainsKey(key));
             Core.Debug("已加载贴图：" + key + "（" + texture.width + "×" + texture.height + "，来源=" + usedResource + "）");

@@ -66,15 +66,23 @@ internal static class WorkroomStorageDragPatch
     internal static int ConsumedFrame { get; private set; } = -1;
     internal static void MarkConsumed() => ConsumedFrame = Time.frameCount;
 
-    private static bool Prefix(ItemMouseDragHandler __instance)
+    private static bool Prefix(ItemMouseDragHandler __instance, out bool __state)
     {
+        __state = false;
         if (handling == __instance.Pointer) return false;
         var item = __instance.currentItem;
         if (!__instance.isDragging || item == null) return true;
         var target = WorkroomTrial.HitShopStorage(Input.mousePosition);
         if (!target && !WorkroomTrial.HitShopStorageWindow(Input.mousePosition)) return true;
         ClearTarget(__instance);
-        if (!target) return true; // Header blocks the inventory below without accepting items.
+        if (!target)
+        {
+            // Native EndDrag restores the item before we report the rejected
+            // title/filter-area drop. Never interrupt its restoration tail.
+            __state = WorkroomStorageReleasePatch.Handler == __instance.Pointer &&
+                Input.GetKeyUp(__instance.lastMouseClickedKey);
+            return true;
+        }
         // Cancellation over our window must restore the source, never store it.
         if (WorkroomStorageReleasePatch.Handler != __instance.Pointer ||
             !Input.GetKeyUp(__instance.lastMouseClickedKey)) return true;
@@ -110,6 +118,11 @@ internal static class WorkroomStorageDragPatch
         }
         WorkroomTrial.NotifyStorage();
         return original;
+    }
+
+    private static void Postfix(bool __state)
+    {
+        if (__state) WorkroomStorage.Notify("invalid_position");
     }
 
     private static void ClearTarget(ItemMouseDragHandler drag)

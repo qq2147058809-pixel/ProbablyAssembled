@@ -1,30 +1,55 @@
 {
-  "contract": "pcexpansion-computer-manual-v12",
+  "contract": "pcexpansion-computer-manual-v13",
   "pages": [
     {
       "title": "Introduction",
-      "body": "At the station, a broken PC may be worth more than scrap. A damaged case can hide useful parts, and a machine with missing parts may sell well after repair and reassembly.\n\nThis version supports only new saves. All part assembly, disassembly, and repair take place in the workroom.\n\nUse the keychain on the shop desk to enter the workroom. Transfer items through the PC Storage Box, then choose the parts workbench, motherboard panel, or case panel.\n\nThe next pages explain opening a case, repairable items, repair and batch recycling, the power-on check, three PC build profiles, examples, and high-end parts.",
-      "illustrations": ["pcrepair.computer_case_t2_broken", "pcrepair.computer_case_t2"]
+      "body": "At the station, a broken PC may be worth more than scrap. A damaged case can hide useful parts, and a machine with missing parts may sell well after repair and reassembly.\n\nPC expansion 1.1 requires a new game. Saves from version 1.0 or earlier are unsupported. Assembly, disassembly, and repair all take place in the workroom.\n\nUse the keychain on the shop desk to enter the workroom. Transfer items through the PC Storage Box, then choose the parts workbench, motherboard panel, or case panel.",
+      "illustrations": [
+        "pcrepair.computer_case_t2_broken",
+        "pcrepair.computer_case_t2"
+      ]
+    },
+    {
+      "title": "Introduction (Continued)",
+      "body": "Guide contents\n\n1. Repair: opening a case, repairable items, and repair recipes.\n\n2. Assembly: the power-on check, three PC build profiles, examples, and high-end parts.",
+      "illustrations": []
     },
     {
       "title": "Opening a Case",
       "body": "A damaged PC case is a locked loot crate. Its contents may be intact or broken.\n\nTransfer it through storage to the workroom. Place it in the case panel's main body slot and click Disassemble. All internal items return to the workroom inventory together. If space is insufficient, the crate stays sealed.\n\nContents and item identities are fixed when the crate is generated. Reopening or retrying disassembly never rerolls them.\n\nOnce opened, an empty damaged case is worth zero. An empty T1-T3 case can be repaired with materials. Opening crates and assembling or disassembling cases all use the workroom; no screwdriver is required.",
-      "illustrations": ["pcrepair.computer_case_t2_broken", "pcrepair.component_motherboard_t2", "pcrepair.component_gpu_t2"]
+      "illustrations": [
+        "pcrepair.computer_case_t2_broken",
+        "pcrepair.component_motherboard_t2",
+        "pcrepair.component_gpu_t2"
+      ]
     },
     {
       "title": "What Can Be Repaired?",
       "body": "T1-T3 motherboards and empty cases can receive body repairs. Disassemble the six part families first: bodies and some modules are repairable; chips and capacity modules must be replaced.\n\nCPUs, GPU cores, SSD controllers, and capacity chips cannot be repaired. Common bodies, fan rotors, thermal modules, and cooler fan modules use cash repair.\n\nBroken CPUs recycle into electronic parts. Empty T4/T5 motherboards yield electronic parts, wire, and scrap; empty cases yield scrap, screws, and printer filament. Remove all contents and unlock crates first. Each material's tier cap is 1/1/2/2/3 for T1-T5.\n\nBody repair happens only in the workroom. It consumes the complete recipe once, keeps the body in its slot, and does not repair faulty internal parts. There is no repair progress carried between attempts.",
-      "illustrations": ["pcrepair.component_motherboard_t2_broken", "pcrepair.component_motherboard_t2"]
+      "illustrations": [
+        "pcrepair.component_motherboard_t2_broken",
+        "pcrepair.component_motherboard_t2"
+      ]
     },
     {
-      "title": "Repair and Batch Recycling",
-      "body": "Empty motherboard/case bodies: T1-T3 only. Motherboard: electronic parts; add wire at T2 and screws at T3. Case: scrap; add metal ingot at T2 and printer filament at T3. Each material x1; the whole recipe is consumed together.\n\nCommon bodies, fan rotors, thermal modules, and cooler fan modules: cash repair costs 25% of saved intact value, rounded down, with a minimum of 1 for nonzero value.\n\nPSU power modules include capacitors. Repair uses electronic parts plus wire: x1 each at T1/T2, x2 at T3/T4, x3 at T5. Workroom stock is used first, then storage.\n\nGPU cores, SSD controllers, and capacity chips cannot be repaired. GPU/RAM/SSD assemblies accept up to 6/6/4 capacity modules; at least one is required. Capacity adds from actual modules.\n\nEnter a recycling quantity including the target. Match physical specification and condition; origins, prices, and orientations may differ. Workroom first, then storage. Budget is 50% of the items' combined current value.\n\nInsufficient quantity, materials, or space consumes nothing; unused budget never carries over. A broken, unrepairable item worth zero or yielding nothing from single-item recycling may be discarded after two confirmations. Discard removes only the target and produces nothing. A normal empty broken case remains worth zero and yields no materials.",
+      "title": "Repair and Single-Batch Recycling",
+      "body": "Empty motherboard/case bodies: T1-T3 only. Motherboard: electronic parts; add wire at T2 and screws at T3. Case: scrap; add metal ingot at T2 and printer filament at T3. Each material x1; the whole recipe is consumed together.\n\nCommon bodies, fan rotors, thermal modules, and cooler fan modules: cash repair costs 25% of saved intact value, rounded down, with a minimum of 1 for nonzero value.\n\nPSU power modules include capacitors. Repair uses electronic parts plus wire: x1 each at T1/T2, x2 at T3/T4, x3 at T5. Workroom stock is used first, then storage.",
+      "illustrations": []
+    },
+    {
+      "title": "Repair and Single-Batch Recycling (Continued)",
+      "body": "GPU cores, SSD controllers, and capacity chips cannot be repaired. GPU/RAM/SSD assemblies accept up to 6/6/4 capacity modules; at least one is required. Capacity adds from actual modules.\n\nEnter a recycling quantity including the target. Match physical specification and condition; origins, prices, and orientations may differ. Workroom first, then storage. Budget is 50% of the items' combined current value.\n\nInsufficient quantity, materials, or space consumes nothing; unused budget never carries over. A broken, unrepairable item worth zero or yielding nothing from single-item recycling may be discarded after two confirmations. Discard removes only the target and produces nothing. A normal empty broken case remains worth zero and yields no materials.",
       "illustrations": []
     },
     {
       "title": "Power-on Check",
       "body": "Install the CPU, cooler, GPU, RAM, and SSD on a motherboard. Then install that motherboard in a case with a PSU and case fans. Missing parts do not prevent assembly or saving; selling a complete build requires a passing check.\n\nEvery part must be intact. Multiple RAM sticks must have the same configuration tier. The highest and lowest internal tiers must be no more than three tiers apart. The case tier is excluded from this internal comparison.\n\nMotherboard SSD slots by T1-T5: 1/1/1/2/2. All SSD tiers are accepted. A complete PC needs at least one storage device. T4/T5 boards support two GPUs. Extra parts are checked too.\n\nA bare intact motherboard can be sold as a loose part. An assembled motherboard must pass its own check: at least one CPU, cooler, GPU, and RAM stick; all parts intact, matching RAM tiers, and a tier gap of three or less. Extra GPU, RAM, and SSD slots may remain empty.",
-      "illustrations": ["pcrepair.computer_case_t2", "pcrepair.component_motherboard_t2", "pcrepair.component_cpu_t2", "pcrepair.component_gpu_t2"]
+      "illustrations": [
+        "pcrepair.computer_case_t2",
+        "pcrepair.component_motherboard_t2",
+        "pcrepair.component_cpu_t2",
+        "pcrepair.component_gpu_t2"
+      ]
     },
     {
       "title": "Three PC Build Profiles",
@@ -34,12 +59,21 @@
     {
       "title": "Build Examples",
       "body": "Value Build\nUse a T3 CPU and GPU, with a T2 PSU and all other parts at T2. Each non-core part must be below both core parts; the PSU must stay within one tier of the higher core tier.\n\nBottleneck Build\nUse a T2 CPU and GPU, with all other internal parts at T3. Both core parts must be below the highest-tier other parts. One low-tier core part alone does not qualify.\n\nThese examples describe profiles, not an exception to the power-on check. A complete PC still needs its required part types and storage, intact parts, matching RAM configuration tiers, and an internal tier gap of three or less.\n\nThe lower-district builder buys eligible T1-T3 parts and builds. The uptown buyer requires every actual part, including the motherboard and extra installed parts, to be intact and T3-T5.",
-      "illustrations": ["pcrepair.component_cpu_t3", "pcrepair.component_gpu_t3", "pcrepair.component_cpu_t2", "pcrepair.component_gpu_t2"]
+      "illustrations": [
+        "pcrepair.component_cpu_t3",
+        "pcrepair.component_gpu_t3",
+        "pcrepair.component_cpu_t2",
+        "pcrepair.component_gpu_t2"
+      ]
     },
     {
       "title": "High-End Parts",
       "body": "Intact T4 CPUs and GPUs, and intact T5 parts, receive a 20% High-End Parts Markup. Configuration tier follows performance parts; common bodies and capacity modules do not lower it. Motherboards and cases are checked using their actual internal parts.\n\nAn intact case containing qualifying high-end parts inherits this markup once. Multiple qualifying parts do not stack it. Removing the last qualifying part removes the inherited markup. Empty cases and damaged loot crates do not inherit it.\n\nHigh-end and build-profile markups can both apply, but belong to different price stages. Do not add their percentages and treat that as the final sale increase. The actual deal still follows the game's trading conditions.",
-      "illustrations": ["pcrepair.component_cpu_t4", "pcrepair.component_gpu_t4", "pcrepair.component_gpu_t5"]
+      "illustrations": [
+        "pcrepair.component_cpu_t4",
+        "pcrepair.component_gpu_t4",
+        "pcrepair.component_gpu_t5"
+      ]
     }
   ]
 }

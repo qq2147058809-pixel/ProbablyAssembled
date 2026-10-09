@@ -4,7 +4,7 @@ using Il2Cpp;
 
 namespace PCExpansion;
 
-/// <summary>独立的八页文档；创建/读档只恢复物品，阅读才接入场景手册。</summary>
+/// <summary>独立的多页文档；创建/读档只恢复物品，阅读才接入场景手册。</summary>
 internal static class ComputerManual
 {
     internal const string Id = "pcrepair.computer_build_guide";

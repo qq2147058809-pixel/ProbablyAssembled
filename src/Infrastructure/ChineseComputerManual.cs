@@ -73,7 +73,7 @@ internal static class ChineseComputerManual
         if (title != "电脑装机与交易手册") throw new InvalidOperationException("中文手册标题不匹配。");
         var pages = root.GetProperty("pages");
         if (pages.ValueKind != JsonValueKind.Array || pages.GetArrayLength() != ComputerManualPages.PageCount)
-            throw new InvalidOperationException("中文手册必须完整包含八页。");
+            throw new InvalidOperationException("中文手册页面数量不匹配。");
         var accepted = new Document { Title = title, Pages = new Page[ComputerManualPages.PageCount] };
         for (var i = 0; i < accepted.Pages.Length; i++)
         {

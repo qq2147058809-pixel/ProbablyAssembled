@@ -71,7 +71,7 @@ internal sealed class WorkroomStorageState
     internal bool HasStoredItem(PlayerStore store, string identifier)
     {
         if (!SaveGeneration.IsSupported(store))
-            throw new InvalidOperationException("当前存档不是受支持的1.0新档，不能检查储物记录。");
+            throw new InvalidOperationException("当前存档未通过版本与会话校验，不能检查储物记录。");
         if (!PlayerStore.IsInstanceExist() || PlayerStore.instance == null || PlayerStore.instance.Pointer != store.Pointer)
             throw new InvalidOperationException("储物持有检查不属于当前存档。");
         Document? saved = null;
@@ -113,7 +113,7 @@ internal sealed class WorkroomStorageState
     internal void Bind(PlayerStore store)
     {
         if (!SaveGeneration.IsSupported(store))
-            throw new InvalidOperationException("当前存档不是受支持的1.0新档，工作间不读取或改写记录。");
+            throw new InvalidOperationException("当前存档未通过版本与会话校验，工作间不读取或改写记录。");
         if (owner != null && owner.Pointer == store.Pointer && store.runID == run && store.saveSlotId == slot) return;
         owner = store; run = store.runID; slot = store.saveSlotId;
         Epoch++; Revision++; Error = null; document = new();

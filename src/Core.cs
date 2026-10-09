@@ -8,11 +8,11 @@ using System;
 using HarmonyLib;
 using MelonLoader;
 
-[assembly: System.Reflection.AssemblyVersion("0.1.0.0")]
-[assembly: System.Reflection.AssemblyFileVersion("0.1.0.0")]
+[assembly: System.Reflection.AssemblyVersion("1.1.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("1.1.0.0")]
 [assembly: System.Reflection.AssemblyCompany("阿铭")]
 [assembly: System.Reflection.AssemblyMetadata("Author", "阿铭")]
-[assembly: MelonInfo(typeof(PCExpansion.Core), "深空装机 - PC expansion", "0.1.0", "阿铭", "")]
+[assembly: MelonInfo(typeof(PCExpansion.Core), "深空装机 - PC expansion", "1.1.0", "阿铭", "")]
 [assembly: MelonGame("Questing Goose Studio", "Probably Stolen")]
 
 namespace PCExpansion;
@@ -55,7 +55,7 @@ public sealed class Core : MelonMod
         }
 
         WorkroomGameAdapter.ReportPatchStatus();
-        Log.Msg("深空装机 / PC expansion v0.1.0 已加载，作者：阿铭。");
+        Log.Msg("深空装机 / PC expansion v1.1.0 已加载，作者：阿铭。");
         Log.Msg("已启用补丁模块：" + patched + " 个。");
     }
 

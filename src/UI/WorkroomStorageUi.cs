@@ -129,7 +129,7 @@ internal sealed class WorkroomStorageUi
             row.Take = row.Button.GetComponent<Button>();
         }
         summary = AssemblyDebugUi.Text(body.transform, "Summary", "", font, 13);
-        summary.fontSize = 12;
+        summary.fontSize = 15;
         AssemblyDebugUi.Place(summary.gameObject, 72, 360, 396, 27);
         var up = WorkroomPanelSkin.Button(canvas, body.transform, "Previous", "↑", font, 18,
             () => offset = Math.Max(0, offset-rows.Length));

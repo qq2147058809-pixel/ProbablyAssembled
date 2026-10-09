@@ -8,8 +8,8 @@ namespace PCExpansion;
 /// <summary>版本受控的可选页面入口。本体没有英文正文或补丁引用。</summary>
 public static class ComputerManualPages
 {
-    public const string ContractVersion = "pcexpansion-computer-manual-v12";
-    internal const int PageCount = 8;
+    public const string ContractVersion = "pcexpansion-computer-manual-v13";
+    internal const int PageCount = 10;
     private static Page[]? english;
     internal static int Revision { get; private set; }
     internal static event Action? PagesChanged;
@@ -38,7 +38,7 @@ public static class ComputerManualPages
                 throw new InvalidOperationException("手册页面契约不匹配。");
             var pages = root.GetProperty("pages");
             if (pages.ValueKind != JsonValueKind.Array || pages.GetArrayLength() != PageCount)
-                throw new InvalidOperationException("手册必须包含完整八页。");
+                throw new InvalidOperationException("手册页面数量不匹配。");
             var accepted = new Page[PageCount];
             for (var i = 0; i < PageCount; i++)
             {

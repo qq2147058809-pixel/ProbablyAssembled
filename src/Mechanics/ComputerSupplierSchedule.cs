@@ -119,6 +119,11 @@ internal static class ComputerSupplierSchedule
     internal static class DailySupplierPatch
     {
         [HarmonyPriority(Priority.Last)]
-        private static void Postfix(PlayerStore __instance) => Arrange(__instance);
+        private static void Postfix(PlayerStore __instance)
+        {
+            Arrange(__instance);
+            // 原版和随机供应者的当日安排都结束后，再把周四江白固定到队首。
+            SecuritySeizureMerchant.Arrange(__instance);
+        }
     }
 }

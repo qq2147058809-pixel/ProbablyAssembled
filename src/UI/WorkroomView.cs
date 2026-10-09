@@ -25,6 +25,7 @@ internal sealed class WorkroomView : IDisposable
     private TextMeshProUGUI hintText;
     private TMP_FontAsset font;
     private long hintUntil;
+    private long lastRoomMessageUntil;
     private WorkroomInventoryUi inventory;
     private bool storagePointerOwned;
     private int storagePointerFrame = -1, storageNeutralFrames;
@@ -64,11 +65,25 @@ internal sealed class WorkroomView : IDisposable
     internal bool HitShopStorage(Vector2 point)
     {
         if (panels.HitWindow(point)) return panels.HitStorage(point);
-        if (!AssemblyDebugUi.Alive(shopCrate) || !shopCrate.activeInHierarchy) return false;
-        var camera = shopCanvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : shopCanvas.worldCamera;
-        if (!RectTransformUtility.RectangleContainsScreenPoint(AssemblyDebugUi.Rect(shopCrate), point, camera)) return false;
+        if (!ShopCrateContains(point)) return false;
         var target = WorkroomNativeTooltip.PointerTarget();
         return target != null && (target.Pointer == shopCrate.Pointer || target.transform.IsChildOf(shopCrate.transform));
+    }
+
+    // During a native drag its own preview can become the top raycast hit.
+    // Drop acceptance follows the visible crate rectangle instead of that
+    // changing raycast owner; ordinary clicks retain the owner check above.
+    internal bool HitShopStorageDrop(Vector2 point)
+    {
+        if (panels.HitWindow(point)) return panels.HitStorage(point);
+        return ShopCrateContains(point);
+    }
+
+    private bool ShopCrateContains(Vector2 point)
+    {
+        if (!AssemblyDebugUi.Alive(shopCrate) || !shopCrate.activeInHierarchy) return false;
+        var camera = shopCanvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : shopCanvas.worldCamera;
+        return RectTransformUtility.RectangleContainsScreenPoint(AssemblyDebugUi.Rect(shopCrate), point, camera);
     }
     internal void OpenPanel(WorkroomPanels.Kind kind, bool inRoom) => panels.Open(kind, inRoom);
     internal void ReleaseItemInfo() => inventory?.Cancel();
@@ -197,14 +212,24 @@ internal sealed class WorkroomView : IDisposable
 
     internal void Render(WorkroomTransition flow, Rect storeViewport)
     {
-        Fit(noticeSpace, storeViewport);
+        var inside = flow.Current == WorkroomTransition.Stage.Inside;
+        Fit(noticeSpace, inside ? new Rect(0, 0, Screen.width, Screen.height) : storeViewport);
         Fit(roomSpace, new Rect(0, 0, Screen.width, Screen.height));
         noticeCanvas.gameObject.SetActive(hint.activeSelf && Environment.TickCount64 < hintUntil && !flow.BlocksInput);
         roomCanvas.gameObject.SetActive(flow.RoomVisible);
         blackCanvas.gameObject.SetActive(flow.BlocksInput && flow.Current != WorkroomTransition.Stage.Inside);
         black.color = new Color(0,0,0,flow.Opacity);
-        var inside = flow.Current == WorkroomTransition.Stage.Inside;
         var home = flow.Current == WorkroomTransition.Stage.Home;
+        if (inside)
+        {
+            if (lastRoomMessageUntil != WorkroomStorage.MessageUntil)
+            {
+                lastRoomMessageUntil = WorkroomStorage.MessageUntil;
+                if (Environment.TickCount64 < lastRoomMessageUntil && !string.IsNullOrWhiteSpace(WorkroomStorage.Message))
+                    NotifyStorage();
+            }
+        }
+        else lastRoomMessageUntil = WorkroomStorage.MessageUntil;
         panels.Render(inside, inside || home, inside ? new Rect(0, 0, Screen.width, Screen.height) : storeViewport, (inventory?.IsDragging ?? false) || (!panels.OwnsTextInput && Input.GetKeyDown(KeyCode.Escape) && (inventory?.HasSelection ?? false)));
         inventory.Update(inside && (!panels.BlocksInput || panels.StorageOpen), panels);
         if (shopCanvas.renderMode == RenderMode.ScreenSpaceOverlay)
@@ -294,6 +319,7 @@ internal sealed class WorkroomView : IDisposable
 
     internal void Notify(string keyName)
     {
+        PlaceNotice();
         hintText.text = Text(keyName);
         hint.SetActive(true);
         hintUntil = Environment.TickCount64 + 3000;
@@ -303,9 +329,18 @@ internal sealed class WorkroomView : IDisposable
     {
         var text = WorkroomStorage.Message;
         AssemblyDebugFonts.Prepare(text, text);
+        PlaceNotice();
         hintText.text = text;
         hint.SetActive(true);
         hintUntil = Environment.TickCount64 + 5000;
+    }
+
+    private void PlaceNotice()
+    {
+        var inRoom = roomCanvas.gameObject.activeInHierarchy;
+        noticeCanvas.sortingOrder = inRoom ? RoomOrder + 50 : 31010;
+        AssemblyDebugUi.Place(hint, inRoom ? 190 : 420, inRoom ? 18 : 640,
+            inRoom ? 900 : 440, inRoom ? 50 : 44);
     }
 
     public void Dispose()

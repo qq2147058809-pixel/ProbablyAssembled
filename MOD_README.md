@@ -2,11 +2,11 @@
 
 **作者：** 阿铭
 **游戏：** Probably Stolen Demo
-**内容基线：** 1.0 新档规则，2026-10-08 更新
+**内容基线：** 1.1，2026-10-09 更新
 
 ## 安装前必读
 
-- **只支持安装当前版本后新建的存档。** 0.7 及更早版本、旧测试档不加载、不迁移，也不会覆盖。请保留旧档备份并新建游戏。
+- **1.1 不支持 1.0 及以下版本的深空装机旧档，请开新档游玩。** 旧档不迁移，也不会被本 Mod 覆盖；请单独保留备份。
 - 中文只需 `PCExpansion.dll`；英文另装同一发布版本的 `PCExpansionEnglishPatch.dll`。两个文件必须配套，英文补丁不能单独使用。
 - 开箱、拆装、维修、回收和报废都在工作间完成。点击店内桌面的 CPU 钥匙串进入；它是场景入口，不占玩家库存。
 
@@ -14,7 +14,7 @@
 
 《深空装机 / PC expansion》为《Probably Stolen Demo》加入电脑拾荒、拆检、维修、组装和交易玩法。打开破损机箱寻找配件，把坏件拆到更小的部件，再决定维修、更换、回收或报废；将合适的配置组装成主板和整机，检测、估价，并向不同买家出售。
 
-模组提供独立工作间、店铺与工作间共用的电脑储物箱、专属供应者和装机佬，以及八页游戏内手册。在深空当铺，一只磕碰变形的机箱里，可能还藏着能用的配件；一台缺件的电脑，也可能在重新装配后成为值得出售的整机。
+模组提供独立工作间、店铺与工作间共用的电脑储物箱、专属供应者和装机佬，以及十页游戏内手册。在深空当铺，一只磕碰变形的机箱里，可能还藏着能用的配件；一台缺件的电脑，也可能在重新装配后成为值得出售的整机。
 
 ## 安装、更新与语言
 
@@ -31,7 +31,7 @@
 
 ## 硬件与内部拆装
 
-九类完整硬件为机箱、电源、主板、固态硬盘、内存、显卡、机箱风扇、CPU 和 CPU 散热器，均有 T1–T5 及完好／破损两态，共 90 种；另有 41 种拆机子件规格及两态，共 82 个子件 ID。加上辅助物品，当前合计 175 个注册物品。
+九类完整硬件为机箱、电源、主板、固态硬盘、内存、显卡、机箱风扇、CPU 和 CPU 散热器，均有 T1–T5 及完好／破损两态，共 90 种；另有 41 种拆机子件规格及两态，共 82 个子件 ID。加上辅助物品与两种收缴盒，当前合计 177 个注册物品。
 
 显卡、内存、固态硬盘、电源、风扇和 CPU 散热器可进一步拆成通用机体与内部子件；CPU 仍作为整件使用。破损配件首次拆检确定坏件分布，重试或读档不会重新抽取；已组装件拆开返回原来的实际子件。
 
@@ -98,11 +98,17 @@
 
 **洛夕（Vesper，0504）：**首次购买或实际持有名片后，在当前新档永久解锁；只将名片上柜不会解锁，随后丢失或出售名片不会取消联系。电话来访有三天冷却，实际入队后才开始记录；到店带两只 T1–T3 破损机箱和一只随机档位完好机箱。洛夕、下层装机佬和上城区收购商使用各自的立绘；装机佬不再出售旧拆机工具或库存钥匙。
 
-## 八页电脑装机交易手册
+**治安收缴商江白：** 每周四固定排在待访队首，只出售大、小收缴配件盒各一只。付款前看不到内部；玩家持有后随时可以打开。大盒为 3×10 格，出 T2–T5；小盒为 5×3 格，出 T1–T4。内含完好电脑配件，逐件带赃物标记及 10–50 热度。开封后盒体价值为零，空盒仍可像原版物资箱一样复用；购买增加治安部声望。
+
+## 五日电脑行情事件
+
+“AI需求暴涨”和“虚拟币暴涨迎来狂潮”进入原版普通事件随机池，互不同时生效。前者让完整显卡及内存条的买入、卖出和估价变为两倍，后者让完整显卡变为三倍；每次从触发当天起持续五个游戏日。完好、破损、散放或装在整机中的配件均受影响，拆解后的子件和未开封盲盒不涨价。若与原版材料行情重叠，先计原版效果，再计电脑行情倍率。
+
+## 十页电脑装机交易手册
 
 下城区装机佬出售手册，占格 2×3，基础价值 25，实际售价按原版交易结算。已在店铺、工作间或储物箱持有手册时不补售。
 
-双击阅读，使用原版翻页、关闭、拖动与音效。八页介绍简介、开箱、可维修物品、维修与批量回收、开机检测、机型、示例和高端配件；中英文均使用原生文字与独立配图，保留纸张和页码。重开回到第一页；英文页不匹配或无法正常显示时，整本回退中文。
+双击阅读，使用原版翻页、关闭、拖动与音效。十页介绍简介、开箱、可维修物品、维修与批量回收、开机检测、机型、示例和高端配件；中文正文使用原生文字与独立配图，保留纸张和页码。重开回到第一页；旧英文页面因契约不匹配时，整本回退中文。
 
 ## 卸载
 
@@ -130,11 +136,11 @@
 
 **Author:** 阿铭
 **Game:** Probably Stolen Demo
-**Content baseline:** 1.0 new-save rules, updated 2026-10-08.
+**Content baseline:** 1.1, updated 2026-10-09.
 
 ## Install and Save Requirements
 
-Use matching `PCExpansion.dll` and `PCExpansionEnglishPatch.dll`. This version supports only saves started after installing the current base mod. Older test or pre-1.0 saves are not migrated, loaded, or overwritten. Keep any old saves separately and start a new game.
+Use matching `PCExpansion.dll` and `PCExpansionEnglishPatch.dll`. PC expansion 1.1 does not support saves from mod version 1.0 or earlier. Start a new game and keep older saves separately; this mod does not migrate or overwrite them.
 
 Close the game before replacing DLLs. Remove old-named base and language DLLs from `Mods` to prevent duplicate loading: `ProbablyAssembled.dll`, `PcRepairMod.dll`, `ProbablyAssembledEnglishPatch.dll`, and `PcRepairEnglishPatch.dll`.
 
@@ -144,7 +150,7 @@ This project uses MelonLoader **0.7.3 Open-Beta (IL2CPP x64)**; no other mod is 
 
 ## Computer Items and the Workroom
 
-The mod adds 90 intact/broken whole computer items, 41 part specifications with both states (82 part IDs), and three utility items: 175 registered items in total. Whole-item families are cases, PSUs, motherboards, SSDs, RAM, GPUs, fans, CPUs, and CPU coolers.
+The mod adds 90 intact/broken whole computer items, 41 part specifications with both states (82 part IDs), three utility items, and two confiscated-parts boxes: 177 registered items in total. Whole-item families are cases, PSUs, motherboards, SSDs, RAM, GPUs, fans, CPUs, and CPU coolers.
 
 Click the keychain on the shop desk to enter the workroom. It is a scene entrance, not an inventory key. The workroom has a 32x8 inventory and a fixed exit back to the shop. Use the PC Storage Box to transfer your repair materials and mod items between the shop and workroom. Items are kept and transferred individually. Identical unassembled items may share a catalog row, but each withdrawal and price refers to one actual item.
 
@@ -198,11 +204,17 @@ The Lower-District PC Builder visits on day 5 and Fridays afterward, with same-d
 
 Vesper's phone visits have a three-day cooldown recorded only after the visitor actually enters the queue. She brings two broken T1-T3 cases and one intact case of a random tier. Builders do not sell retired screwdrivers or inventory workroom keys. Shared NPC portraits remain in the base mod; the patch supplies English names and dialogue.
 
-## Eight-Page Manual
+Jiang Bai, the security confiscation trader, visits at the front of the Thursday queue and sells one large and one small sealed parts box. Contents remain hidden until purchase; an owned box can be opened at any time. The 3x10 large box contains intact T2-T5 parts, and the 5x3 small box contains intact T1-T4 parts. Each part is stolen with its own 10-50 heat. Opening makes the reusable box itself worth zero. Buying a box raises Security Department reputation.
+
+## Five-Day PC Market Events
+
+AI Demand Surge and Crypto Boom join the vanilla ordinary event pool and cannot run together. AI Demand Surge doubles whole GPU and RAM prices; Crypto Boom triples whole GPU prices. Each lasts five in-game days including its starting day and affects buying, selling, and estimates. Intact and broken parts count both loose and installed in a PC. Dismantled subparts and unopened loot crates are excluded. Vanilla materials events apply first, followed by the PC market multiplier.
+
+## Ten-Page Manual
 
 The Lower-District PC Builder offers the PC Assembly and Trading Manual, a 2x3 document with base value 25. It is offered only when you do not already hold one, including workroom and storage custody. Card/manual offers do not block normal mechanical stock.
 
-Double-click to read using the game's native book controls. Both languages use native text with separate component illustrations. The eight pages cover the introduction, case opening, repairable items, repairs and batch recycling, power-on checks, build profiles, examples, and high-end parts. Invalid, mismatched, or unrenderable English pages fall back to the complete Chinese manual. Reopening starts at page one.
+Double-click to read using the game's native book controls. Both languages use native text with separate component illustrations. The ten pages cover the introduction, case opening, repairable items, repairs and batch recycling, power-on checks, build profiles, examples, and high-end parts. Invalid, mismatched, or unrenderable English pages fall back to the complete Chinese manual. Reopening starts at page one.
 
 ## Uninstall
 

@@ -10,7 +10,7 @@ using UnityEngine.UI;
 
 namespace PCExpansion;
 
-/// <summary>只向原版 books 追加一个根；直属八个子对象供原版导航使用。</summary>
+/// <summary>只向原版 books 追加一个根；直属十个子对象供原版导航使用。</summary>
 internal static class ComputerManualUI
 {
     private const string RootName = "PCREPAIR_ComputerManual";
@@ -219,9 +219,9 @@ internal static class ComputerManualUI
     private static void BuildChinesePage(RectTransform area, TMP_FontAsset font, ChineseComputerManual.Document content, int index)
     {
         var page = content.Pages[index];
-        NativeText(area, font, "Title", content.Title, .127f, .09f, .81f, .033f, 16, "blue", true);
-        NativeText(area, font, "Heading", page.Heading, .127f, .133f, .81f, .045f, 22, "body", true);
-        if (index == 3) RecipeTableRules(area);
+        NativeText(area, font, "Title", content.Title, .127f, .09f, .81f, .033f, 20, "blue", true);
+        NativeText(area, font, "Heading", page.Heading, .127f, .133f, .81f, .045f, 27.5f, "body", true);
+        if (page.Heading.StartsWith("维修与单次回收", StringComparison.Ordinal)) RecipeTableRules(area, page);
         for (var i = 0; i < page.Elements.Length; i++)
         {
             var element = page.Elements[i];
@@ -248,14 +248,14 @@ internal static class ComputerManualUI
         }
     }
 
-    private static void RecipeTableRules(RectTransform area)
+    private static void RecipeTableRules(RectTransform area, ChineseComputerManual.Page page)
     {
-        // Thin rules between the header and five recipe rows, matching the v2 table.
-        var tops = new[] { .302f, .3635f, .4205f, .4775f, .5345f, .5915f };
-        for (var i = 0; i < tops.Length; i++)
+        // The recipe may span multiple pages after enlarging its text.
+        for (var i = 0; i < page.Elements.Length - 1; i++)
         {
             var node = NewRect("TableRule" + (i + 1), area, Vector2.zero, Vector2.zero);
-            Place(node.GetComponent<RectTransform>(), area, .127f, tops[i], .823f, 1 / ChineseComputerManual.PaperHeight);
+            var top = page.Elements[i].Y + page.Elements[i].Height + .004f;
+            Place(node.GetComponent<RectTransform>(), area, .127f, top, .823f, 1 / ChineseComputerManual.PaperHeight);
             var rule = Add<Image>(node);
             rule.color = new Color(.51f, .53f, .49f, .6f);
             rule.raycastTarget = false;
@@ -294,7 +294,7 @@ internal static class ComputerManualUI
         text.font = font;
         text.fontSharedMaterial = font.material;
         text.fontSize = fontSize * area.rect.width / ChineseComputerManual.PaperWidth;
-        text.fontStyle = FontStyles.Normal;
+        text.fontStyle = FontStyles.Bold;
         text.color = Ink(style);
         text.enableWordWrapping = style != "arrow";
         text.enableAutoSizing = false;
@@ -333,10 +333,10 @@ internal static class ComputerManualUI
     {
         var area = NewRect("Content", page.transform, new Vector2(480, 580), new Vector2(9, 6));
         Text(area.transform, "Title", template, content.Title,
-            new Vector2(480, 62), new Vector2(0, 255), 24, 32, true);
+            new Vector2(480, 62), new Vector2(0, 255), 30, 40, true);
         var illustrated = content.Illustrations.Length > 0;
         Text(area.transform, "Body", template, content.Body,
-            new Vector2(480, illustrated ? 430 : 502), new Vector2(0, illustrated ? 8 : -28), 12, 20, false);
+            new Vector2(480, illustrated ? 430 : 502), new Vector2(0, illustrated ? 8 : -28), 15, 25, false);
         if (!illustrated) return;
         var width = Math.Min(100f, 460f / content.Illustrations.Length);
         for (var i = 0; i < content.Illustrations.Length; i++)
@@ -362,6 +362,7 @@ internal static class ComputerManualUI
         var text = Add<TextMeshProUGUI>(node);
         text.font = template.font;
         text.fontSharedMaterial = template.fontSharedMaterial;
+        text.fontStyle = FontStyles.Bold;
         text.color = template.color;
         text.enableWordWrapping = true;
         text.enableAutoSizing = true;
