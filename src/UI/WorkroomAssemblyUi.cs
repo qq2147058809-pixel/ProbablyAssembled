@@ -34,7 +34,7 @@ internal sealed class WorkroomAssemblyWindow
         var footer = AssemblyDebugUi.Text(Root.transform, "WindowHint", WorkroomComponentTemplates.Text("window_hint"), font, 10);
         AssemblyDebugUi.Place(footer.gameObject, 12, height-30, 150, 26);
         footer.enableWordWrapping = true;
-        footer.fontSize = 11.25f;
+        footer.fontSize = 9;
         Root.SetActive(false);
     }
 

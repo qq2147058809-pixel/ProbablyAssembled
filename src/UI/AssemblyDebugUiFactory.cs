@@ -98,9 +98,9 @@ internal static class AssemblyDebugUi
         label.font = font;
         label.fontSharedMaterial = font.material;
         label.text = text;
-        // Workroom-owned text only: preserve every panel and button rectangle.
-        label.fontSize = size * 1.25f;
-        label.fontStyle = FontStyles.Bold;
+        var originalAssemblyFont = UsesOriginalAssemblyFont(parent);
+        label.fontSize = originalAssemblyFont ? size : size * 1.25f;
+        label.fontStyle = originalAssemblyFont ? FontStyles.Normal : FontStyles.Bold;
         label.enableAutoSizing = false;
         label.enableWordWrapping = false;
         label.richText = false;
@@ -108,6 +108,23 @@ internal static class AssemblyDebugUi
         label.color = new Color(.96f, .98f, 1, 1);
         label.alignment = (TextAlignmentOptions)(left ? 513 : 514);
         return label;
+    }
+
+    // The 1.1 text enlargement applies to other workroom windows. These assembly,
+    // processing and repair windows use their original font metrics so fixed slot
+    // labels and descriptions remain inside their existing rectangles.
+    internal static bool UsesOriginalAssemblyFont(Transform parent)
+    {
+        for (var current = parent; current != null; current = current.parent)
+        {
+            var name = current.name;
+            if (name == "ProcessingEntry" || name == "BoardEntry" ||
+                name.StartsWith("Assembly_", StringComparison.Ordinal) ||
+                name.StartsWith("MachineAssembly_", StringComparison.Ordinal) ||
+                name.StartsWith("MachineRepair_", StringComparison.Ordinal)) return true;
+            if (name == "PanelReference") break;
+        }
+        return false;
     }
 
     // A drawn key can use the same event/hover ownership without a text label.

@@ -53,9 +53,12 @@ internal static class WorkroomPanelSkin
         {
             binding.Label = AssemblyDebugUi.Text(face.transform, "Label", text, font, size);
             AssemblyDebugUi.Stretch(binding.Label.gameObject);
-            binding.Label.enableAutoSizing = true;
-            binding.Label.fontSizeMin = size;
-            binding.Label.fontSizeMax = size * 1.25f;
+            if (!AssemblyDebugUi.UsesOriginalAssemblyFont(parent))
+            {
+                binding.Label.enableAutoSizing = true;
+                binding.Label.fontSizeMin = size;
+                binding.Label.fontSizeMax = size * 1.25f;
+            }
             binding.Label.overflowMode = TextOverflowModes.Ellipsis;
         }
         bindings[face.gameObject.Pointer] = binding;
