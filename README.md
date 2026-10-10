@@ -4,7 +4,7 @@
 游戏 / Game：Probably Stolen Demo  
 [Mod 下载 / Download](https://www.nexusmods.com/probablystolen/mods/385) · [爱发电 / Support](https://afdian.com/a/aming567)
 
-这是 **PC expansion 1.1（2026-10-09）** 的公开源码仓库。仓库名 `ProbablyAssembled` 保留；本体和独立英文补丁程序集分别为 `PCExpansion`、`PCExpansionEnglishPatch`。
+这是 **PC expansion 1.1（源码更新于2026-10-11）** 的公开源码仓库。仓库名 `ProbablyAssembled` 保留；本体和独立英文补丁程序集分别为 `PCExpansion`、`PCExpansionEnglishPatch`。
 
 ## 代码使用与署名
 
@@ -21,6 +21,8 @@
 - 两项五游戏日行情事件：AI 需求暴涨使完整显卡和内存条报价变为 2 倍；虚拟币狂潮使完整显卡报价变为 3 倍。
 - 中文本体和独立英文补丁各 509 条文本，双语十页手册 v13。英文补丁不改变中文本体的独立加载。
 - `pcexpansion.save-generation` 门禁与 Brewing Expansion v3.2 共享 getter 触发路径的工作间规避代码。
+
+本次同步包含：行情加价在机箱和已装配主板的报价阶段计算，保留装配物品的基础保存价；回收数量框支持鼠标移出后继续输入，并接入键盘焦点保护；洛夕名片中英文描述加入 QQ 群说明。源码静态核查和正式构建已通过，行情报价与数量输入仍待玩家实机复测。
 
 主程序集和英文补丁版本元数据均为 `1.1.0`。**玩家从深空装机 1.0 及以下版本升级到 1.1 请开新档；旧档没有数据迁移。** 代码层面的门禁接受有效且不低于 1.0 的版本标记，新档写入 1.0，更高标记保持原值；缺失、低版本或无效标记会被拒绝。这是代码行为，不代表对旧版 Mod 存档升级的支持。
 
@@ -43,11 +45,13 @@ pwsh -NoProfile -File .\build.ps1 -GameDir "D:\Games\Probably Stolen Demo" -Upda
 
 ## English
 
-This repository contains the **PC expansion 1.1 source snapshot dated 2026-10-09**. The `ProbablyAssembled` repository name is retained. The base and independent English patch assemblies are `PCExpansion` and `PCExpansionEnglishPatch`, both version `1.1.0`.
+This repository contains the **PC expansion 1.1 source snapshot updated on 2026-10-11**. The `ProbablyAssembled` repository name is retained. The base and independent English patch assemblies are `PCExpansion` and `PCExpansionEnglishPatch`, both version `1.1.0`.
 
 **Prior written permission from 阿铭 is required before reusing, modifying, or adapting the code.** If authorized code is used to make a mod, credit “阿铭”, “PC expansion”, and [this repository](https://github.com/qq2147058809-pixel/ProbablyAssembled) in a player-visible public description, distributed documentation, or in-game acknowledgements. Source comments and commit history alone are insufficient. Attribution alone is not permission. See [LICENSE](LICENSE) for the terms and [COPYRIGHT.md](COPYRIGHT.md) for the copyright notice. This is not an MIT, GPL, or other general open-source grant.
 
 This snapshot includes the workroom and shared storage, modular hardware assembly and repair, recycling, appraisal and trade, dedicated suppliers, Jiang Bai's two Thursday confiscated-parts boxes, and two five-day PC market events. AI Demand Surge doubles whole GPU and RAM prices; Crypto Boom triples whole GPU prices. The independent English patch has 509 catalog entries and ten manual pages under contract v13. The base remains independently Chinese.
+
+This update applies market premiums to case and assembled-motherboard quotes while preserving stored base values, keeps recycling quantity input active when the pointer leaves the window, and adds QQ group information to Vesper's Chinese and English contact-card descriptions. Source checks and the official build passed; market quotes and quantity input still require in-game verification.
 
 **Players updating from mod version 1.0 or earlier should start a new game; old saves are not migrated.** The code accepts valid `pcexpansion.save-generation` markers at or above 1.0 and preserves higher values. That technical check does not constitute support for upgrading an old mod save.
 

@@ -13,6 +13,7 @@ internal static class MarketEvents
     private const int PoolWeight = 15;
     private static Il2CppSystem.Func<StoreEvent>? aiFactory, cryptoFactory;
     private static long nextWarningAt;
+    [ThreadStatic] private static HashSet<IntPtr>? quotingMachines;
 
     private static StoreEventManager? Manager
     {
@@ -74,15 +75,16 @@ internal static class MarketEvents
         return manager.IsEventActive(AiId) ? 2 : 1;
     }
 
-    /// <summary>机箱基础价已合并内部物件；只补足被行情影响的配件份额。</summary>
-    internal static long AddedCaseValue(IEnumerable<CaseEconomy.PartRecord> parts)
+    /// <summary>装配物品基础价已合并内部物件；只补足被行情影响的配件份额。</summary>
+    private static long AddedAssemblyValue(IEnumerable<CaseEconomy.PartRecord> parts, bool isCase)
     {
         var manager = Manager;
         if (manager == null) return 0;
         var ai = manager.IsEventActive(AiId);
         var crypto = manager.IsEventActive(CryptoId);
         if (!ai && !crypto) return 0;
-        var materialFactor = MaterialFactor(manager);
+        // Motherboard quotes already include the native MATERIAL event factor.
+        var materialFactor = isCase ? MaterialFactor(manager) : 1.0;
         long extra = 0;
         foreach (var part in parts)
         {
@@ -121,6 +123,29 @@ internal static class MarketEvents
         if (multiplier > 1) value = checked(value * multiplier);
     }
 
+    // The native quote getters can call one another. Only their outermost call
+    // for an assembled item adds the market share, leaving stored unitValue intact.
+    private static bool EnterAssemblyQuote(GameItem item) =>
+        item != null && (ComputerCase.IsCase(item) || item.IsTag(WorkroomMachineAssembly.Tag)) &&
+        (quotingMachines ??= new HashSet<IntPtr>()).Add(item.Pointer);
+
+    private static void LeaveAssemblyQuote(GameItem item, bool entered)
+    {
+        if (entered) quotingMachines?.Remove(item.Pointer);
+    }
+
+    private static void ApplyAssemblyQuote(GameItem item, bool includeEvents, bool entered, ref long value)
+    {
+        if (!entered || !includeEvents || value <= 0) return;
+        var machine = WorkroomMachineFacts.Read(item);
+        if (machine == null || machine.Value <= 0 || item.unitValue != machine.Value) return;
+        var extra = AddedAssemblyValue(machine.Parts, ComputerCase.IsCase(item));
+        if (extra == 0) return;
+        // Native discounts and the machine's final-stage bonus have already
+        // changed this quote. Apply the same proportion to the affected share.
+        value = checked(value + (long)Math.Round((decimal)value * extra / machine.Value));
+    }
+
     internal static void Warn(Exception ex)
     {
         if (Environment.TickCount64 < nextWarningAt) return;
@@ -152,41 +177,93 @@ internal static class MarketEvents
     [HarmonyPatch(typeof(GameItem), nameof(GameItem.GetCurrentValue))]
     internal static class CurrentValuePatch
     {
-        private static void Postfix(GameItem __instance, bool includeEvents, ref long __result)
+        private static void Prefix(GameItem __instance, ref bool __state) => __state = EnterAssemblyQuote(__instance);
+
+        private static void Postfix(GameItem __instance, bool includeEvents, bool __state, ref long __result)
         {
-            if (!includeEvents) return;
-            try { ApplyLoose(__instance, ref __result); }
+            try
+            {
+                if (includeEvents) ApplyLoose(__instance, ref __result);
+                ApplyAssemblyQuote(__instance, includeEvents, __state, ref __result);
+            }
             catch (Exception ex) { Warn(ex); }
+            finally { LeaveAssemblyQuote(__instance, __state); }
+        }
+
+        private static Exception? Finalizer(GameItem __instance, bool __state, Exception? __exception)
+        {
+            LeaveAssemblyQuote(__instance, __state);
+            return __exception;
         }
     }
 
     [HarmonyPatch(typeof(GameItem), nameof(GameItem.GetNegociatedValue))]
     internal static class NegotiatedValuePatch
     {
-        private static void Postfix(GameItem __instance, ref long __result)
+        private static void Prefix(GameItem __instance, ref bool __state) => __state = EnterAssemblyQuote(__instance);
+
+        private static void Postfix(GameItem __instance, bool __state, ref long __result)
         {
-            try { ApplyLoose(__instance, ref __result); }
+            try
+            {
+                ApplyLoose(__instance, ref __result);
+                ApplyAssemblyQuote(__instance, true, __state, ref __result);
+            }
             catch (Exception ex) { Warn(ex); }
+            finally { LeaveAssemblyQuote(__instance, __state); }
+        }
+
+        private static Exception? Finalizer(GameItem __instance, bool __state, Exception? __exception)
+        {
+            LeaveAssemblyQuote(__instance, __state);
+            return __exception;
         }
     }
 
     [HarmonyPatch(typeof(GameItem), nameof(GameItem.GetRefreshedValue))]
     internal static class RefreshedValuePatch
     {
-        private static void Postfix(GameItem __instance, ref long __result)
+        private static void Prefix(GameItem __instance, ref bool __state) => __state = EnterAssemblyQuote(__instance);
+
+        private static void Postfix(GameItem __instance, bool __state, ref long __result)
         {
-            try { ApplyLoose(__instance, ref __result); }
+            try
+            {
+                ApplyLoose(__instance, ref __result);
+                ApplyAssemblyQuote(__instance, true, __state, ref __result);
+            }
             catch (Exception ex) { Warn(ex); }
+            finally { LeaveAssemblyQuote(__instance, __state); }
+        }
+
+        private static Exception? Finalizer(GameItem __instance, bool __state, Exception? __exception)
+        {
+            LeaveAssemblyQuote(__instance, __state);
+            return __exception;
         }
     }
 
     [HarmonyPatch(typeof(GameItem), nameof(GameItem.GetValue))]
     internal static class BaseValuePatch
     {
-        private static void Postfix(GameItem __instance, ref long __result)
+        private static void Prefix(GameItem __instance, ref bool __state) => __state = EnterAssemblyQuote(__instance);
+
+        [HarmonyPriority(Priority.Last)]
+        private static void Postfix(GameItem __instance, bool __state, ref long __result)
         {
-            try { ApplyLoose(__instance, ref __result); }
+            try
+            {
+                ApplyLoose(__instance, ref __result);
+                ApplyAssemblyQuote(__instance, true, __state, ref __result);
+            }
             catch (Exception ex) { Warn(ex); }
+            finally { LeaveAssemblyQuote(__instance, __state); }
+        }
+
+        private static Exception? Finalizer(GameItem __instance, bool __state, Exception? __exception)
+        {
+            LeaveAssemblyQuote(__instance, __state);
+            return __exception;
         }
     }
 }

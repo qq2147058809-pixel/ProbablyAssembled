@@ -30,7 +30,7 @@ internal sealed class WorkroomPanels : IDisposable
     internal bool MachinesOpen => machines?.Open ?? false;
     internal bool PreviewOpen => StorageOpen || ComponentsOpen || MachinesOpen;
     internal bool IsDragging => titleDragging || (components?.Dragging ?? false) || (machines?.Dragging ?? false);
-    internal bool OwnsTextInput => storage?.OwnsTextInput ?? false;
+    internal bool OwnsTextInput => (storage?.OwnsTextInput ?? false) || (components?.OwnsTextInput ?? false);
     private bool HitFace(Vector2 point) => state.IsOpen && AssemblyDebugUi.Alive(face) &&
         RectTransformUtility.RectangleContainsScreenPoint(AssemblyDebugUi.Rect(face), point, null);
     internal bool HitWindow(Vector2 point) => HitFace(point) || (components?.Hit(point) ?? false) || (machines?.Hit(point) ?? false);
@@ -241,13 +241,14 @@ internal sealed class WorkroomPanels : IDisposable
         var front = FrontGroup(Input.mousePosition);
         var scrolling = Input.mouseScrollDelta.y != 0;
         var allowPress = !roomDragging && !(Il2Cpp.ItemMouseDragHandler.current?.isDragging ?? false);
+        components.UpdateInput(allowPress && !storage.OwnsTextInput, front == 1);
         if (StorageOpen)
         {
             MoveWindow(roomDragging);
             if (!scrolling || front == 0 || front == -1) storage.Update();
         }
         if (ComponentsOpen && (!scrolling || front == 1 || front == -1))
-            components.Update(allowPress && !OwnsTextInput && ComponentInFront(Input.mousePosition));
+            components.Update(allowPress && !storage.OwnsTextInput && ComponentInFront(Input.mousePosition));
         if (MachinesOpen) machines.Update(allowPress && !OwnsTextInput && FrontGroup(Input.mousePosition) == 2);
         WorkroomPanelSkin.Update(canvas, allowPress && !IsDragging);
         storage.UpdateInformation(StorageOpen && FrontGroup(Input.mousePosition) == 0 && allowPress && !IsDragging);

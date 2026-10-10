@@ -139,7 +139,9 @@ internal static class CaseEconomy
             var label = machine == null ? SelectMachineLabel(parts) :
                 machine.Complete ? SelectMachineLabel(parts) : null;
             var normalValue = machine == null ? checked(baseValue + ContentsValue(parts)) : machine.Value;
-            caseItem.SetValue(checked(normalValue + MarketEvents.AddedCaseValue(parts)));
+            // The serialized machine value must always equal its saved body and parts.
+            // Market premiums belong to quote getters, never to the item snapshot.
+            caseItem.SetValue(normalValue);
             SetMachineProfileFeature(caseItem, label, MachineBonusPercent(label));
             var highestTier = 0;
             var highEndEligible = false;

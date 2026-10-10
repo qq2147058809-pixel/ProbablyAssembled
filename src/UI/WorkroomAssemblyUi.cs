@@ -183,6 +183,8 @@ internal sealed class WorkroomComponentUi
     private int recycleQuantity = 1;
     private string quantityText = "1";
     private bool editingQuantity, replaceQuantity;
+    private bool quantityKeyboardOwned;
+    private int quantityInputFrame = -1, quantityReadFrame = -1, quantityNeutralFrames;
     private string? quantityTarget;
     private long quantityEpoch = -1;
     private readonly Dictionary<WorkroomPartProcessing.Mode, GameObject> modeButtons = new();
@@ -196,6 +198,19 @@ internal sealed class WorkroomComponentUi
     private IEnumerable<WorkroomAssemblyWindow> Windows => new[] { entry, disassemblyWindow }.Concat(families.Select(family => family.Window));
     internal bool Open => Windows.Any(window => window.Open);
     internal bool Dragging => Windows.Any(window => window.Dragging);
+    internal bool OwnsTextInput
+    {
+        get { SampleQuantityInput(); return quantityKeyboardOwned; }
+    }
+    private void SampleQuantityInput()
+    {
+        if (editingQuantity) { quantityKeyboardOwned = true; quantityNeutralFrames = 0; }
+        if (quantityInputFrame == Time.frameCount) return;
+        quantityInputFrame = Time.frameCount;
+        if (!quantityKeyboardOwned || editingQuantity) return;
+        quantityNeutralFrames = Input.anyKey || Input.compositionString.Length > 0 ? 0 : quantityNeutralFrames + 1;
+        if (quantityNeutralFrames >= 2) quantityKeyboardOwned = false;
+    }
     private WorkroomAssemblyWindow? TopAt(Vector2 point) => Windows.Where(window => window.Hit(point))
         .OrderByDescending(window => window.Root.transform.GetSiblingIndex()).FirstOrDefault();
     internal int SiblingIndex(Vector2 point) => TopAt(point)?.Root.transform.GetSiblingIndex() ?? -1;
@@ -411,14 +426,18 @@ internal sealed class WorkroomComponentUi
         recycleQuantity = (int)Math.Clamp((long)recycleQuantity + delta, 1, int.MaxValue);
         quantityText = recycleQuantity.ToString(); previewText = ""; previewOffset = 0;
     }
-    private void ReadQuantity(bool allowPress, WorkroomAssemblyWindow? top)
+    internal void UpdateInput(bool allowInput, bool pointerInFront)
     {
+        SampleQuantityInput();
         if (!editingQuantity) return;
-        if (!allowPress) return;
-        if (Input.GetMouseButtonDown(0) && !RectTransformUtility.RectangleContainsScreenPoint(
-                AssemblyDebugUi.Rect(quantityNumber), Input.mousePosition, null))
+        if (!allowInput || !disassemblyWindow.Open || mode != WorkroomPartProcessing.Mode.Recycle || Dragging ||
+            (Input.GetMouseButtonDown(0) && (!pointerInFront ||
+                !ReferenceEquals(TopAt(Input.mousePosition), disassemblyWindow) ||
+                !RectTransformUtility.RectangleContainsScreenPoint(
+                    AssemblyDebugUi.Rect(quantityNumber), Input.mousePosition, null))))
         { FinishQuantity(); return; }
-        if (!ReferenceEquals(top, disassemblyWindow) || Dragging) return;
+        if (quantityReadFrame == Time.frameCount) return;
+        quantityReadFrame = Time.frameCount;
         foreach (var key in Input.inputString)
         {
             if (key == '\n' || key == '\r') { FinishQuantity(); break; }
@@ -613,7 +632,6 @@ internal sealed class WorkroomComponentUi
             quantityLabel.gameObject.SetActive(recycling);
             foreach (var control in new[] { quantityMinus, quantityNumber, quantityPlus })
             { control.SetActive(recycling); control.GetComponent<Button>().interactable = enabled; }
-            if (recycling) ReadQuantity(allowPress, top);
             quantityLabel.text = WorkroomComponentTemplates.Text("recycle_quantity", recycleQuantity);
             quantityNumber.GetComponentInChildren<TextMeshProUGUI>().text = quantityText + (editingQuantity ? "_" : "");
             var preview = WorkroomPartProcessing.Preview(mode, recycleQuantity);
