@@ -52,6 +52,9 @@ $required = @(
     (Join-Path $interopDir 'UnityEngine.UIModule.dll'),
     (Join-Path $interopDir 'UnityEngine.InputLegacyModule.dll'),
     (Join-Path $interopDir 'UnityEngine.TextRenderingModule.dll')
+    (Join-Path $interopDir 'UnityEngine.AudioModule.dll')
+    (Join-Path $interopDir 'UnityEngine.UnityWebRequestModule.dll')
+    (Join-Path $interopDir 'UnityEngine.UnityWebRequestAudioModule.dll')
 )
 foreach ($path in $required) {
     if (-not (Test-Path -LiteralPath $path)) { throw "缺少编译依赖：$path" }
@@ -93,6 +96,9 @@ $referencePaths = @(
     (Join-Path $interopDir 'UnityEngine.UIModule.dll')
     (Join-Path $interopDir 'UnityEngine.InputLegacyModule.dll')
     (Join-Path $interopDir 'UnityEngine.TextRenderingModule.dll')
+    (Join-Path $interopDir 'UnityEngine.AudioModule.dll')
+    (Join-Path $interopDir 'UnityEngine.UnityWebRequestModule.dll')
+    (Join-Path $interopDir 'UnityEngine.UnityWebRequestAudioModule.dll')
 )
 [Microsoft.CodeAnalysis.MetadataReference[]]$references = @(
     $referencePaths | Sort-Object -Unique | ForEach-Object {
@@ -113,6 +119,13 @@ if ($duplicateNames.Count -gt 0) {
     throw ('assets 中存在同名 PNG：' + (($duplicateNames | ForEach-Object Name) -join ', '))
 }
 [Microsoft.CodeAnalysis.ResourceDescription[]]$resources = @(
+    Get-ChildItem -LiteralPath (Join-Path $projectDir 'assets/audio') -File | Where-Object {
+        $_.Name.EndsWith('.wav.gz', [StringComparison]::OrdinalIgnoreCase) -or $_.Extension -eq '.ogg'
+    } | ForEach-Object {
+        $audioPath = $_.FullName
+        $audioProvider = [System.Func[System.IO.Stream]]({ [IO.File]::OpenRead($audioPath) }.GetNewClosure())
+        [Microsoft.CodeAnalysis.ResourceDescription]::new(('PCExpansion.Audio.' + $_.Name), $audioProvider, $true)
+    }
     $assetFiles | ForEach-Object {
         $assetPath = $_.FullName
         $provider = [System.Func[System.IO.Stream]]({

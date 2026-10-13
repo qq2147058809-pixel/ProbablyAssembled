@@ -903,10 +903,15 @@ internal static class WorkroomLoadPatch
         __state = new LoadState();
         // Refusing this load must leave both the live room and its modData intact.
         if (!WorkroomGameAdapter.SaveHooksReady || !WorkroomCashRepair.AllowSessionChange() ||
+            !ServerRoomRuntime.AllowSessionChange() ||
+            !ServerRoomOrderStock.AllowSessionChange() ||
             !NpcStockOffers.AllowSessionChange()) return false;
         if (__originalMethod.Name == "LoadGame" && !SaveGeneration.PrepareLoad(__instance)) return false;
         __state.Started = true;
         WorkroomStorage.ResetSession();
+        ServerRoomRuntime.ResetSession();
+        ServerRoomOrderStock.ResetSession();
+        ServerRoomOrders.ResetSession();
         WorkroomTrial.OnSceneChanged();
         if (__originalMethod.Name == "StartNewGame") SaveGeneration.BeginNew(__instance);
         return true;

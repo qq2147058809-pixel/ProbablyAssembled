@@ -28,7 +28,7 @@ internal static class WorkroomMachineRepair
     private static readonly Dictionary<string, Plan> cached = new(StringComparer.Ordinal);
     static WorkroomMachineRepair() => LanguageText.LanguageChanged += () => cached.Clear();
     private static string Text(string key, params object[] args) => WorkroomMachineAssembly.Text(key, args);
-    private static void Notice(string key) => WorkroomStorage.NotifyText(Text(key));
+    private static void Notice(string key) { WorkroomStorage.NotifyText(Text(key)); RoomAudio.Notice(key); }
 
     internal static string Preview(string family) => GetPlan(family)?.Text ?? Text("repair_unavailable");
     internal static bool CanExecute(string family) => GetPlan(family)?.Allowed == true;

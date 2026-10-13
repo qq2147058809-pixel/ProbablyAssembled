@@ -43,7 +43,7 @@ internal static class WorkroomMachineAssembly
         internal bool HighContraband => Intact && Parts.Any(p => p.Tier == 5);
     }
     internal static string Text(string key, params object[] args) => LanguageText.Get("workroom.machine." + key, args);
-    private static void Notice(string key) => WorkroomStorage.NotifyText(Text(key));
+    private static void Notice(string key) { WorkroomStorage.NotifyText(Text(key)); RoomAudio.Notice(key); }
     internal static string MainSlot(string family) => "machine." + family + ".body";
     internal static string Slot(string family, string kind, int index = 0) => "machine." + family + "." + kind + "." + index;
     internal static string[] Kinds(string family) => family == Motherboard ? new[] { "cpu", "cooler", "gpu", "ram", "ssd" } :
@@ -193,6 +193,12 @@ internal static class WorkroomMachineAssembly
     internal static void ValidateInfo(MachineInfo info, string identifier, int identity) => ValidateInfoCore(info, identifier, identity, false);
     private static void ValidateInfoCore(MachineInfo info, string identifier, int identity, bool allowEmpty)
     {
+        if (info == null) throw new InvalidOperationException("机器本体记录无效。");
+        if (ServerRoomMachine.IsKind(info.Kind))
+        {
+            ServerRoomMachine.ValidateInfo(info, identifier, identity);
+            return;
+        }
         if (info.Version != 3 || (info.Kind != Motherboard && info.Kind != Case) || info.Parts == null || !allowEmpty && info.Parts.Count == 0 ||
             !IsBody(info.Kind, info.Body) || !Bare(info.Body) || info.Body.Identifier != identifier || info.Body.Nodes[0].UniqueId != identity)
             throw new InvalidOperationException("机器本体记录无效。");
@@ -209,6 +215,11 @@ internal static class WorkroomMachineAssembly
     internal static void ValidateNode(WorkroomItemCodec.Node node)
     {
         if (node.Machine == null) return;
+        if (ServerRoomMachine.IsKind(node.Machine.Kind))
+        {
+            ServerRoomMachine.ValidateNode(node);
+            return;
+        }
         ValidateInfo(node.Machine, node.Identifier, node.UniqueId);
         if (node.Composition != null || node.SlotItems.Count != 0 || !ActiveTag(node, Tag))
             throw new InvalidOperationException("机器组成快照与标签不一致。");
@@ -217,6 +228,7 @@ internal static class WorkroomMachineAssembly
     internal static int ConfigurationTier(MachineInfo info) => Flatten(info).Select(p => p.Tier).DefaultIfEmpty(0).Min();
     internal static List<CaseEconomy.PartRecord> Flatten(MachineInfo info)
     {
+        if (ServerRoomMachine.IsKind(info.Kind)) return ServerRoomMachine.Flatten(info);
         var result = new List<CaseEconomy.PartRecord>();
         if (info.Kind == Motherboard) Add(info.Body, result, false);
         foreach (var part in info.Parts) Add(part.Item, result, true);
@@ -229,10 +241,14 @@ internal static class WorkroomMachineAssembly
         result.Add(new CaseEconomy.PartRecord(spec.Owner.Tag, item.Nodes[0].Composition is { } parts ? WorkroomComponentParts.EffectiveTier(parts) : spec.Tier,
             SnapshotBroken(item), item.Value));
     }
-    internal static long Value(MachineInfo info) => info.Parts.Aggregate(info.Body.Value, (sum, part) => checked(sum + part.Item.Value));
+    internal static long Value(MachineInfo info) => ServerRoomMachine.IsKind(info.Kind)
+        ? ServerRoomMachine.Value(info)
+        : info.Parts.Aggregate(info.Body.Value, (sum, part) => checked(sum + part.Item.Value));
     private static bool SnapshotBroken(WorkroomItemCodec.Snapshot item) => item.Broken || Components.Find(item.Identifier)?.Broken == true ||
         item.Nodes[0].Composition?.Any(SnapshotBroken) == true || item.Nodes[0].Machine is { } machine && Broken(machine);
-    internal static bool Broken(MachineInfo info) => SnapshotBroken(info.Body) || info.Parts.Any(part => SnapshotBroken(part.Item));
+    internal static bool Broken(MachineInfo info) => ServerRoomMachine.IsKind(info.Kind)
+        ? ServerRoomMachine.Broken(info)
+        : SnapshotBroken(info.Body) || info.Parts.Any(part => SnapshotBroken(part.Item));
     /// <summary>仅检查保存的实际组成；不创建实体，不刷新标签，也不依赖检测文案。</summary>
     internal static Assessment Assess(MachineInfo info) => AssessCore(info, false);
     internal static Assessment AssessDraft(MachineInfo info) => AssessCore(info, true);
@@ -292,6 +308,31 @@ internal static class WorkroomMachineAssembly
             throw;
         }
         if (info == null) return;
+        if (ServerRoomMachine.IsKind(info.Kind))
+        {
+            var dedicated = ServerRoomMachine.Assess(info);
+            if (dedicated.Intact) item.DisableTag(Components.BrokenTag, false);
+            else item.EnableTag(Components.BrokenTag, false);
+            item.DisableTag("BROKEN_MACHINE", false);
+            item.EnableTag("IGNORE_CHILD_VALUE", false);
+            item.lateUnitValue = 0;
+            item.SetValue(ServerRoomMachine.Value(info));
+            Components.SetTradeProperties(item, false, false);
+            item.RemoveItemFeatureByID(CaseEconomy.MachinePriceFeatureId);
+            var definition = ServerRoomMachine.DefinitionFor(info.Kind,
+                ServerRoomMachine.TryDefinition(info.Body.Identifier, out var found) ? found.Tier : 0);
+            var dedicatedName = LanguageText.Get(info.Kind == ServerRoomMachine.Mining ?
+                "serverroom.item.mining" : "serverroom.item.server", definition.Tier);
+            item.identifierName = dedicatedName;
+            item.SetName(dedicatedName);
+            var dedicatedDescription = LanguageText.Get("serverroom.item.assembled_description", info.Parts.Count,
+                dedicated.CanRun ? LanguageText.Get("serverroom.item.ready") :
+                LanguageText.Get("serverroom.item.incomplete"));
+            item.shortDescription = dedicatedDescription;
+            item.longDescription = dedicatedDescription;
+            LowerAssemblerNpc.RefreshPurchaseEligibility(item);
+            return;
+        }
         var assessment = Assess(info);
         var broken = Broken(info); var spec = Components.Find(item.identifier)!;
         if (broken) item.EnableTag(Components.BrokenTag, false); else item.DisableTag(Components.BrokenTag, false);

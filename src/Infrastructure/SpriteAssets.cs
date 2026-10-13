@@ -49,6 +49,13 @@ internal static class SpriteAssets
             specs[item.SpriteKey] = new Spec(primary, fallback, type.Width, type.Height);
         }
 
+        foreach (var definition in ServerRoomMachine.Definitions)
+        {
+            var resource = "PCExpansion.Assets." + ServerRoomHardware.ArtworkName(definition) + ".png";
+            specs[definition.Identifier] = new Spec(resource, resource,
+                ServerRoomHardware.GridWidth, ServerRoomHardware.GridHeight);
+        }
+
         specs[ContactCard.SpriteKey] = new Spec(
             "PCExpansion.Assets.contact_card_0504.png",
             "PCExpansion.Assets.contact_card_0504.png", 2, 1);
@@ -98,7 +105,8 @@ internal static class SpriteAssets
         Cache.Remove(key);
     }
 
-    internal static bool IsSpriteKey(string? rawKey) => Specs.ContainsKey(Core.Clean(rawKey)) || WorkroomComponentParts.IsSpriteKey(Core.Clean(rawKey));
+    internal static bool IsSpriteKey(string? rawKey) => Specs.ContainsKey(Core.Clean(rawKey)) ||
+        WorkroomComponentParts.IsSpriteKey(Core.Clean(rawKey));
 
     internal static Sprite? PartArtwork(string artwork, int width, int height)
     {

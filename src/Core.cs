@@ -8,11 +8,11 @@ using System;
 using HarmonyLib;
 using MelonLoader;
 
-[assembly: System.Reflection.AssemblyVersion("1.1.0.0")]
-[assembly: System.Reflection.AssemblyFileVersion("1.1.0.0")]
+[assembly: System.Reflection.AssemblyVersion("2.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("2.0.0.0")]
 [assembly: System.Reflection.AssemblyCompany("阿铭")]
 [assembly: System.Reflection.AssemblyMetadata("Author", "阿铭")]
-[assembly: MelonInfo(typeof(PCExpansion.Core), "深空装机 - PC expansion", "1.1.0", "阿铭", "")]
+[assembly: MelonInfo(typeof(PCExpansion.Core), "深空装机 - PC expansion", "2.0.0", "阿铭", "")]
 [assembly: MelonGame("Questing Goose Studio", "Probably Stolen")]
 
 namespace PCExpansion;
@@ -32,6 +32,7 @@ public sealed class Core : MelonMod
         var preferences = MelonPreferences.CreateCategory(
             "PCExpansion", LanguageText.Get("preferences.category"));
         preferenceCategory = preferences;
+        RoomAudio.Initialize(preferences);
         DebugLogging = preferences.CreateEntry(
             "DebugLogging", false, LanguageText.Get("preferences.debug.name"),
             LanguageText.Get("preferences.debug.description"));
@@ -55,7 +56,7 @@ public sealed class Core : MelonMod
         }
 
         WorkroomGameAdapter.ReportPatchStatus();
-        Log.Msg("深空装机 / PC expansion v1.1.0 已加载，作者：阿铭。");
+        Log.Msg("深空装机 / PC expansion v2.0 已加载，作者：阿铭。");
         Log.Msg("已启用补丁模块：" + patched + " 个。");
     }
 
@@ -67,6 +68,7 @@ public sealed class Core : MelonMod
     public override void OnUpdate()
     {
         WorkroomCashRepair.RetryRecovery();
+        ServerRoomRuntime.RetryRecovery();
         ComputerSupplierNpcs.UpdateStockCleanup();
         NpcStockOffers.Update();
         WorkroomTrial.Update();
@@ -98,10 +100,15 @@ public sealed class Core : MelonMod
 
     public override void OnSceneWasUnloaded(int buildIndex, string sceneName) => WorkroomTrial.OnSceneChanged();
     public override void OnApplicationQuit() => WorkroomTrial.OnSceneChanged();
-    public override void OnDeinitializeMelon() => WorkroomTrial.OnSceneChanged();
+    public override void OnDeinitializeMelon()
+    {
+        WorkroomTrial.OnSceneChanged();
+        RoomAudioAssets.Release();
+    }
 
     private static void RefreshPreferenceLabels()
     {
+        RoomAudio.RefreshLabels();
         if (preferenceCategory != null) preferenceCategory.DisplayName = LanguageText.Get("preferences.category");
         if (DebugLogging == null) return;
         DebugLogging.DisplayName = LanguageText.Get("preferences.debug.name");

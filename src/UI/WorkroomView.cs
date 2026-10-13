@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Il2CppTMPro;
 using Il2Cpp;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace PCExpansion;
@@ -13,11 +14,14 @@ internal sealed class WorkroomView : IDisposable
 {
     private const float Width = 1280, Height = 720;
     private const int RoomOrder = 32600, BlackOrder = 32700;
+    // The wall patch left of the pegboard leaves the tabletop free for handling parts.
+    private static readonly Rect ServerKeyRect = new(426, 180, 54, 70);
+    private static readonly Rect AudioSpeakerRect = new(860, 298, 40, 48);
     private static readonly Color BackdropColor = new(.10f, .13f, .14f, 1);
     private Canvas noticeCanvas, roomCanvas, blackCanvas, shopCanvas;
     private GameObject noticeSpace, roomSpace, shopSpace, hint;
     private GameObject shopCrate;
-    private GameObject exitEntry;
+    private GameObject exitEntry, serverEntry, audioSpeaker;
     private readonly Dictionary<WorkroomPanels.Kind, GameObject> roomEntries = new();
     private WorkroomEntryHover entryHover;
     private readonly WorkroomPanels panels = new();
@@ -32,8 +36,9 @@ internal sealed class WorkroomView : IDisposable
 
     internal bool Alive => AssemblyDebugUi.Alive(noticeCanvas) && AssemblyDebugUi.Alive(roomCanvas) &&
         AssemblyDebugUi.Alive(blackCanvas) && AssemblyDebugUi.Alive(shopCanvas) &&
-        AssemblyDebugUi.Alive(backdrop) && panels.Alive && (entryHover?.Alive ?? false);
+        AssemblyDebugUi.Alive(backdrop) && AssemblyDebugUi.Alive(audioSpeaker) && panels.Alive && (entryHover?.Alive ?? false);
     internal bool BlocksPanelInput => panels.BlocksInput;
+    internal bool HasOpenPanels => panels.PreviewOpen;
     internal bool OwnsTextInput => panels.OwnsTextInput;
     internal bool IsDragging => panels.IsDragging || (inventory?.IsDragging ?? false);
     internal bool HasRoomSelection => inventory?.HasSelection ?? false;
@@ -70,13 +75,41 @@ internal sealed class WorkroomView : IDisposable
         return target != null && (target.Pointer == shopCrate.Pointer || target.transform.IsChildOf(shopCrate.transform));
     }
 
-    // During a native drag its own preview can become the top raycast hit.
-    // Drop acceptance follows the visible crate rectangle instead of that
-    // changing raycast owner; ordinary clicks retain the owner check above.
+    // The dragged item can cover the pointer, but an inventory window above
+    // the crate still owns the drop. Skip only the active drag visuals and
+    // use the first remaining EventSystem hit, as the click path does.
     internal bool HitShopStorageDrop(Vector2 point)
     {
         if (panels.HitWindow(point)) return panels.HitStorage(point);
-        return ShopCrateContains(point);
+        if (!ShopCrateContains(point)) return false;
+        var events = EventSystem.current;
+        if (!WorkroomUiCleanup.IsAlive(events) || !events.isActiveAndEnabled) return false;
+        var data = new PointerEventData(events) { position = point };
+        var hits = new Il2CppSystem.Collections.Generic.List<RaycastResult>();
+        events.RaycastAll(data, hits);
+        for (var i = 0; i < hits.Count; i++)
+        {
+            var target = hits[i].gameObject;
+            if (!WorkroomUiCleanup.IsAlive(target) || ActiveDragVisual(target)) continue;
+            return target.Pointer == shopCrate.Pointer || target.transform.IsChildOf(shopCrate.transform);
+        }
+        return false;
+    }
+
+    private static bool ActiveDragVisual(GameObject target)
+    {
+        static bool Contains(GameObject hit, RectTransform rect) =>
+            WorkroomUiCleanup.IsAlive(rect) && hit.transform.IsChildOf(rect);
+        var drag = ItemMouseDragHandler.current;
+        // Native single drag draws a separate fakeMiddle subtree beside the real item.
+        if (drag != null && drag.isDragging && drag.currentItem != null && !drag.currentItem.IsDestroyed() &&
+            (Contains(target, drag.currentItem.rectTransform) ||
+             Contains(target, drag.currentItem.fakeMiddle?.rectTransform))) return true;
+        var group = ItemMultiSelectHandler.current;
+        if (group == null || (int)group.state != 5 || group.selectedItems == null) return false;
+        foreach (var item in group.selectedItems)
+            if (item != null && !item.IsDestroyed() && Contains(target, item.rectTransform)) return true;
+        return false;
     }
 
     private bool ShopCrateContains(Vector2 point)
@@ -87,13 +120,13 @@ internal sealed class WorkroomView : IDisposable
     }
     internal void OpenPanel(WorkroomPanels.Kind kind, bool inRoom) => panels.Open(kind, inRoom);
     internal void ReleaseItemInfo() => inventory?.Cancel();
-    internal void ClearRoomSelection(long epoch) => inventory?.ClearSelection(epoch);
 
-    internal void Build(Action exit)
+    internal void Build(Action exit, Action enterServerRoom)
     {
         var labels = new[] { "title", "exit", "bench", "transit", "placeholder", "busy", "unavailable" };
         var texts = new List<string>();
         foreach (var label in labels) texts.Add(Text(label));
+        texts.Add(LanguageText.Get("serverroom.m1.entry"));
         foreach (var key in new[] { "title", "storage", "components", "motherboard", "case", "inventory" })
             texts.Add(LanguageText.Get("workroom.layout." + key));
         font = AssemblyDebugFonts.Prepare(texts[0], string.Join("", texts));
@@ -111,14 +144,14 @@ internal sealed class WorkroomView : IDisposable
         backdrop = AssemblyDebugUi.Image(roomCanvas.transform, "Backdrop", BackdropColor, true);
         AssemblyDebugUi.Stretch(backdrop.gameObject);
         roomSpace = Space(roomCanvas.transform, "RoomReference");
-        DrawRoom(exit);
+        DrawRoom(exit, enterServerRoom);
         roomCanvas.gameObject.SetActive(false);
 
         // Lowest native UI order; follow its actual Overlay/Camera mode below.
         shopCanvas = AssemblyDebugUi.NewCanvas("PCExpansion.ShopStorageEntry", -2);
         shopSpace = Space(shopCanvas.transform, "ShopReference");
         var crate = AssemblyDebugUi.Button(shopCanvas, shopSpace.transform, "StorageEntry", Color.clear,
-            () => WorkroomTrial.RequestPanel(WorkroomPanels.Kind.Storage, false));
+            RequestShopStorageAtPointer);
         shopCrate = crate;
         AssemblyDebugUi.Place(crate, 921, 594, 142, 109);
         var crateArt = AssemblyDebugUi.Image(crate.transform, "CrateArt", Color.white, false);
@@ -156,12 +189,25 @@ internal sealed class WorkroomView : IDisposable
         AttachRoomHover(roomEntries[WorkroomPanels.Kind.Storage], new[] { new Vector2(1069, 544),
             new Vector2(1218, 544), new Vector2(1265, 578), new Vector2(1265, 681),
             new Vector2(1088, 680), new Vector2(1069, 639) });
+        entryHover.AddRoomSprite(serverEntry, WorkroomArt.Get("workroom_wall_server_key"), ServerKeyRect,
+            roomCanvas, roomSpace.transform, shopCanvas, shopSpace.transform);
+        entryHover.AddRoomSprite(audioSpeaker, WorkroomArt.Get("workroom_audio_speaker"), AudioSpeakerRect,
+            roomCanvas, roomSpace.transform, shopCanvas, shopSpace.transform, () => RoomAudio.Text("speaker_hint"));
         entryHover.AddShop(shopCrate, WorkroomArt.Get("workroom_storage_chest"), new Rect(921, 594, 142, 109),
             roomCanvas, roomSpace.transform, shopCanvas, shopSpace.transform);
     }
 
     private void AttachRoomHover(GameObject button, Vector2[] contour) => entryHover.AddRoom(button, contour,
         roomCanvas, roomSpace.transform, shopCanvas, shopSpace.transform);
+
+    private void RequestShopStorageAtPointer()
+    {
+        // This callback can survive a native/UI hit behind a transparent part
+        // of another panel. Decide ownership again at activation time.
+        var point = (Vector2)Input.mousePosition;
+        if (panels.HitWindow(point) || !HitShopStorage(point)) return;
+        WorkroomTrial.RequestPanel(WorkroomPanels.Kind.Storage, false);
+    }
 
     private static string Text(string name) => LanguageText.Get("workroom.trial." + name);
 
@@ -182,7 +228,7 @@ internal sealed class WorkroomView : IDisposable
         return image.gameObject;
     }
 
-    private void DrawRoom(Action exit)
+    private void DrawRoom(Action exit, Action enterServerRoom)
     {
         var parent = roomSpace.transform;
         var art = AssemblyDebugUi.Image(parent, "WorkshopBackground", Color.white, false);
@@ -191,11 +237,27 @@ internal sealed class WorkroomView : IDisposable
         var door = AssemblyDebugUi.Button(roomCanvas, parent, "Exit", Color.clear, exit);
         exitEntry = door;
         AssemblyDebugUi.Place(door, 65, 145, 218, 425);
+        serverEntry = AssemblyDebugUi.Button(roomCanvas, parent, "ServerRoomKey", Color.clear, enterServerRoom);
+        AssemblyDebugUi.Place(serverEntry, ServerKeyRect.x, ServerKeyRect.y,
+            ServerKeyRect.width, ServerKeyRect.height);
+        DrawWallKeyArt(serverEntry.transform);
         Entry(WorkroomPanels.Kind.Components, 492, 342, 293, 67);
         Entry(WorkroomPanels.Kind.Motherboard, 905, 290, 158, 110);
         // Cover the full case art down to its feet.
         Entry(WorkroomPanels.Kind.Case, 1064, 188, 185, 214);
         Entry(WorkroomPanels.Kind.Storage, 1065, 542, 202, 143);
+        audioSpeaker = AssemblyDebugUi.Button(roomCanvas, parent, "AudioSpeaker", Color.clear, () =>
+        {
+            if (!AssemblyDebugUi.Alive(audioSpeaker) || !audioSpeaker.activeInHierarchy ||
+                !audioSpeaker.GetComponent<Button>().interactable || panels.BlocksInput || IsDragging) return;
+            var hit = WorkroomNativeTooltip.PointerTarget();
+            if (hit == null || hit.Pointer != audioSpeaker.Pointer) return;
+            RoomAudioSettingsUi.Open();
+        });
+        AssemblyDebugUi.Place(audioSpeaker, AudioSpeakerRect.x, AudioSpeakerRect.y, AudioSpeakerRect.width, AudioSpeakerRect.height);
+        var speakerArt = AssemblyDebugUi.Image(audioSpeaker.transform, "SpeakerArt", Color.white, false);
+        speakerArt.sprite = WorkroomArt.Get("workroom_audio_speaker");
+        AssemblyDebugUi.Stretch(speakerArt.gameObject);
         var inventoryText = WorkroomStorage.Text("room_hint") + WorkroomStorage.Text("invalid_position") +
             WorkroomStorage.Text("stored") + WorkroomStorage.Text("taken") + "0123456789";
         AssemblyDebugFonts.Prepare(inventoryText, inventoryText);
@@ -212,14 +274,14 @@ internal sealed class WorkroomView : IDisposable
 
     internal void Render(WorkroomTransition flow, Rect storeViewport)
     {
-        var inside = flow.Current == WorkroomTransition.Stage.Inside;
-        Fit(noticeSpace, inside ? new Rect(0, 0, Screen.width, Screen.height) : storeViewport);
+        var inside = flow.IsStable && flow.CurrentRegion == WorkroomTransition.Region.Workroom;
+        var home = flow.IsStable && flow.CurrentRegion == WorkroomTransition.Region.Shop;
+        Fit(noticeSpace, home ? storeViewport : new Rect(0, 0, Screen.width, Screen.height));
         Fit(roomSpace, new Rect(0, 0, Screen.width, Screen.height));
-        noticeCanvas.gameObject.SetActive(hint.activeSelf && Environment.TickCount64 < hintUntil && !flow.BlocksInput);
+        noticeCanvas.gameObject.SetActive(hint.activeSelf && Environment.TickCount64 < hintUntil && flow.IsStable);
         roomCanvas.gameObject.SetActive(flow.RoomVisible);
-        blackCanvas.gameObject.SetActive(flow.BlocksInput && flow.Current != WorkroomTransition.Stage.Inside);
+        blackCanvas.gameObject.SetActive(flow.BlocksInput && !flow.IsStable);
         black.color = new Color(0,0,0,flow.Opacity);
-        var home = flow.Current == WorkroomTransition.Stage.Home;
         if (inside)
         {
             if (lastRoomMessageUntil != WorkroomStorage.MessageUntil)
@@ -230,8 +292,8 @@ internal sealed class WorkroomView : IDisposable
             }
         }
         else lastRoomMessageUntil = WorkroomStorage.MessageUntil;
-        panels.Render(inside, inside || home, inside ? new Rect(0, 0, Screen.width, Screen.height) : storeViewport, (inventory?.IsDragging ?? false) || (!panels.OwnsTextInput && Input.GetKeyDown(KeyCode.Escape) && (inventory?.HasSelection ?? false)));
-        inventory.Update(inside && (!panels.BlocksInput || panels.StorageOpen), panels);
+        panels.Render(inside, inside || home, inside ? new Rect(0, 0, Screen.width, Screen.height) : storeViewport, RoomAudioSettingsUi.BlocksInput || (inventory?.IsDragging ?? false) || (!panels.OwnsTextInput && Input.GetKeyDown(KeyCode.Escape) && (inventory?.HasSelection ?? false)));
+        inventory.Update(inside && !RoomAudioSettingsUi.BlocksInput && (!panels.BlocksInput || panels.StorageOpen), panels);
         if (shopCanvas.renderMode == RenderMode.ScreenSpaceOverlay)
             Fit(shopSpace, storeViewport);
         else if (AssemblyDebugUi.Alive(shopCanvas.worldCamera))
@@ -247,9 +309,19 @@ internal sealed class WorkroomView : IDisposable
         shopCanvas.gameObject.SetActive(home && shopReady &&
             !panels.BlocksInput &&
             WorkroomGameAdapter.HooksReady && Time.timeScale > 0);
-        var entryReady = !panels.BlocksInput && !IsDragging &&
+        var entryReady = !RoomAudioSettingsUi.BlocksInput && !panels.BlocksInput && !IsDragging &&
             WorkroomGameAdapter.HooksReady && Time.timeScale > 0 && !Interactable.isPaused;
+        if (AssemblyDebugUi.Alive(serverEntry))
+        {
+            var button = serverEntry.GetComponent<Button>();
+            if (AssemblyDebugUi.Alive(button)) button.interactable = inside && entryReady && !panels.PreviewOpen;
+            var hit = serverEntry.GetComponent<Image>();
+            if (AssemblyDebugUi.Alive(hit)) hit.raycastTarget = inside && entryReady && !panels.PreviewOpen;
+        }
         entryHover.Update(inside && entryReady, home && shopReady && entryReady);
+        var speakerReady = inside && entryReady && RoomAudioSettingsUi.CanOpen;
+        audioSpeaker.GetComponent<Button>().interactable = speakerReady;
+        audioSpeaker.GetComponent<Image>().raycastTarget = speakerReady;
         // Concrete press callbacks do not run during idle frames. Advance the
         // release tail every frame even when no handler queries mouse ownership.
         SampleStoragePointer();
@@ -335,9 +407,16 @@ internal sealed class WorkroomView : IDisposable
         hintUntil = Environment.TickCount64 + 5000;
     }
 
+    private static void DrawWallKeyArt(Transform parent)
+    {
+        var art = AssemblyDebugUi.Image(parent, "WallServerRoomKeyArt", Color.white, false);
+        art.sprite = WorkroomArt.Get("workroom_wall_server_key");
+        AssemblyDebugUi.Place(art.gameObject, 0, 0, ServerKeyRect.width, ServerKeyRect.height);
+    }
+
     private void PlaceNotice()
     {
-        var inRoom = roomCanvas.gameObject.activeInHierarchy;
+        var inRoom = WorkroomTrial.CustomRegionVisible;
         noticeCanvas.sortingOrder = inRoom ? RoomOrder + 50 : 31010;
         AssemblyDebugUi.Place(hint, inRoom ? 190 : 420, inRoom ? 18 : 640,
             inRoom ? 900 : 440, inRoom ? 50 : 44);
@@ -377,7 +456,7 @@ internal sealed class WorkroomView : IDisposable
         });
         cleanup.ThrowIfFailed();
         hint = noticeSpace = roomSpace = shopSpace = null;
-        shopCrate = exitEntry = null; roomEntries.Clear(); hintText = null; backdrop = black = null; font = null;
+        shopCrate = exitEntry = serverEntry = null; roomEntries.Clear(); hintText = null; backdrop = black = null; font = null;
         storagePointerOwned = false; storagePointerFrame = -1; storageNeutralFrames = 0;
     }
 }

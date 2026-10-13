@@ -21,10 +21,12 @@ internal sealed class WorkroomEntryHover : IDisposable
         internal TooltipContainer Tooltip;
         internal Outlinable Outline;
         internal bool InRoom, Ready;
+        internal Func<string> Description;
     }
 
     private static readonly List<WorkroomEntryHover> live = new();
     private static readonly Dictionary<IntPtr, Interactable> interactions = new();
+    private static int nextRenderScene;
     private readonly List<Entry> entries = new();
     private readonly List<Mesh> meshes = new();
     private GameObject scene;
@@ -32,9 +34,12 @@ internal sealed class WorkroomEntryHover : IDisposable
     private RenderTexture buffer;
     private RawImage roomImage, shopImage;
     private Material backgroundMaterial;
+    private readonly Sprite sourceBackground;
+    private readonly Color? hoverColor;
     private bool disposed;
 
-    internal WorkroomEntryHover() => live.Add(this);
+    internal WorkroomEntryHover(Sprite background = null, Color? hoverColor = null)
+    { sourceBackground = background; this.hoverColor = hoverColor; live.Add(this); }
     internal bool Alive => !disposed && WorkroomUiCleanup.IsAlive(scene) &&
         WorkroomUiCleanup.IsAlive(camera) && WorkroomUiCleanup.IsAlive(buffer);
 
@@ -43,7 +48,8 @@ internal sealed class WorkroomEntryHover : IDisposable
         if (WorkroomUiCleanup.IsAlive(scene)) return;
         scene = new GameObject("PCExpansion.EntryOutlineScene");
         // Vanilla cameras include every layer. Keep these render-only proxies far outside their view.
-        scene.transform.position = new Vector3(100000, 100000, 0);
+        // Workroom and server-room views coexist. Each camera must exclude the other owner's proxies.
+        scene.transform.position = new Vector3(100000 + nextRenderScene++ * 100, 100000, 0);
         var cameraObject = new GameObject("EntryOutlineCamera");
         cameraObject.transform.SetParent(scene.transform, false);
         cameraObject.transform.localPosition = new Vector3(6.4f, -3.6f, -10);
@@ -81,8 +87,11 @@ internal sealed class WorkroomEntryHover : IDisposable
         roomImage = NewImage(roomSpace, "RoomNativeEntryOutline");
         // Above the background, below the existing fixed labels and interactive UI.
         roomImage.transform.SetSiblingIndex(1);
-        shopImage = NewImage(shopSpace, "ShopNativeEntryOutline");
-        shopImage.transform.SetAsFirstSibling();
+        if (shopSpace != null)
+        {
+            shopImage = NewImage(shopSpace, "ShopNativeEntryOutline");
+            shopImage.transform.SetAsFirstSibling();
+        }
     }
 
     private RawImage NewImage(Transform parent, string name)
@@ -98,7 +107,7 @@ internal sealed class WorkroomEntryHover : IDisposable
     }
 
     internal void AddRoom(GameObject button, Vector2[] contour, Canvas roomCanvas,
-        Transform roomSpace, Canvas shopCanvas, Transform shopSpace)
+        Transform roomSpace, Canvas shopCanvas, Transform shopSpace, Func<string> description = null)
     {
         Build(roomCanvas, roomSpace, shopCanvas, shopSpace);
         if (!WorkroomUiCleanup.IsAlive(backgroundMaterial))
@@ -106,7 +115,7 @@ internal sealed class WorkroomEntryHover : IDisposable
             var shader = Shader.Find("Sprites/Default");
             if (!WorkroomUiCleanup.IsAlive(shader)) throw new InvalidOperationException("入口绘制材质缺失。");
             backgroundMaterial = new Material(shader);
-            backgroundMaterial.mainTexture = WorkroomArt.Get("workroom_background").texture;
+            backgroundMaterial.mainTexture = (sourceBackground ?? WorkroomArt.Get("workroom_background")).texture;
         }
         var proxy = NewProxy(button.name);
         // The boundary clips the original background's UVs, including concave stand recesses.
@@ -131,7 +140,7 @@ internal sealed class WorkroomEntryHover : IDisposable
         proxy.AddComponent<MeshFilter>().sharedMesh = mesh;
         var renderer = proxy.AddComponent<MeshRenderer>();
         renderer.sharedMaterial = backgroundMaterial;
-        Register(button, proxy, renderer, true);
+        Register(button, proxy, renderer, true, description);
     }
 
     // Built once with the view. A fan from vertex zero would fill concave notches outside the object.
@@ -181,7 +190,15 @@ internal sealed class WorkroomEntryHover : IDisposable
         (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
 
     internal void AddShop(GameObject button, Sprite sprite, Rect rect, Canvas roomCanvas,
-        Transform roomSpace, Canvas shopCanvas, Transform shopSpace)
+        Transform roomSpace, Canvas shopCanvas, Transform shopSpace) =>
+        AddSprite(button, sprite, rect, roomCanvas, roomSpace, shopCanvas, shopSpace, false);
+
+    internal void AddRoomSprite(GameObject button, Sprite sprite, Rect rect, Canvas roomCanvas,
+        Transform roomSpace, Canvas shopCanvas, Transform shopSpace, Func<string> description = null) =>
+        AddSprite(button, sprite, rect, roomCanvas, roomSpace, shopCanvas, shopSpace, true, description);
+
+    private void AddSprite(GameObject button, Sprite sprite, Rect rect, Canvas roomCanvas,
+        Transform roomSpace, Canvas shopCanvas, Transform shopSpace, bool inRoom, Func<string> description = null)
     {
         Build(roomCanvas, roomSpace, shopCanvas, shopSpace);
         var proxy = NewProxy(button.name);
@@ -190,7 +207,7 @@ internal sealed class WorkroomEntryHover : IDisposable
         var scale = Mathf.Min(rect.width / sprite.bounds.size.x, rect.height / sprite.bounds.size.y) / 100;
         proxy.transform.localScale = new Vector3(scale, scale, 1);
         proxy.transform.localPosition = new Vector3(rect.center.x / 100, -rect.center.y / 100, 0);
-        Register(button, proxy, renderer, false);
+        Register(button, proxy, renderer, inRoom, description);
     }
 
     private GameObject NewProxy(string name)
@@ -202,7 +219,7 @@ internal sealed class WorkroomEntryHover : IDisposable
         return proxy;
     }
 
-    private void Register(GameObject button, GameObject proxy, Renderer renderer, bool inRoom)
+    private void Register(GameObject button, GameObject proxy, Renderer renderer, bool inRoom, Func<string> description = null)
     {
         // Native filtering reads the Outlinable owner's layer as well as its target Renderer.
         // Only this far-away camera changes; EPO layer 63 still limits outlines to our entries.
@@ -221,7 +238,7 @@ internal sealed class WorkroomEntryHover : IDisposable
         interaction.doNotOutline = false;
         interaction.isAvailable = false;
         var entry = new Entry { Button = button, Proxy = proxy, Interaction = interaction,
-            Outline = outline, InRoom = inRoom };
+            Outline = outline, InRoom = inRoom, Description = description };
         entries.Add(entry);
         interactions.Add(interaction.Pointer, interaction);
         entry.Tooltip = button.AddComponent<TooltipContainer>();
@@ -235,11 +252,18 @@ internal sealed class WorkroomEntryHover : IDisposable
         {
             entry.Ready = entry.InRoom ? roomReady : shopReady;
             entry.Interaction.isAvailable = entry.Ready;
-            entry.Tooltip.content = entry.InRoom && entry.Button.name == "Exit"
-                ? LanguageText.Get("workroom.trial.exit") : entry.InRoom
-                ? WorkroomPanels.Name(Enum.Parse<WorkroomPanels.Kind>(entry.Button.name))
-                : WorkroomPanels.Name(WorkroomPanels.Kind.Storage);
+            if (entry.Description != null)
+            {
+                entry.Tooltip.content = entry.Description();
+                if (!entry.Ready) WorkroomNativeTooltip.Hide(entry.Tooltip);
+            }
+            else if (!entry.InRoom) entry.Tooltip.content = WorkroomPanels.Name(WorkroomPanels.Kind.Storage);
+            else if (entry.Button.name == "Exit") entry.Tooltip.content = LanguageText.Get("workroom.trial.exit");
+            else if (entry.Button.name == "ServerRoomKey") entry.Tooltip.content = LanguageText.Get("serverroom.m1.entry");
+            else entry.Tooltip.content = WorkroomPanels.Name(Enum.Parse<WorkroomPanels.Kind>(entry.Button.name));
         }
+        if (!roomReady && WorkroomUiCleanup.IsAlive(roomImage)) roomImage.gameObject.SetActive(false);
+        if (!shopReady && WorkroomUiCleanup.IsAlive(shopImage)) shopImage.gameObject.SetActive(false);
     }
 
     internal static bool AllowNativeClick(Interactable target) => target == null ||
@@ -261,10 +285,15 @@ internal sealed class WorkroomEntryHover : IDisposable
             var on = entry.Ready && WorkroomUiCleanup.IsAlive(entry.Button) && entry.Button.activeInHierarchy &&
                 hit != null && hit.Pointer == entry.Button.Pointer && entry.Interaction.isPointerOver;
             entry.Proxy.SetActive(on);
-            if (on) selected = entry;
+            if (on)
+            {
+                // Apply after native hover callbacks so this owner's explicit color reaches the render pass.
+                if (hoverColor.HasValue) entry.Outline.OutlineParameters.Color = hoverColor.Value;
+                selected = entry;
+            }
         }
         roomImage.gameObject.SetActive(selected != null && selected.InRoom);
-        shopImage.gameObject.SetActive(selected != null && !selected.InRoom);
+        if (WorkroomUiCleanup.IsAlive(shopImage)) shopImage.gameObject.SetActive(selected != null && !selected.InRoom);
         if (selected != null) camera.Render(); // Native Outliner.OnPreRender owns the outline pass.
     }
 

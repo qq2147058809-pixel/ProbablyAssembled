@@ -84,7 +84,7 @@ internal static class LowerAssemblerNpc
         client.clientBuyingIdList = new Il2CppSystem.Collections.Generic.List<string>();
         client.clientBlackTagList = new Il2CppSystem.Collections.Generic.List<string>();
         client.clientBlackIdList = new Il2CppSystem.Collections.Generic.List<string>();
-        client.willAcceptItemPreference = (Func<GameItem, bool>)IsAllowedAssemblerPurchase;
+        client.willAcceptItemPreference = (Func<GameItem, bool>)(item => IsAllowedFor(client, item));
         client.noAcceptingContraband = false;
         client.AcceptingContrabandOverride = true;
         client.isRequireVariety = false;
@@ -147,14 +147,40 @@ internal static class LowerAssemblerNpc
         }
     }
 
+    private static bool DedicatedSaleReady(GameItem? item)
+    {
+        if (!ServerRoomHardware.IsHardware(item) || item!.unitCount != 1 ||
+            !item.IsTag(ServerRoomHardware.MarkerTag) || item.IsTag(Components.BrokenTag) ||
+            item.IsTag("BROKEN_MACHINE")) return false;
+        if (!ServerRoomMachine.TryDefinition(Core.Clean(item.identifier), out var definition)) return false;
+        var machine = WorkroomMachineAssembly.Read(item);
+        return machine == null ? item.unitValue == definition.BaseValue :
+            ServerRoomMachine.Assess(machine).CanSell && item.unitValue == ServerRoomMachine.Value(machine);
+    }
+
+    internal static bool IsAllowedFor(StoreClient? client, GameItem? item)
+    {
+        try
+        {
+            if (ServerRoomHardware.IsHardware(item))
+                return PhoneAssemblerNpc.IsPhoneAssembler(client) && DedicatedSaleReady(item);
+            return IsAllowedAssemblerPurchase(item);
+        }
+        catch (Exception ex)
+        {
+            Core.Log?.Warning("机房专用机器收购核对失败：" + ex.Message);
+            return false;
+        }
+    }
+
     /// <summary>把电脑规则计算结果写成原版客户可直接识别的内部标签，不添加可见词条。</summary>
     internal static bool RefreshPurchaseEligibility(GameItem? item)
     {
         if (item == null) return false;
         try
         {
-            if (!Components.IsComponent(item) && !ComputerCase.IsCase(item)) return false;
-            var allowed = IsAllowedAssemblerPurchase(item);
+            if (!Components.IsComponent(item) && !ComputerCase.IsCase(item) && !ServerRoomHardware.IsHardware(item)) return false;
+            var allowed = ServerRoomHardware.IsHardware(item) ? DedicatedSaleReady(item) : IsAllowedAssemblerPurchase(item);
             if (allowed && !item.IsTag(PurchaseTag)) item.EnableTag(PurchaseTag, false);
             else if (!allowed && item.IsTag(PurchaseTag)) item.DisableTag(PurchaseTag, false);
             return allowed;
@@ -169,6 +195,7 @@ internal static class LowerAssemblerNpc
     private static string? PurchaseRefusalReason(GameItem? item)
     {
         if (item == null) return "没有物品";
+        if (ServerRoomHardware.IsHardware(item)) return "机房专用设备仅洛夕回收";
 
         // 单独散件只收完好电脑配件；原版其他客户行为保持不变。
         if (Components.IsComponent(item))
@@ -481,7 +508,7 @@ internal static class LowerAssemblerNpc
             try
             {
                 if (!IsAssembler(__instance)) return;
-                __result = IsAllowedAssemblerPurchase(gameItem);
+                __result = IsAllowedFor(__instance, gameItem);
                 // 摆货流程在拒收检查之前读取此对白；按当前物品刷新，避免沿用上一件的原因。
                 if (!__result && gameItem != null && ComputerCase.IsCase(gameItem) &&
                     CaseEconomy.MachineLabel(gameItem) == "刀把机")
@@ -564,7 +591,7 @@ internal static class LowerAssemblerNpc
             {
                 var client = __instance.currentClientInstance?.storeClient;
                 if (!IsAssembler(client) || gameItem == null) return;
-                __result = IsAllowedAssemblerPurchase(gameItem) && __result;
+                __result = IsAllowedFor(client, gameItem) && __result;
                 if (lastItem == gameItem.Pointer && lastResult == __result) return;
                 lastItem = gameItem.Pointer;
                 lastResult = __result;
@@ -632,7 +659,7 @@ internal static class LowerAssemblerNpc
             try
             {
                 if (!IsAssembler(__instance)) return;
-                __result = !IsAllowedAssemblerPurchase(gameItem);
+                __result = !IsAllowedFor(__instance, gameItem);
                 if (__result) __instance.placedWrongItemWhenSellingToDialogue = RefusalDialogue(__instance, gameItem);
             }
             catch (Exception ex) { Core.Log?.Warning("电脑拒收规则判断失败：" + ex.Message); }
@@ -663,7 +690,7 @@ internal static class LowerAssemblerNpc
         {
             try
             {
-                if (IsAssembler(__instance) && !IsAllowedAssemblerPurchase(gameItem)) __result = false;
+                if (IsAssembler(__instance) && !IsAllowedFor(__instance, gameItem)) __result = false;
             }
             catch (Exception ex) { Core.Log?.Warning("电脑收购预算判断失败：" + ex.Message); }
         }

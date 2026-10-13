@@ -15,13 +15,13 @@ internal static class WorkroomStorage
     private static readonly Dictionary<string, WorkroomItemCodec.Candidate> delivery = new();
     private static bool busy, deferredSave;
     private static long lastSlowLog;
-    internal static bool Busy => busy || WorkroomCashRepair.Pending;
+    internal static bool Busy => busy || WorkroomCashRepair.Pending || ServerRoomRuntime.Pending;
     internal static string Text(string name, params object[] args) => LanguageText.Get("workroom.storage." + name, args);
     internal static string Message { get; private set; } = "";
     internal static long MessageUntil { get; private set; }
 
     internal static void Notify(string name)
-    { Message = Text(name); MessageUntil = Environment.TickCount64 + 5000; }
+    { Message = Text(name); MessageUntil = Environment.TickCount64 + 5000; RoomAudio.Notice(name); }
 
     internal static void NotifyText(string text)
     { Message = text; MessageUntil = Environment.TickCount64 + 5000; }
@@ -56,7 +56,7 @@ internal static class WorkroomStorage
             });
         if (State.PendingRecords.Any(item => (item.Place == "cleanup" && !cleanup.ContainsKey(item.Id)) ||
             (item.Place == "delivery" && !delivery.ContainsKey(item.Id)))) Run(ReconcileLoadedRecords);
-        if (deferredSave && cleanup.Count == 0 && delivery.Count == 0 && !WorkroomItemCodec.CleanupPending && !WorkroomCashRepair.Pending && !ComputerSupplierNpcs.StockPending && !NpcStockOffers.Pending &&
+        if (deferredSave && cleanup.Count == 0 && delivery.Count == 0 && !WorkroomItemCodec.CleanupPending && !WorkroomCashRepair.Pending && !ServerRoomRuntime.Pending && ServerRoomDaily.AllowSave && !ComputerSupplierNpcs.StockPending && !NpcStockOffers.Pending && ServerRoomOrderStock.BeforeSave() &&
             State.PendingRecords.Count == 0)
         { deferredSave = false; store.SaveGame(); }
     }
@@ -98,12 +98,12 @@ internal static class WorkroomStorage
         return null;
     }
 
+    // Admission only. Existing records remain readable and withdrawable.
     internal static bool AcceptsIdentifier(string? identifier) => identifier != null &&
-        (Components.Find(identifier) != null || WorkroomComponentTemplates.TryPart(identifier, out _, out _, out _) ||
-        identifier is "pcrepair.sign_computer" or "pcrepair.contact_card_0504" or
-            "pcrepair.computer_build_guide" or
-            "common_electronic" or "wire" or "nuts_metal" or "printer_plastic" or
-            "scrap_metal" or "metal_ingot" or "energy_credit");
+        (Components.Find(identifier) != null || ServerRoomMachine.TryDefinition(identifier, out _) ||
+        WorkroomComponentTemplates.TryPart(identifier, out _, out _, out _) ||
+        identifier is "common_electronic" or "wire" or "nuts_metal" or "printer_plastic" or
+            "scrap_metal" or "metal_ingot");
 
     internal static bool Contains(GameInventory? inventory, GameItem item)
     {
@@ -129,7 +129,7 @@ internal static class WorkroomStorage
         try
         {
             if (!State.Ready) return Refuse(State.Error ?? "unavailable");
-            if (busy || WorkroomItemCodec.CleanupPending) return Refuse("recovery");
+            if (Busy || WorkroomItemCodec.CleanupPending) return Refuse("recovery");
             stage = "item";
             if (item == null) return Refuse("refused");
             count = item.unitCount;
@@ -195,7 +195,7 @@ internal static class WorkroomStorage
 
     internal static void Take(string id, bool inRoom, long epoch)
     {
-        if (!State.Ready || State.Epoch != epoch || busy || WorkroomItemCodec.CleanupPending) return;
+        if (!State.Ready || State.Epoch != epoch || Busy || WorkroomItemCodec.CleanupPending) return;
         var record = State.Find(id);
         if (record == null || record.Place != "box" || cleanup.ContainsKey(id) || delivery.ContainsKey(id)) return;
         if (record.Item.Count != 1) { Notify("single_only"); return; }
@@ -243,7 +243,7 @@ internal static class WorkroomStorage
 
     internal static void MoveRoom(string id, int x, int y, long epoch, int? orientation = null)
     {
-        if (!State.Ready || State.Epoch != epoch || busy) return;
+        if (!State.Ready || State.Epoch != epoch || Busy) return;
         var item = State.Find(id);
         if (item == null || item.Place != "room") return;
         Run(() =>
@@ -256,7 +256,7 @@ internal static class WorkroomStorage
 
     internal static void StoreRoom(string id, long epoch, int? orientation = null)
     {
-        if (!State.Ready || State.Epoch != epoch || busy || State.Find(id)?.Place != "room") return;
+        if (!State.Ready || State.Epoch != epoch || Busy || State.Find(id)?.Place != "room") return;
         Run(() =>
         {
             var item = State.Find(id)!;
@@ -281,7 +281,8 @@ internal static class WorkroomStorage
 
     internal static void CollectCurrent(bool inRoom, long epoch)
     {
-        if (!State.Ready || State.Epoch != epoch || busy || WorkroomItemCodec.CleanupPending ||
+        using var audioBatch = RoomAudio.Batch();
+        if (!State.Ready || State.Epoch != epoch || Busy || WorkroomItemCodec.CleanupPending ||
             !WorkroomTrial.CanCollectCurrent(inRoom)) { Notify("recovery"); return; }
         var moved = 0; var failed = 0; var skipped = 0;
         if (inRoom)
@@ -345,6 +346,7 @@ internal static class WorkroomStorage
         var pending = State.PendingRecords.Count;
         if (pending == 0 && WorkroomItemCodec.CleanupPending) pending = 1;
         NotifyText(Text("collect_result", moved, skipped, failed, pending));
+        RoomAudio.Play(pending > 0 ? "warning" : moved > 0 ? "store" : "warning");
         Core.Log?.Msg($"[工作间一键收纳] source={(inRoom ? "room" : "main")}; moved={moved}; skipped={skipped}; failed={failed}; pending={pending}; records={State.Items.Count}");
     }
 
@@ -390,7 +392,8 @@ internal static class WorkroomStorage
     // records publish together; a failed Replace leaves every original record.
     internal static void StoreRoomGroup(IReadOnlyList<RoomDrop> candidates, long epoch)
     {
-        if (!State.Ready || State.Epoch != epoch || busy || WorkroomItemCodec.CleanupPending ||
+        using var audioBatch = RoomAudio.Batch();
+        if (!State.Ready || State.Epoch != epoch || Busy || WorkroomItemCodec.CleanupPending ||
             State.PendingRecords.Count != 0 || !WorkroomTrial.CanCollectCurrent(true))
         { Notify("recovery"); return; }
         var moved = 0; var skipped = 0; var failed = 0;
@@ -424,7 +427,7 @@ internal static class WorkroomStorage
             for (; index < candidates.Count; index++)
             {
                 var selection = ItemMultiSelectHandler.current;
-                if (!State.Ready || State.Epoch != epoch || busy || WorkroomItemCodec.CleanupPending ||
+                if (!State.Ready || State.Epoch != epoch || Busy || WorkroomItemCodec.CleanupPending ||
                     State.PendingRecords.Count != 0 || selection == null || selection.Pointer != handlerPointer ||
                     !WorkroomStorageGroupDragPatch.ResetComplete(selection) || !WorkroomTrial.CanCollectCurrent(false))
                 { failed += candidates.Count - index; break; }
@@ -449,6 +452,7 @@ internal static class WorkroomStorage
         var pending = State.PendingRecords.Count;
         if (pending == 0 && WorkroomItemCodec.CleanupPending) pending = 1;
         NotifyText(Text("selected_result", moved, skipped, failed, pending));
+        RoomAudio.Play(pending > 0 ? "warning" : moved > 0 ? "store" : "warning");
         Core.Log?.Msg($"[工作间群拖收纳] source={source}; moved={moved}; skipped={skipped}; failed={failed}; pending={pending}");
     }
 
@@ -528,7 +532,7 @@ internal static class WorkroomStorage
 
     internal static bool BeforeSave()
     {
-        if (busy || cleanup.Count != 0 || delivery.Count != 0 || WorkroomItemCodec.CleanupPending || WorkroomCashRepair.Pending || ComputerSupplierNpcs.StockPending || NpcStockOffers.Pending ||
+        if (busy || cleanup.Count != 0 || delivery.Count != 0 || WorkroomItemCodec.CleanupPending || WorkroomCashRepair.Pending || ServerRoomRuntime.Pending || !ServerRoomDaily.AllowSave || ComputerSupplierNpcs.StockPending || NpcStockOffers.Pending || !ServerRoomOrderStock.BeforeSave() ||
             State.PendingRecords.Count != 0)
         { deferredSave = true; Notify("recovery"); return false; }
         return true;

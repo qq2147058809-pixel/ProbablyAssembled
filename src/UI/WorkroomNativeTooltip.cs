@@ -129,7 +129,7 @@ internal static class WorkroomNativeTooltip
         manager = null; widget = null; previousParent = null; previousCanvas = null;
     }
 
-    private static void Hide(Component source)
+    internal static void Hide(Component source)
     {
         var current = TooltipManager._instance;
         var matched = false;

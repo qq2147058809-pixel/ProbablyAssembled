@@ -302,7 +302,13 @@ internal static class WorkroomPartProcessing
         foreach (var id in preferred.Append(fallback).Distinct(StringComparer.Ordinal))
             if (counts.TryGetValue(id, out var count))
             { var material = quotes[id]; material.Count = checked((int)count); plan.Materials.Add(material); }
-        if (plan.Materials.Count == 0) { Refuse(plan, "processing_zero_recycle"); return; }
+        if (plan.Materials.Count == 0)
+        {
+            Refuse(plan, "processing_zero_recycle");
+            preview.Add(plan.Text);
+            preview.Add(RecycleQuantityHint(plan, source, quotes.Values.Min(material => material.Value)));
+            plan.Text = string.Join("\n", preview); return;
+        }
         var outputs = plan.Materials.SelectMany(material => Enumerable.Range(0, material.Count)
             .Select(_ => new WorkroomStorageState.Record { Item = new WorkroomItemCodec.Snapshot { Footprint = material.Shape } })).ToList();
         var next = PreviewRemainders(plan);
@@ -390,9 +396,7 @@ internal static class WorkroomPartProcessing
         plan.Sources.Add(SelectOne(source));
         var remaining = plan.Quantity - 1;
         if (remaining > 0)
-        foreach (var record in WorkroomStorage.State.Items.Where(record =>
-            record.Id != source.Id && (record.Place == "room" || record.Place == "box") &&
-            WorkroomRecyclingRules.SamePhysicalSpec(source.Item, record.Item)).OrderBy(record => record.Place == "room" ? 0 : 1))
+        foreach (var record in RecyclingCandidates(source))
         {
             if (remaining == 0) break;
             var count = Math.Min(remaining, record.Item.Count);
@@ -405,6 +409,41 @@ internal static class WorkroomPartProcessing
         if (plan.TotalValue < 0) throw new InvalidOperationException("本次回收价格为负。");
         plan.Budget = plan.TotalValue / 2;
         return true;
+    }
+
+    // The hint must follow the same stable room-first order as actual selection.
+    private static IEnumerable<WorkroomStorageState.Record> RecyclingCandidates(WorkroomStorageState.Record source) =>
+        WorkroomStorage.State.Items.Where(record => record.Id != source.Id &&
+            (record.Place == "room" || record.Place == "box") &&
+            WorkroomRecyclingRules.SamePhysicalSpec(source.Item, record.Item))
+        .OrderBy(record => record.Place == "room" ? 0 : 1);
+
+    private static string RecycleQuantityHint(Plan plan, WorkroomStorageState.Record source, long cheapestMaterial)
+    {
+        // With positive material quotes and N >= 1, any output needs at least
+        // the cheapest allowed material's price. floor(total / 2) must reach it.
+        var requiredValue = 2m * cheapestMaterial;
+        decimal totalValue = plan.TotalValue;
+        long quantity = plan.Quantity;
+        foreach (var record in RecyclingCandidates(source).Skip(plan.Quantity - 1))
+        {
+            WorkroomItemCodec.Validate(record.Item);
+            if (record.Item.Count != 1 || record.Item.Value < 0)
+                throw new InvalidOperationException("回收数量提示候选状态无效。");
+            totalValue += record.Item.Value;
+            quantity++;
+            if (totalValue >= requiredValue)
+                return Text("processing_recycle_quantity_needed", plan.Quantity, quantity, quantity - plan.Quantity);
+        }
+        if (source.Item.Value == 0)
+            return Text("processing_recycle_quantity_zero", quantity);
+        // Future items can have other prices. Extrapolate only the unowned
+        // remainder at the target's unit value, and label this as an estimate.
+        var estimatedQuantity = quantity + decimal.Ceiling((requiredValue - totalValue) / source.Item.Value);
+        if (estimatedQuantity > int.MaxValue)
+            return Text("processing_recycle_quantity_limit", quantity);
+        return Text("processing_recycle_quantity_estimate", plan.Quantity, estimatedQuantity,
+            estimatedQuantity - plan.Quantity, quantity);
     }
 
     private static Selection SelectOne(WorkroomStorageState.Record record)

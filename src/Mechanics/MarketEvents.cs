@@ -10,6 +10,7 @@ internal static class MarketEvents
 {
     internal const string AiId = "pcrepair.ai_demand_surge";
     internal const string CryptoId = "pcrepair.crypto_boom";
+    private const string SaleLabelFeatureId = "pcrepair.market_event_sale_label";
     private const int PoolWeight = 15;
     private static Il2CppSystem.Func<StoreEvent>? aiFactory, cryptoFactory;
     private static long nextWarningAt;
@@ -123,6 +124,72 @@ internal static class MarketEvents
         if (multiplier > 1) value = checked(value * multiplier);
     }
 
+    // The price patches run after the native quote is calculated. The native
+    // sale sheet lists visible Market-stage item features separately, so give
+    // it a zero-value feature only for the duration of that sheet refresh.
+    private static string? SaleLabel(GameItem item)
+    {
+        var manager = Manager;
+        if (item == null || manager == null) return null;
+        var ai = manager.IsEventActive(AiId);
+        var crypto = manager.IsEventActive(CryptoId);
+        if (!ai && !crypto) return null;
+
+        var gpu = false;
+        var ram = false;
+        if (ComputerCase.IsCase(item) || item.IsTag(WorkroomMachineAssembly.Tag))
+        {
+            var machine = WorkroomMachineFacts.Read(item);
+            if (machine == null || machine.Value <= 0 || item.unitValue != machine.Value ||
+                AddedAssemblyValue(machine.Parts, ComputerCase.IsCase(item) || ServerRoomHardware.IsHardware(item)) == 0) return null;
+            foreach (var part in machine.Parts)
+            {
+                gpu |= part.TypeTag == Components.GpuTag;
+                ram |= part.TypeTag == Components.RamTag;
+            }
+        }
+        else
+        {
+            var spec = Components.Find(Core.Clean(item.identifier));
+            if (spec == null) return null;
+            gpu = spec.Owner.Tag == Components.GpuTag;
+            ram = spec.Owner.Tag == Components.RamTag;
+        }
+
+        var labels = new List<string>(2);
+        if (crypto && gpu) labels.Add(LanguageText.Get("event.crypto.name"));
+        if (ai && (ram || gpu && !crypto)) labels.Add(LanguageText.Get("event.ai.name"));
+        return labels.Count == 0 ? null : string.Join(" / ", labels);
+    }
+
+    private static void RemoveSaleLabel(GameItem item)
+    {
+        if (item?.FindItemFeatureByID(SaleLabelFeatureId) != null)
+            item.RemoveItemFeatureByID(SaleLabelFeatureId);
+    }
+
+    private static void AddSaleLabel(GameItem item)
+    {
+        RemoveSaleLabel(item);
+        var label = SaleLabel(item);
+        if (label == null) return;
+        var feature = ItemFeatureList.Discount(0);
+        feature.identifier = SaleLabelFeatureId;
+        feature.category = SaleLabelFeatureId;
+        feature.featureType = ItemFeature.FeatureType.Normale;
+        feature.valueStage = ItemFeature.ValueStage.Market;
+        feature.initiallyShown = true;
+        feature.isPublicHidden = false;
+        feature.isExposable = false;
+        // The sale sheet formats exposed features as a numeric match result.
+        // Use the public display path so this zero-value marker is name only.
+        feature.isFeatureExposed = false;
+        feature.SetValueModifier(0);
+        feature.SetPublicDisplay(label);
+        feature.SetActualDisplay(label);
+        item.AddItemFeature(feature);
+    }
+
     // The native quote getters can call one another. Only their outermost call
     // for an assembled item adds the market share, leaving stored unitValue intact.
     private static bool EnterAssemblyQuote(GameItem item) =>
@@ -139,7 +206,7 @@ internal static class MarketEvents
         if (!entered || !includeEvents || value <= 0) return;
         var machine = WorkroomMachineFacts.Read(item);
         if (machine == null || machine.Value <= 0 || item.unitValue != machine.Value) return;
-        var extra = AddedAssemblyValue(machine.Parts, ComputerCase.IsCase(item));
+        var extra = AddedAssemblyValue(machine.Parts, ComputerCase.IsCase(item) || ServerRoomHardware.IsHardware(item));
         if (extra == 0) return;
         // Native discounts and the machine's final-stage bonus have already
         // changed this quote. Apply the same proportion to the affected share.
@@ -151,6 +218,47 @@ internal static class MarketEvents
         if (Environment.TickCount64 < nextWarningAt) return;
         nextWarningAt = Environment.TickCount64 + 5000;
         Core.Log?.Warning("电脑行情事件处理失败：" + ex.Message);
+    }
+
+    // The calendar's detail panel uses this native method, not the event's
+    // news description. These two events price items in the quote patches
+    // below, so adding native negociation data would apply the rise twice.
+    [HarmonyPatch(typeof(StoreEvent), nameof(StoreEvent.GetEventPriceEffect))]
+    internal static class CalendarEffectPatch
+    {
+        private static void Postfix(StoreEvent __instance, ref string __result)
+        {
+            var key = Core.Clean(__instance.identifier) == AiId ? "event.ai.effect" :
+                Core.Clean(__instance.identifier) == CryptoId ? "event.crypto.effect" : null;
+            if (key != null) __result = LanguageText.Get(key);
+        }
+    }
+
+    [HarmonyPatch(typeof(NegociationUIManager), nameof(NegociationUIManager.UpdateItemFeatureGroup))]
+    internal static class SaleLabelPatch
+    {
+        private static void Prefix(GameItem item)
+        {
+            try { AddSaleLabel(item); }
+            catch (Exception ex)
+            {
+                try { RemoveSaleLabel(item); } catch (Exception cleanup) { Warn(cleanup); }
+                Warn(ex);
+            }
+        }
+
+        private static void Postfix(GameItem item)
+        {
+            try { RemoveSaleLabel(item); }
+            catch (Exception ex) { Warn(ex); }
+        }
+
+        private static Exception? Finalizer(GameItem item, Exception? __exception)
+        {
+            try { RemoveSaleLabel(item); }
+            catch (Exception ex) { Warn(ex); }
+            return __exception;
+        }
     }
 
     [HarmonyPatch(typeof(StoreEventManager), nameof(StoreEventManager.QueueEvent))]

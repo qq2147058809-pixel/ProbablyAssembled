@@ -157,6 +157,9 @@ internal static class SaveGeneration
                 expectedSlot = __instance.saveSlotId;
             }
             if (!IsSupported(__instance)) return Reject();
+            // SaveGame can be called inside the native day transition. Record a
+            // deferred save while the frozen server-room day plan is pending.
+            if (!ServerRoomDaily.AllowSave) return WorkroomStorage.BeforeSave();
             // Also cover a direct native file write and re-check any transaction
             // that started after SaveGame's own entry guard.
             return __originalMethod.Name != nameof(PlayerStore.WriteSlotFile) || WorkroomStorage.BeforeSave();

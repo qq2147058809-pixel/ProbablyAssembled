@@ -10,6 +10,7 @@ internal static class WorkroomTrial
 {
     private static readonly WorkroomTransition flow = new();
     private static WorkroomView view;
+    private static ServerRoomView serverView;
     private static IntPtr storePointer, scenePointer;
     private static string run, locale;
     private static int slot;
@@ -18,37 +19,53 @@ internal static class WorkroomTrial
     private static bool entryRequested;
     private static long requestUntil;
     private static int requestNeutralFrames;
+    private static bool regionRequested;
+    private static WorkroomTransition.Region regionTarget;
+    private static long regionRequestUntil;
+    private static int regionNeutralFrames;
     private static bool storageRequested, storageRequestInRoom;
     private static long storageRequestUntil, storageRequestEpoch;
     private static int storageNeutralFrames, storageRequestFrame;
     private static bool RegionInputHeld => flow.BlocksInput || WorkroomGameAdapter.LeaseHeld || cleanupPending;
     internal static bool IsolatesStoreRegion => RegionInputHeld;
+    internal static bool CustomRegionVisible => flow.RegionVisible;
+    internal static bool ServerCommandsAllowed => !RoomAudioSettingsUi.BlocksInput && !cleanupPending && !regionRequested &&
+        flow.IsStable && flow.CurrentRegion == WorkroomTransition.Region.ServerRoom &&
+        WorkroomGameAdapter.AtStore() && WorkroomGameAdapter.HooksReady &&
+        Time.timeScale > 0 && !Il2Cpp.Interactable.isPaused &&
+        !WorkroomGameAdapter.PendingGesture() && !WorkroomStorage.Busy &&
+        !WorkroomItemCodec.CleanupPending;
     internal static bool RoomSelectionActive => !cleanupPending && (view?.HasRoomSelection ?? false);
-    internal static bool OwnsTextInput => !cleanupPending && (view?.OwnsTextInput ?? false);
-    internal static bool BlocksNativeInput => RegionInputHeld || (view?.BlocksPanelInput ?? false);
-    internal static bool BlocksSharedInput => cleanupPending ||
-        (RegionInputHeld && flow.Current != WorkroomTransition.Stage.Inside) || (view?.BlocksPanelInput ?? false);
-    internal static bool OwnsPanelMouse => !cleanupPending &&
+    internal static bool OwnsTextInput => !cleanupPending && ((view?.OwnsTextInput ?? false) ||
+        (serverView?.OwnsTextInput ?? false));
+    internal static bool BlocksNativeInput => RoomAudioSettingsUi.BlocksInput || RegionInputHeld || (view?.BlocksPanelInput ?? false) ||
+        (serverView?.BlocksPanelInput ?? false);
+    internal static bool BlocksSharedInput => RoomAudioSettingsUi.BlocksInput || cleanupPending ||
+        (RegionInputHeld && (!flow.IsStable ||
+            flow.CurrentRegion == WorkroomTransition.Region.ServerRoom)) ||
+        (view?.BlocksPanelInput ?? false) ||
+        (serverView?.BlocksPanelInput ?? false);
+    internal static bool OwnsPanelMouse => RoomAudioSettingsUi.BlocksInput || !cleanupPending &&
         (WorkroomStoreKey.OwnsMousePress || (view?.OwnsMousePress ?? false));
-    internal static bool OwnsPanelScroll => !cleanupPending && (view?.OwnsScroll ?? false);
-    internal static bool OwnsPanelEscape => !cleanupPending && (view?.OwnsEscape ?? false);
+    internal static bool OwnsPanelScroll => RoomAudioSettingsUi.BlocksInput || !cleanupPending && (view?.OwnsScroll ?? false);
+    internal static bool OwnsPanelEscape => RoomAudioSettingsUi.BlocksInput || !cleanupPending && (view?.OwnsEscape ?? false);
     internal static bool ShopEntryVisible => view != null && !cleanupPending &&
-        flow.Current == WorkroomTransition.Stage.Home && WorkroomGameAdapter.AtStore();
+        flow.IsStable && flow.CurrentRegion == WorkroomTransition.Region.Shop && WorkroomGameAdapter.AtStore();
     internal static bool CanRequestEntry => ShopEntryVisible && !entryRequested && !BlocksNativeInput &&
         !WorkroomStoreKey.CleanupPending &&
         !view.IsDragging && WorkroomGameAdapter.HooksReady && Time.timeScale > 0 &&
         !Il2Cpp.Interactable.isPaused && !WorkroomGameAdapter.PendingGesture();
-    internal static bool CanCollectCurrent(bool inRoom) => view != null && !cleanupPending && !entryRequested &&
-        flow.Current == (inRoom ? WorkroomTransition.Stage.Inside : WorkroomTransition.Stage.Home) &&
+    internal static bool CanCollectCurrent(bool inRoom) => !RoomAudioSettingsUi.BlocksInput && view != null && !cleanupPending && !entryRequested &&
+        !regionRequested && flow.IsStable &&
+        flow.CurrentRegion == (inRoom ? WorkroomTransition.Region.Workroom : WorkroomTransition.Region.Shop) &&
         !view.BlocksPanelInput && !view.IsDragging &&
         WorkroomGameAdapter.HooksReady && WorkroomGameAdapter.AtStore() && Time.timeScale > 0 &&
         !WorkroomGameAdapter.PendingGesture(allowStableSelection: true);
-    internal static void ClearRoomSelection(long epoch) => view?.ClearRoomSelection(epoch);
     internal static bool HitShopStorage(Vector2 point) => view != null &&
-        flow.Current == WorkroomTransition.Stage.Home && !BlocksNativeInput &&
+        flow.IsStable && flow.CurrentRegion == WorkroomTransition.Region.Shop && !BlocksNativeInput &&
         Time.timeScale > 0 && WorkroomGameAdapter.AtStore() && view.HitShopStorageDrop(point);
     internal static bool HitShopStorageWindow(Vector2 point) => view != null && !cleanupPending &&
-        flow.Current == WorkroomTransition.Stage.Home && view.HitStorageWindow(point);
+        flow.IsStable && flow.CurrentRegion == WorkroomTransition.Region.Shop && view.HitStorageWindow(point);
     internal static void NotifyStorage()
     {
         if (cleanupPending) return;
@@ -62,11 +79,11 @@ internal static class WorkroomTrial
     {
         try
         {
-            if (view == null || cleanupPending || entryRequested ||
+            if (RoomAudioSettingsUi.BlocksInput || view == null || cleanupPending || entryRequested || regionRequested || !flow.IsStable ||
                 view.BlocksPanelInput || view.IsDragging || WorkroomStorageDragPatch.ConsumedFrame == Time.frameCount ||
                 !WorkroomGameAdapter.HooksReady || Time.timeScale <= 0 || !WorkroomGameAdapter.AtStore()) return;
-            var expected = inRoom ? WorkroomTransition.Stage.Inside : WorkroomTransition.Stage.Home;
-            if (flow.Current != expected) { view.Notify("busy"); return; }
+            var expected = inRoom ? WorkroomTransition.Region.Workroom : WorkroomTransition.Region.Shop;
+            if (flow.CurrentRegion != expected) { view.Notify("busy"); return; }
             if (kind == WorkroomPanels.Kind.Storage)
             {
                 // Unity's click can precede the native release dispatch. Keep
@@ -126,11 +143,68 @@ internal static class WorkroomTrial
         Enter();
     }
 
+    private static bool RegionTransitionReady()
+    {
+        return !RoomAudioSettingsUi.BlocksInput && view != null && !cleanupPending && !entryRequested && !storageRequested &&
+            !WorkroomStoreKey.CleanupPending && !WorkroomStorage.Busy &&
+            !WorkroomItemCodec.CleanupPending && WorkroomStorage.State.PendingRecords.Count == 0 &&
+            !ComputerSupplierNpcs.StockPending && !NpcStockOffers.Pending &&
+            !view.HasOpenPanels && !view.BlocksPanelInput && !view.OwnsTextInput &&
+            !view.IsDragging && !view.HasRoomSelection &&
+            !(serverView?.BlocksPanelInput ?? false) &&
+            WorkroomGameAdapter.HooksReady && WorkroomGameAdapter.AtStore() &&
+            Time.timeScale > 0 && !Il2Cpp.Interactable.isPaused &&
+            !WorkroomGameAdapter.PendingGesture();
+    }
+
+    internal static void RequestServerEntry() => RequestRegion(WorkroomTransition.Region.ServerRoom);
+    private static void RequestServerExit() => RequestRegion(WorkroomTransition.Region.Workroom);
+
+    private static void RequestRegion(WorkroomTransition.Region target)
+    {
+        var source = target == WorkroomTransition.Region.Workroom
+            ? WorkroomTransition.Region.ServerRoom : WorkroomTransition.Region.Workroom;
+        if (regionRequested || !flow.IsStable ||
+            flow.CurrentRegion != source) return;
+        try
+        {
+            if (!RegionTransitionReady()) { view?.Notify("busy"); return; }
+            // Unity's click can arrive before the native mouse-up tail. Start
+            // the fade only after the original gesture and two neutral frames.
+            regionRequested = true;
+            regionTarget = target;
+            regionRequestUntil = Environment.TickCount64 + 3000;
+            regionNeutralFrames = 0;
+        }
+        catch (Exception ex) { regionRequested = false; Warn(ex, "region-request"); }
+    }
+
+    private static void ProcessRegionRequest()
+    {
+        if (!regionRequested) return;
+        var source = regionTarget == WorkroomTransition.Region.Workroom
+            ? WorkroomTransition.Region.ServerRoom : WorkroomTransition.Region.Workroom;
+        if (!flow.IsStable || flow.CurrentRegion != source || !RegionTransitionReady())
+        { regionRequested = false; return; }
+        if (Environment.TickCount64 >= regionRequestUntil)
+        { regionRequested = false; view?.Notify("busy"); return; }
+        var neutral = WorkroomGameAdapter.InputNeutral() && !WorkroomGameAdapter.PendingGesture();
+        regionNeutralFrames = neutral ? regionNeutralFrames + 1 : 0;
+        if (regionNeutralFrames < 2) return;
+        regionRequested = false;
+        view?.ReleaseItemInfo();
+        serverView?.ClosePanels();
+        if (!flow.Request(regionTarget)) view?.Notify("busy");
+        else if (regionTarget == WorkroomTransition.Region.Shop)
+            Core.Log?.Msg("[工作间] 固定出口返回店铺。");
+    }
+
     private static void ProcessStorageRequest()
     {
         if (!storageRequested) return;
-        var expected = storageRequestInRoom ? WorkroomTransition.Stage.Inside : WorkroomTransition.Stage.Home;
-        if (view == null || cleanupPending || entryRequested || flow.Current != expected ||
+        var expected = storageRequestInRoom ? WorkroomTransition.Region.Workroom : WorkroomTransition.Region.Shop;
+        if (view == null || cleanupPending || entryRequested || regionRequested || !flow.IsStable ||
+            flow.CurrentRegion != expected ||
             WorkroomStorage.State.Epoch != storageRequestEpoch || view.BlocksPanelInput || view.IsDragging ||
             !WorkroomGameAdapter.HooksReady || !WorkroomGameAdapter.AtStore() || Time.timeScale <= 0 ||
             WorkroomStorageDragPatch.ConsumedFrame >= storageRequestFrame ||
@@ -184,19 +258,25 @@ internal static class WorkroomTrial
             WorkroomGameAdapter.RecoverIdleQuickTransfer();
             stage = "storage-update";
             WorkroomStorage.Update(store);
+            ServerRoomRuntime.Update(store);
+            ServerRoomDaily.Tick();
+            ServerRoomOrders.Update(store);
+            ServerRoomOrderStock.Update(store);
+            ServerRoomDeliverySchedule.Update(store);
             stage = "events";
             var events = EventSystem.current;
             if (!WorkroomGameAdapter.EventsReady(events) || !WorkroomGameAdapter.AtStore() ||
                 (BlocksNativeInput && !WorkroomGameAdapter.SameEvents(events)))
             { Reset(); return; }
-            if (view != null && !view.Alive) { Reset(); return; }
+            if ((view != null && !view.Alive) || (serverView != null && !serverView.Alive))
+            { Reset(); return; }
             if (view == null && Environment.TickCount64 >= retryAt)
             {
                 stage = "view-build";
                 retryAt = Environment.TickCount64 + 1000;
                 // Keep ownership even if partial construction/cleanup fails.
                 view = new WorkroomView();
-                view.Build(Exit);
+                view.Build(Exit, RequestServerEntry);
             }
             if (view == null) return;
             stage = "overlay";
@@ -206,19 +286,28 @@ internal static class WorkroomTrial
             ProcessEntryRequest();
             stage = "storage-request";
             ProcessStorageRequest();
+            stage = "region-request";
+            ProcessRegionRequest();
             stage = "transition";
             if (RegionInputHeld)
             {
                 flow.Tick(Time.unscaledDeltaTime, WorkroomGameAdapter.InputNeutral());
+                if (flow.ReadyToSwitch) CompleteRegionSwitch();
                 if (!flow.BlocksInput) WorkroomGameAdapter.Release();
                 else
                 {
-                    WorkroomGameAdapter.SetRegionVisible(flow.RoomVisible);
+                    WorkroomGameAdapter.SetRegionVisible(flow.RegionVisible);
                     WorkroomGameAdapter.SetSharedInputBlocked(BlocksSharedInput);
                 }
             }
             stage = "view-render";
+            // Audio failures are isolated inside their owner and cannot reset or roll back gameplay.
+            RoomAudio.Tick(flow.CurrentRegion);
+            RoomAudioSettingsUi.Tick(flow.IsStable && flow.RegionVisible && Time.timeScale > 0 && !Il2Cpp.Interactable.isPaused,
+                !(view?.IsDragging ?? false) && !WorkroomGameAdapter.PendingGesture() && !WorkroomStorage.Busy);
             view.Render(flow, WorkroomGameAdapter.StoreViewport());
+            serverView?.Render(flow.ServerRoomVisible,
+                flow.IsStable && flow.CurrentRegion == WorkroomTransition.Region.ServerRoom);
             stage = "shared-input";
             WorkroomGameAdapter.SetSharedInputBlocked(BlocksSharedInput);
         }
@@ -230,6 +319,46 @@ internal static class WorkroomTrial
             if (!cleanupPending)
                 try { Reset(); } catch (Exception cleanup) { Warn(cleanup, "cleanup"); }
             retryAt = Environment.TickCount64 + 1000;
+        }
+    }
+
+    private static void CompleteRegionSwitch()
+    {
+        var target = flow.TargetRegion;
+        try
+        {
+            if (target == WorkroomTransition.Region.ServerRoom)
+            {
+                if (serverView == null)
+                {
+                    serverView = new ServerRoomView();
+                    serverView.Build(RequestServerExit);
+                }
+                if (!serverView.Alive) throw new InvalidOperationException("机房占位区域创建失败。");
+                serverView.EnsureOverlay();
+            }
+            else if (target == WorkroomTransition.Region.Workroom)
+            {
+                if (view == null || !view.Alive) throw new InvalidOperationException("工作间区域不可用。");
+                view.EnsureOverlay();
+            }
+            flow.CommitSwitch();
+        }
+        catch (Exception ex)
+        {
+            Warn(ex, "region-target");
+            if (target == WorkroomTransition.Region.ServerRoom && serverView != null)
+            {
+                try { serverView.Dispose(); serverView = null; }
+                catch (Exception cleanup)
+                {
+                    cleanupPending = true;
+                    cleanupRetryAt = Environment.TickCount64 + 500;
+                    Warn(cleanup, "region-target-cleanup");
+                    return;
+                }
+            }
+            flow.CancelSwitch();
         }
     }
 
@@ -259,18 +388,13 @@ internal static class WorkroomTrial
 
     private static void Exit()
     {
-        if (cleanupPending) return;
-        if ((view?.BlocksPanelInput ?? false) || (view?.IsDragging ?? false)) return;
-        if (WorkroomGameAdapter.PendingGesture()) { view?.Notify("busy"); return; }
-        // Hide the workroom tooltip before restoring shop input.
-        view?.ReleaseItemInfo();
-        if (flow.Exit()) Core.Log?.Msg("[工作间试作] 固定出口返回。");
+        RequestRegion(WorkroomTransition.Region.Shop);
     }
 
     internal static void EnsureOverlay()
     {
         if (cleanupPending) return;
-        try { view?.EnsureOverlay(); }
+        try { view?.EnsureOverlay(); serverView?.EnsureOverlay(); }
         catch (Exception ex)
         {
             // Don't throw back into the game's Letterbox conversion callback.
@@ -281,10 +405,14 @@ internal static class WorkroomTrial
 
     internal static void Reset()
     {
+        RoomAudioSettingsUi.Reset();
+        RoomAudio.Reset();
         cleanupPending = true;
         cleanupRetryAt = Environment.TickCount64 + 500;
         entryRequested = false;
         requestNeutralFrames = 0;
+        regionRequested = false;
+        regionNeutralFrames = 0;
         storageRequested = false;
         storageNeutralFrames = 0;
         // Keep the shop lease while any workroom view survives failed cleanup.
@@ -292,6 +420,8 @@ internal static class WorkroomTrial
         WorkroomStoreKey.Reset();
         view?.Dispose();
         view = null;
+        serverView?.Dispose();
+        serverView = null;
         WorkroomGameAdapter.Release();
         flow.Abort();
         storePointer = scenePointer = IntPtr.Zero; run = locale = null; slot = 0;

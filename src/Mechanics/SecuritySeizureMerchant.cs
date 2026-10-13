@@ -6,13 +6,15 @@ using Il2Cpp;
 
 namespace PCExpansion;
 
-/// <summary>每周四队首的收缴物资商江白；只售两盒，原版交易计入治安部声望。</summary>
+/// <summary>每周四队首的收缴物资商江白；至多售两盒，原版交易计入治安部声望。</summary>
 internal static class SecuritySeizureMerchant
 {
     internal const string Id = "pcrepair.security_seizure_merchant";
     internal const string SpriteKey = "pcrepair.jiang_bai_sprite";
     internal const string ClientTag = "PCREPAIR_SECURITY_SEIZURE_MERCHANT";
     private const string StockTag = "PCREPAIR_SECURITY_SEIZURE_STOCK";
+    private const string LargeSkippedTag = "PCREPAIR_SECURITY_SEIZURE_LARGE_SKIPPED";
+    private const string SmallSkippedTag = "PCREPAIR_SECURITY_SEIZURE_SMALL_SKIPPED";
     private const string LastDayKey = "pcrepair.security_seizure.last_scheduled_day";
     private static Il2CppSystem.Action? introduceAction;
 
@@ -86,19 +88,36 @@ internal static class SecuritySeizureMerchant
             var store = PlayerStore.Instance;
             var client = store?.currentClientInstance?.storeClient;
             if (store == null || !IsMerchant(client)) return;
-            NpcStockOffers.Stock(store, client!, StockTag, "SECURITY_SEIZURE",
-                () => new List<string> { SecuritySeizureBoxes.LargeId, SecuritySeizureBoxes.SmallId },
-                2, 2, id => id is SecuritySeizureBoxes.LargeId or SecuritySeizureBoxes.SmallId,
-                configure: SecuritySeizureBoxes.PrepareStock,
-                existingFilter: item => SecuritySeizureBoxes.IsBox(item),
-                validate: plan =>
-                {
-                    if (plan.Count != 2 || plan[0] != SecuritySeizureBoxes.LargeId ||
-                        plan[1] != SecuritySeizureBoxes.SmallId)
-                        throw new InvalidOperationException("江白货单必须为大、小盒各一。");
-                });
+            StockOne(store, client!, SecuritySeizureBoxes.LargeId,
+                "SECURITY_SEIZURE_LARGE", LargeSkippedTag);
+            StockOne(store, client!, SecuritySeizureBoxes.SmallId,
+                "SECURITY_SEIZURE_SMALL", SmallSkippedTag);
         }
-        catch (Exception ex) { Core.Log?.Error("江白两盒上柜失败：" + ex); }
+        catch (Exception ex) { Core.Log?.Error("江白上柜失败：" + ex); }
+    }
+
+    private static void StockOne(PlayerStore store, StoreClient client,
+        string id, string group, string skippedTag)
+    {
+        if (client.IsTag(skippedTag)) return;
+        try
+        {
+            NpcStockOffers.Stock(store, client, StockTag, group,
+                () => new List<string> { id }, 1, 1, candidate => candidate == id,
+                configure: SecuritySeizureBoxes.PrepareStock,
+                existingFilter: item => Core.Clean(item.identifier) == id);
+        }
+        catch (Exception ex)
+        {
+            if (SecuritySeizureBoxes.IsStockExhausted(ex) && !NpcStockOffers.Pending)
+            {
+                client.AddTag(skippedTag);
+                Core.Log?.Warning("江白本次来访少上一只" +
+                    (id == SecuritySeizureBoxes.LargeId ? "大" : "小") + "盒：三次装箱均未完成。");
+                return;
+            }
+            Core.Log?.Error("江白单盒上柜失败：" + ex);
+        }
     }
 
     internal static void Arrange(PlayerStore store)

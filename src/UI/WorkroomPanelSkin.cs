@@ -46,7 +46,12 @@ internal static class WorkroomPanelSkin
         var button = Add<Button>(face.gameObject);
         button.targetGraphic = face;
         button.transition = Selectable.Transition.None;
-        button.onClick.AddListener(DelegateSupport.ConvertDelegate<UnityAction>(click));
+        button.onClick.AddListener(DelegateSupport.ConvertDelegate<UnityAction>((Action)(() =>
+        {
+            if (RoomAudioSettingsUi.BlocksInput) return;
+            click();
+            if (!slot && name is "Close" or "Previous" or "Next" or "WorkbenchProcessing" or "WorkbenchAssembly") RoomAudio.Play("ui");
+        })));
         var binding = new Binding { Owner = owner, Root = face.gameObject, Window = Window(parent),
             Button = button, Face = face, Slot = slot, Edges = Frame(face.gameObject, new Color(.65f,.67f,.58f,1)) };
         if (!slot)

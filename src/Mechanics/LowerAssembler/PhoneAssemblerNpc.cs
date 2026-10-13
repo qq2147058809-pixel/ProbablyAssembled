@@ -13,7 +13,10 @@ internal static class PhoneAssemblerNpc
     internal const string ClientTag = "PCREPAIR_PHONE_ASSEMBLER";
     internal const string StockTag = "PCREPAIR_PHONE_ASSEMBLER_STOCK";
     internal const long PhoneNumber = 504;
-    internal const int Budget = 15000;
+    // A full T5 miner can exceed the old 15000 budget during the GPU boom.
+    // Keep native bargaining while leaving enough budget for two legitimate
+    // dedicated devices in the same visit.
+    internal const int Budget = 100000;
 
     private const string DialogId = "pcrepair_phone_assembler";
     private static readonly Random random = new();
@@ -92,6 +95,97 @@ internal static class PhoneAssemblerNpc
         return client;
     }
 
+    internal static void ApplyDeliveryBudget(StoreClient client)
+    {
+        if (!ServerRoomOrderStock.IsDelivery(client))
+            throw new InvalidOperationException("仅预订送货洛夕可使用零预算。");
+        client.SetBudget(0);
+        client.OverrideBudget(0);
+        client.clientCash = 0;
+        client.clientBudget = 0;
+        client.useClientBudget = true;
+        client.budgetConversionRate = 1;
+    }
+
+    internal static void PrepareDeliveryDialogue(StoreClient client)
+    {
+        if (!ServerRoomOrderStock.IsDelivery(client))
+            throw new InvalidOperationException("仅预订送货洛夕可使用送货对白。");
+        var greeting = new Dialogue().SetText(client.displayName,
+            LanguageText.Get("serverroom.m2.delivery_stock_failed"));
+        greeting.isMainDialog = true;
+        client.mainDialogue = greeting;
+        client.isMainDialogueStarted = false;
+    }
+
+    // The native arrival callback may begin the first dialogue before its
+    // postfix stocks the counter. Refresh again at the actual text display.
+    private static IntPtr displayedDeliveryClient;
+    private static ServerRoomOrderStock.GreetingStatus displayedDeliveryStatus = ServerRoomOrderStock.GreetingStatus.Failed;
+
+    internal static void ResetDisplayedDeliveryGreeting()
+    {
+        displayedDeliveryClient = IntPtr.Zero;
+        displayedDeliveryStatus = ServerRoomOrderStock.GreetingStatus.Failed;
+    }
+
+    private static void ConfigureDeliveryGreeting(Dialogue? dialogue, bool displaying = false)
+    {
+        try
+        {
+            var store = PlayerStore.Instance;
+            var client = store?.currentClientInstance?.storeClient;
+            if (dialogue == null || store == null || !ServerRoomOrderStock.IsDelivery(client) ||
+                client!.mainDialogue == null || client.mainDialogue.Pointer != dialogue.Pointer) return;
+            ApplyDeliveryBudget(client);
+            var greeting = client.mainDialogue;
+            var status = ServerRoomOrderStock.Greeting(store, client);
+            switch (status)
+            {
+                case ServerRoomOrderStock.GreetingStatus.Offered:
+                    greeting.SetText(client.displayName, LanguageText.Get("serverroom.m2.delivery_greeting"));
+                    greeting.SetNextDialogue(new Dialogue().SetText(client.displayName,
+                        LanguageText.Get("serverroom.m2.delivery_personal")));
+                    break;
+                case ServerRoomOrderStock.GreetingStatus.CounterFull:
+                    greeting.SetText(client.displayName, LanguageText.Get("serverroom.m2.delivery_counter_full"));
+                    greeting.nextDialogue = null;
+                    break;
+                default:
+                    greeting.SetText(client.displayName, LanguageText.Get("serverroom.m2.delivery_stock_failed"));
+                    greeting.nextDialogue = null;
+                    break;
+            }
+            if (displaying)
+            {
+                displayedDeliveryClient = client.Pointer;
+                displayedDeliveryStatus = status;
+            }
+        }
+        catch (Exception ex) { Core.Log?.Warning("洛夕送货开场白暂未确认：" + ex); }
+    }
+
+    internal static void RefreshDisplayedDeliveryGreeting(StoreClient client)
+    {
+        try
+        {
+            if (!ServerRoomOrderStock.IsDelivery(client)) return;
+            var store = PlayerStore.Instance;
+            var manager = DialogUIManager.Instance;
+            var greeting = client.mainDialogue;
+            if (store == null || manager == null || greeting == null || manager.currentDialog == null ||
+                manager.currentDialog.Pointer != greeting.Pointer) return;
+            var status = ServerRoomOrderStock.Greeting(store, client);
+            if (status == ServerRoomOrderStock.GreetingStatus.Failed ||
+                displayedDeliveryClient == client.Pointer && displayedDeliveryStatus == status) return;
+            // The native arrival method can render the placeholder before its
+            // postfix stocks the counter. Re-display that same active dialogue
+            // once the actual offer result is known, before player input.
+            manager.DisplayClientText(greeting);
+        }
+        catch (Exception ex) { Core.Log?.Warning("洛夕送货开场白刷新失败：" + ex); }
+    }
+
     private static Dialogue GetCallDialog(StorePhoneClient contact)
     {
         if (contact.phoneState == StorePhoneClient.PhoneState.Cooldown)
@@ -109,11 +203,11 @@ internal static class PhoneAssemblerNpc
     private static bool IsAlreadyAtStore(PlayerStore? store)
     {
         var current = store?.currentClientInstance?.storeClient;
-        if (IsPhoneAssembler(current)) return true;
+        if (IsPhoneAssembler(current) && !ServerRoomOrderStock.IsDelivery(current)) return true;
         var queued = store?.storeClientManager?.clientStack;
         if (queued == null) return false;
         for (var i = 0; i < queued.Count; i++)
-            if (IsPhoneAssembler(queued[i])) return true;
+            if (IsPhoneAssembler(queued[i]) && !ServerRoomOrderStock.IsDelivery(queued[i])) return true;
         return false;
     }
 
@@ -138,6 +232,7 @@ internal static class PhoneAssemblerNpc
                 return;
             }
 
+            if (store == null) return;
             var manager = store?.storeClientManager;
             if (manager == null)
             {
@@ -160,6 +255,8 @@ internal static class PhoneAssemblerNpc
                 Core.Log?.Warning("0504 来客未确认进入当前队列，未消耗三天冷却。");
                 return;
             }
+            try { ServerRoomDeliverySchedule.PrioritizeQueued(store); }
+            catch (Exception ex) { Core.Log?.Warning("0504 后送货队首调整暂未完成，稍后重试：" + ex); }
             contact.UseService();
             Core.Log?.Msg("[深空装机] 0504 电话已接通，装机佬已加入来客队列，原版三天冷却已启动。");
         }
@@ -179,6 +276,13 @@ internal static class PhoneAssemblerNpc
 
             LowerAssemblerNpc.ConfigurePurchaseRules(client!);
             LowerAssemblerNpc.ConfigureTradeDialogue(client!);
+            if (ServerRoomOrderStock.IsDelivery(client))
+            {
+                ApplyDeliveryBudget(client!);
+                ServerRoomOrderStock.Stock(store, client!);
+                RefreshDisplayedDeliveryGreeting(client!);
+                return;
+            }
             LowerAssemblerNpc.ApplyAssemblerBudget(client!, Budget);
             NpcStockOffers.Stock(store, client!, StockTag, "PHONE", () => new List<string>
             {
@@ -334,6 +438,20 @@ internal static class PhoneAssemblerNpc
     {
         [HarmonyPriority(Priority.Last)]
         private static void Postfix() => AddStock();
+    }
+
+    [HarmonyPatch(typeof(DialogUIManager), nameof(DialogUIManager.StartDialogue),
+        new[] { typeof(Dialogue), typeof(bool) })]
+    internal static class DeliveryDialogueStartPatch
+    {
+        private static void Prefix(Dialogue __0) => ConfigureDeliveryGreeting(__0);
+    }
+
+    [HarmonyPatch(typeof(DialogUIManager), nameof(DialogUIManager.DisplayClientText),
+        new[] { typeof(Dialogue) })]
+    internal static class DeliveryDialogueDisplayPatch
+    {
+        private static void Prefix(Dialogue __0) => ConfigureDeliveryGreeting(__0, true);
     }
 
     [HarmonyPatch(typeof(StoreClientListDict), nameof(StoreClientListDict.CreateStoreClient))]

@@ -1,9 +1,9 @@
 {
-  "contract": "pcexpansion-computer-manual-v13",
+  "contract": "pcexpansion-computer-manual-v14",
   "pages": [
     {
       "title": "Introduction",
-      "body": "At the station, a broken PC may be worth more than scrap. A damaged case can hide useful parts, and a machine with missing parts may sell well after repair and reassembly.\n\nPC expansion 1.1 requires a new game. Saves from version 1.0 or earlier are unsupported. Assembly, disassembly, and repair all take place in the workroom.\n\nUse the keychain on the shop desk to enter the workroom. Transfer items through the PC Storage Box, then choose the parts workbench, motherboard panel, or case panel.",
+      "body": "At the station, a broken PC may be worth more than scrap. A damaged case can hide useful parts, and a machine with missing parts may sell well after repair and reassembly.\n\nSaves need a valid version marker of 1.0 or higher. Assembly, disassembly, and repair all take place in the workroom.\n\nUse the keychain on the shop desk to enter the workroom. Transfer items through the PC Storage Box, then choose the parts workbench, motherboard panel, or case panel.",
       "illustrations": [
         "pcrepair.computer_case_t2_broken",
         "pcrepair.computer_case_t2"

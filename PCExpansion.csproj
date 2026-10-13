@@ -11,6 +11,9 @@
     <GameDir Condition="'$(GameDir)' == ''">$(PROBABLY_STOLEN_GAME_DIR)</GameDir>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="UnityEngine.AudioModule"><HintPath>$(GameDir)\MelonLoader\Il2CppAssemblies\UnityEngine.AudioModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.UnityWebRequestModule"><HintPath>$(GameDir)\MelonLoader\Il2CppAssemblies\UnityEngine.UnityWebRequestModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.UnityWebRequestAudioModule"><HintPath>$(GameDir)\MelonLoader\Il2CppAssemblies\UnityEngine.UnityWebRequestAudioModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="MelonLoader"><HintPath>$(GameDir)\MelonLoader\net6\MelonLoader.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="0Harmony"><HintPath>$(GameDir)\MelonLoader\net6\0Harmony.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Il2CppInterop.Runtime"><HintPath>$(GameDir)\MelonLoader\net6\Il2CppInterop.Runtime.dll</HintPath><Private>false</Private></Reference>
@@ -39,6 +42,8 @@
     <!-- 逻辑名必须与 build.ps1 保持一致（扁平命名 PCExpansion.Assets.<文件名>），
          否则 SpriteAssets 按名字取资源会全部落空。 -->
     <EmbeddedResource Include="assets\**\*.png" LogicalName="PCExpansion.Assets.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="assets\audio\*.wav.gz" LogicalName="PCExpansion.Audio.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="assets\audio\*.ogg" LogicalName="PCExpansion.Audio.%(Filename)%(Extension)" />
     <EmbeddedResource Include="src\Infrastructure\translations.zh.json" LogicalName="PCExpansion.Localization.zh.json" />
     <EmbeddedResource Include="src\Infrastructure\computer_manual.zh.json" LogicalName="PCExpansion.Manual.zh.json" />
   </ItemGroup>

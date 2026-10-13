@@ -14,6 +14,11 @@ internal static class ComputerItemInteraction
             CaseUnboxing.Notify(WorkroomMachineAssembly.Text("open_workroom"));
             return false;
         }
+        if (ServerRoomHardware.IsHardware(item))
+        {
+            CaseUnboxing.Notify(LanguageText.Get("serverroom.item.open_room"));
+            return false;
+        }
         return !Components.IsComponent(item);
     }
 }
@@ -42,6 +47,6 @@ internal static class CaseNestableGuardPatch
 {
     private static void Postfix(GameItem item, ref bool __result)
     {
-        if (__result && ComputerCase.IsCase(item)) __result = false;
+        if (__result && (ComputerCase.IsCase(item) || ServerRoomHardware.IsHardware(item))) __result = false;
     }
 }

@@ -19,11 +19,42 @@ internal static class SecuritySeizureBoxes
     internal const string SmallSpriteKey = "pcrepair.security_seizure_small_sprite";
     internal const string SealedTag = "PCREPAIR_SECURITY_SEALED";
     private const string FilledTag = "PCREPAIR_SECURITY_FILLED";
-    // 以冷却后、无议价加成的配件基础现金估值校准；模拟均值约 760/258，目标约九成回款。
+    // 回款按冷却后、无议价加成的配件基础现金估值计算；
+    // 每盒 60%–170%，目标分布众数 100%、均值 110%。
     private const int LargePrice = 850;
     private const int SmallPrice = 290;
     private static readonly Components.Type[] EligibleTypes = Components.All.Where(type =>
         type.Tag != Components.CaseTag && type.Tag != Components.MotherboardTag).ToArray();
+    private const int MinimumReturnPercent = 60;
+    private const int MaximumReturnPercent = 170;
+    private const int RandomPlanAttempts = 3;
+    private static readonly LeafChoice[] LargeLeafChoices = BuildLeafChoices(true);
+    private static readonly LeafChoice[] SmallLeafChoices = BuildLeafChoices(false);
+    private static readonly double[,] LargeLeafWays = BuildLeafWays(LargeLeafChoices, 3,
+        LargePrice * MaximumReturnPercent / 100);
+    private static readonly double[,] SmallLeafWays = BuildLeafWays(SmallLeafChoices, 2,
+        SmallPrice * MaximumReturnPercent / 100);
+
+    private sealed record WholeChoice(Components.Type Type, int Tier);
+    private sealed record WholeCandidate(WholeChoice Choice, int Value, double Weight);
+    private sealed record LeafChoice(WorkroomComponentTemplates.PartDefinition Definition,
+        bool Broken, int Value, double Weight);
+    private sealed record BoxPlan(List<WholeChoice> Whole, List<LeafChoice> Leaves, long Value);
+    private sealed class NativePlacementException : InvalidOperationException
+    {
+        internal NativePlacementException() : base("江白箱子计划中的物品未能装入原生库存。") { }
+    }
+    private sealed class StockExhaustedException : InvalidOperationException
+    {
+        internal StockExhaustedException(Exception? inner) : base("江白箱子三次装箱均未完成，本次不予上柜。", inner) { }
+    }
+
+    internal static bool IsStockExhausted(Exception error)
+    {
+        for (Exception? current = error; current != null; current = current.InnerException)
+            if (current is StockExhaustedException) return true;
+        return false;
+    }
 
     internal static bool IsBox(GameItem? item) => item != null &&
         Core.Clean(item.identifier) is LargeId or SmallId;
@@ -143,73 +174,229 @@ internal static class SecuritySeizureBoxes
         return new Random(BitConverter.ToInt32(SHA256.HashData(Encoding.UTF8.GetBytes(source)), 0));
     }
 
-    private static int RollTier(Random rng, bool large)
+    // 权重分母 300：大盒 T5 2%，小盒 T4 5%，削掉的概率均分给前三档。
+    private static int TierWeight(bool large, int tier) => large ? tier switch
     {
-        // 权重分母 300：大盒 T5 2%，小盒 T4 5%，削掉的概率均分给前三档。
-        var roll = rng.Next(300);
-        if (large) return roll < 128 ? 2 : roll < 226 ? 3 : roll < 294 ? 4 : 5;
-        return roll < 125 ? 1 : roll < 220 ? 2 : roll < 285 ? 3 : 4;
+        2 => 128, 3 => 98, 4 => 68, 5 => 6, _ => 0
+    } : tier switch
+    {
+        1 => 125, 2 => 95, 3 => 65, 4 => 15, _ => 0
+    };
+
+    // First choose one of the six disassemblable whole-part families, then a
+    // non-body kind and the box's original tier roll. Fixed-spec leaves use
+    // the default specification for that tier.
+    private static LeafChoice[] BuildLeafChoices(bool large)
+    {
+        var families = WorkroomComponentTemplates.All;
+        var choices = new List<LeafChoice>();
+        foreach (var family in families)
+        {
+            var kinds = family.Kinds.Where(kind => kind != "body").ToArray();
+            foreach (var kind in kinds)
+                for (var tier = 1; tier <= Components.TierCount; tier++)
+                {
+                    var tierWeight = TierWeight(large, tier);
+                    if (tierWeight == 0) continue;
+                    var definition = WorkroomComponentTemplates.DefaultPart(family, kind, tier);
+                    var intact = checked((int)(definition.FixedValue ??
+                        throw new InvalidOperationException("拆机子件缺少固定价值。")));
+                    var weight = tierWeight / (300.0 * families.Count * kinds.Length * 2);
+                    choices.Add(new LeafChoice(definition, false, intact, weight));
+                    choices.Add(new LeafChoice(definition, true,
+                        checked((int)WorkroomComponentParts.BrokenValue(intact)), weight));
+                }
+        }
+        if (choices.Count == 0 || Math.Abs(choices.Sum(choice => choice.Weight) - 1) > 0.000001)
+            throw new InvalidOperationException("江白子件权重未完整覆盖原有档位。");
+        return choices.ToArray();
+    }
+
+    // Only a few one-cell parts are needed once occupancy is no longer a goal.
+    // Precompute the original-weight probability of each exact top-up amount.
+    private static double[,] BuildLeafWays(LeafChoice[] choices, int maxCount, int maxValue)
+    {
+        var ways = new double[maxCount + 1, maxValue + 1];
+        ways[0, 0] = 1;
+        for (var count = 1; count <= maxCount; count++)
+            for (var sum = count; sum <= maxValue; sum++)
+                foreach (var choice in choices)
+                    if (sum >= choice.Value)
+                        ways[count, sum] += choice.Weight * ways[count - 1, sum - choice.Value];
+        return ways;
+    }
+
+    // A triangular target makes 100% the most common result while giving
+    // a mean of 110% and rare outcomes near the 60% and 170% boundaries.
+    private static int RollTargetValue(Random rng, int price)
+    {
+        const double low = 0.60, mode = 1.00, high = 1.70;
+        var u = rng.NextDouble();
+        var split = (mode - low) / (high - low);
+        var ratio = u < split
+            ? low + Math.Sqrt(u * (high - low) * (mode - low))
+            : high - Math.Sqrt((1 - u) * (high - low) * (high - mode));
+        return Math.Clamp((int)Math.Round(price * ratio),
+            price * MinimumReturnPercent / 100, price * MaximumReturnPercent / 100);
+    }
+
+    // Condition the original leaf weights on the exact remaining value.
+    private static List<LeafChoice> PlanLeaves(Random rng, LeafChoice[] choices,
+        double[,] ways, int count, int targetValue)
+    {
+        if (count < 0 || count >= ways.GetLength(0) || targetValue < 0 ||
+            targetValue >= ways.GetLength(1) || ways[count, targetValue] <= 0)
+            throw new InvalidOperationException("江白子件金额没有可行组合。");
+        var leaves = new List<LeafChoice>(count);
+        var remaining = targetValue;
+        for (var n = count; n > 0; n--)
+        {
+            var roll = rng.NextDouble() * ways[n, remaining];
+            LeafChoice? selected = null;
+            foreach (var choice in choices)
+            {
+                if (choice.Value > remaining) continue;
+                var weight = choice.Weight * ways[n - 1, remaining - choice.Value];
+                if (weight <= 0) continue;
+                selected = choice;
+                roll -= weight;
+                if (roll <= 0) break;
+            }
+            if (selected == null)
+                throw new InvalidOperationException("江白子件组合概率与回款目标不一致。");
+            leaves.Add(selected);
+            remaining -= selected.Value;
+        }
+        if (remaining != 0) throw new InvalidOperationException("江白子件组合未达到回款目标。");
+        return leaves;
+    }
+
+    private static BoxPlan? PlanBox(Random rng, bool large)
+    {
+        var price = large ? LargePrice : SmallPrice;
+        var width = large ? 10 : 5;
+        var slots = width * 3;
+        var minimumValue = price * MinimumReturnPercent / 100;
+        var maximumValue = price * MaximumReturnPercent / 100;
+        var choices = large ? LargeLeafChoices : SmallLeafChoices;
+        var ways = large ? LargeLeafWays : SmallLeafWays;
+        var targetValue = RollTargetValue(rng, price);
+        // Use the fewest leaves that can meet this target. A single whole part
+        // plus at most three/two leaves fits either native inventory size.
+        for (var count = 0; count < ways.GetLength(0); count++)
+        {
+            var candidates = new List<WholeCandidate>();
+            double totalWeight = 0;
+            foreach (var type in EligibleTypes)
+            {
+                if (!((type.Width <= width && type.Height <= 3) ||
+                    (type.Height <= width && type.Width <= 3)) ||
+                    type.Width * type.Height + count > slots) continue;
+                for (var tier = 1; tier <= Components.TierCount; tier++)
+                {
+                    var tierWeight = TierWeight(large, tier);
+                    if (tierWeight == 0) continue;
+                    var value = checked((int)Components.ValueFor(type, tier, false));
+                    var missing = targetValue - value;
+                    if (missing < 0 || missing >= ways.GetLength(1)) continue;
+                    var weight = tierWeight / (300.0 * EligibleTypes.Length) * ways[count, missing];
+                    if (weight <= 0) continue;
+                    candidates.Add(new WholeCandidate(new WholeChoice(type, tier), value, weight));
+                    totalWeight += weight;
+                }
+            }
+            if (candidates.Count == 0) continue;
+            var roll = rng.NextDouble() * totalWeight;
+            var selected = candidates[^1];
+            foreach (var candidate in candidates)
+            {
+                roll -= candidate.Weight;
+                if (roll > 0) continue;
+                selected = candidate;
+                break;
+            }
+            var leaves = PlanLeaves(rng, choices, ways, count, targetValue - selected.Value);
+            var total = checked(selected.Value + leaves.Sum(leaf => leaf.Value));
+            if (total != targetValue || total < minimumValue || total > maximumValue ||
+                selected.Choice.Type.Width * selected.Choice.Type.Height + leaves.Count > slots)
+                throw new InvalidOperationException("江白箱子计划未满足回款或容积边界。");
+            return new BoxPlan(new List<WholeChoice> { selected.Choice }, leaves, total);
+        }
+        return null;
+    }
+
+    private static void Place(GameInventory inventory, GameItem part, List<GameItem> placed,
+        Random rng, long expectedValue)
+    {
+        var retained = false;
+        try
+        {
+            var marker = inventory.TryFindOneValidInventorySlot(part);
+            if (marker == null || !marker.IsValid() || marker.targetItem != null ||
+                marker.TryAcceptOnce(-1) != 1)
+                throw new NativePlacementException();
+            retained = true;
+            placed.Add(part);
+            if (!WorkroomStorage.Contains(inventory, part))
+                throw new InvalidOperationException("江白箱子物品未留在盒内。");
+            StolenHelper.InitStolenItem(part, rng.Next(10, 51));
+            if (part.unitValue != expectedValue)
+                throw new InvalidOperationException("江白箱子物品实际价值与装填计划不一致。");
+        }
+        finally { if (!retained) part.Destroy(); }
     }
 
     private static List<GameItem> Fill(GameInventory inventory, bool large)
     {
         var rng = SeededRandom(large);
-        var minimum = large ? 9 : 6;
-        var maximum = large ? 21 : 10;
-        var target = rng.Next(minimum, maximum + 1);
-        var used = 0;
-        var placed = new List<GameItem>();
-        try
+        Exception? lastFailure = null;
+        for (var attempt = 0; attempt < RandomPlanAttempts; attempt++)
         {
-            // 各类每轮先等权洗牌；无法放进剩余格数或实际库存时重选。
-            for (var round = 0; round < 10 && used < maximum; round++)
+            var plan = PlanBox(rng, large);
+            if (plan == null)
             {
-                var choices = EligibleTypes.OrderBy(_ => rng.Next()).ToArray();
-                var added = false;
-                foreach (var type in choices)
-                {
-                    var cells = type.Width * type.Height;
-                    if (used + cells > maximum) continue;
-                    var tier = RollTier(rng, large);
-                    var id = "pcrepair." + type.Stem + "_t" + tier;
-                    var part = Components.Create(id);
-                    var retained = false;
-                    try
-                    {
-                        // 原版寻位会尝试旋转；小盒中的 2×4 显卡因而以 4×2 放入。
-                        var marker = inventory.TryFindOneValidInventorySlot(part);
-                        if (marker == null || !marker.IsValid() || marker.targetItem != null) continue;
-                        if (marker.TryAcceptOnce(-1) != 1) continue;
-                        retained = true;
-                        placed.Add(part);
-                        if (!WorkroomStorage.Contains(inventory, part))
-                            throw new InvalidOperationException("收缴配件未留在盒内。");
-                        StolenHelper.InitStolenItem(part, rng.Next(10, 51));
-                        used += cells;
-                        added = true;
-                        break;
-                    }
-                    finally
-                    {
-                        if (!retained) part.Destroy();
-                    }
-                }
-                if (!added) break;
-                if (used >= minimum && used >= target) break;
+                lastFailure = new InvalidOperationException("江白箱子随机计划未形成合规内容。");
+                Core.Log?.Warning(lastFailure.Message);
+                continue;
             }
-            if (used < minimum || used > maximum)
-                throw new InvalidOperationException("收缴盒装填未达到占格范围：" + used);
-            Core.Log?.Msg("[治安收缴] " + (large ? "大" : "小") + "盒已固定内容：" +
-                placed.Count + " 件，占 " + used + "/" + (large ? 30 : 15) + " 格。");
-            return placed;
+            var placed = new List<GameItem>();
+            try
+            {
+                foreach (var whole in plan.Whole)
+                {
+                    var id = "pcrepair." + whole.Type.Stem + "_t" + whole.Tier;
+                    Place(inventory, Components.Create(id), placed, rng,
+                        Components.ValueFor(whole.Type, whole.Tier, false));
+                }
+                foreach (var leaf in plan.Leaves)
+                    Place(inventory, WorkroomComponentParts.Create(leaf.Definition, leaf.Broken),
+                        placed, rng, leaf.Value);
+                if (placed.Sum(part => (long)part.unitValue) != plan.Value)
+                    throw new InvalidOperationException("江白箱子实际回款与装填计划不一致。");
+                var occupied = plan.Whole.Sum(whole => whole.Type.Width * whole.Type.Height) + plan.Leaves.Count;
+                Core.Log?.Msg("[治安收缴] " + (large ? "大" : "小") + "盒已固定内容：" +
+                    placed.Count + " 件，占 " + occupied + "/" + (large ? 30 : 15) +
+                    " 格，基础回款 " + plan.Value + "/" + (large ? LargePrice : SmallPrice) + "。");
+                return placed;
+            }
+            catch (Exception ex)
+            {
+                var cleanupFailed = false;
+                foreach (var part in placed)
+                    try { inventory.Expel(part); part.Destroy(); }
+                    catch (Exception cleanup)
+                    {
+                        cleanupFailed = true;
+                        Core.Log?.Warning("清理收缴盒半成品失败：" + cleanup.Message);
+                    }
+                if (cleanupFailed)
+                    throw new InvalidOperationException("江白箱子半成品清理失败，停止重抽。", ex);
+                if (ex is not NativePlacementException) throw;
+                lastFailure = ex;
+                Core.Log?.Warning("江白箱子原生寻位与计划不一致，重新规划：" + ex.Message);
+            }
         }
-        catch
-        {
-            foreach (var part in placed)
-                try { inventory.Expel(part); part.Destroy(); }
-                catch (Exception ex) { Core.Log?.Warning("清理收缴盒半成品失败：" + ex.Message); }
-            throw;
-        }
+        throw new StockExhaustedException(lastFailure);
     }
 
     [HarmonyPatch(typeof(ModItemDirectory), "InitDirectory")]

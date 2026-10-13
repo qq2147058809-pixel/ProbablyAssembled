@@ -386,6 +386,19 @@ internal static class ComponentDirectoryPatch
             }
         }
 
-        Core.Log?.Msg("物品工厂注册完成：分级物品 " + registered + " 个。");
+        var dedicated = 0;
+        foreach (var definition in ServerRoomMachine.Definitions)
+        {
+            try
+            {
+                var capturedId = definition.Identifier;
+                Il2CppSystem.Func<GameItem> factory = (Func<GameItem>)(() => ServerRoomHardware.Create(capturedId));
+                __instance.Set(capturedId, factory);
+                dedicated++;
+            }
+            catch (Exception ex) { Core.Log?.Error("注册机房专用机箱失败（" + definition.Identifier + "）：" + ex); }
+        }
+
+        Core.Log?.Msg("物品工厂注册完成：分级物品 " + registered + " 个，机房专用机箱 " + dedicated + " 个。");
     }
 }

@@ -12,7 +12,7 @@ internal static class CaseRejectDropMayPatch
 {
     private static bool Prefix(GameItem __instance, ref bool __result)
     {
-        if (!ComputerCase.IsCase(__instance)) return true;
+        if (!ComputerCase.IsCase(__instance) && !ServerRoomHardware.IsHardware(__instance)) return true;
         __result = false;
         return false;
     }
@@ -30,7 +30,7 @@ internal static class CaseRejectDropFindPatch
 {
     private static bool Prefix(GameItem __instance)
     {
-        if (!ComputerCase.IsCase(__instance)) return true;
+        if (!ComputerCase.IsCase(__instance) && !ServerRoomHardware.IsHardware(__instance)) return true;
         return false;
     }
 }

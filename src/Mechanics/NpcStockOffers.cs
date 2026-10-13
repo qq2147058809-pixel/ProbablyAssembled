@@ -161,7 +161,8 @@ internal static class NpcStockOffers
 
     internal static void Stock(PlayerStore store, StoreClient client, string stockTag, string group,
         Func<List<string>> create, int minimum, int maximum, Func<string, bool> accepts,
-        Action<GameItem>? configure = null, Func<GameItem, bool>? existingFilter = null, Action<List<string>>? validate = null)
+        Action<GameItem>? configure = null, Func<GameItem, bool>? existingFilter = null, Action<List<string>>? validate = null,
+        Action<GameItem>? inspectBeforeSubmit = null)
     {
         if (stocking) return;
         stocking = true;
@@ -218,6 +219,7 @@ internal static class NpcStockOffers
                         throw new InvalidOperationException("NPC商品实体失活。");
                     item.SetUnitCount(1); item.EnableTag(stockTag, false); item.EnableTag(posted, false);
                     configure?.Invoke(item);
+                    inspectBeforeSubmit?.Invoke(item);
                 }
                 foreach (var candidate in pending)
                 {

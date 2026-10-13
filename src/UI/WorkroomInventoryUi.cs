@@ -12,6 +12,11 @@ namespace PCExpansion;
 internal sealed class WorkroomInventoryUi
 {
     private const float Cell = 17;
+    private const float GridLeft = 373, GridTop = 489;
+    private const float GridRimWidth = 3;
+    private static readonly Color GridBackground = new(142f/255f, 155f/255f, 139f/255f, 1f);
+    private static readonly Color GridLine = new(.33f, .39f, .35f, .62f);
+    private static readonly Color GridRim = new(.15f, .17f, .21f, 1f);
     private sealed class ItemView
     {
         internal GameObject Root = null!;
@@ -60,13 +65,13 @@ internal sealed class WorkroomInventoryUi
     internal WorkroomInventoryUi(Canvas canvas, Transform parent, TMP_FontAsset font)
     {
         this.canvas = canvas; this.font = font;
-        grid = AssemblyDebugUi.Image(parent, "WorkingInventory", new Color(.09f,.11f,.14f,.82f), false).gameObject;
-        AssemblyDebugUi.Place(grid, 375, 508, WorkroomStorageState.Columns*Cell, WorkroomStorageState.Rows*Cell);
-        for (var x = 0; x <= WorkroomStorageState.Columns; x++)
-            AssemblyDebugUi.Place(AssemblyDebugUi.Image(grid.transform, "Column"+x, new Color(.34f,.32f,.36f,.75f), false).gameObject,
+        grid = AssemblyDebugUi.Image(parent, "WorkingInventory", GridBackground, false).gameObject;
+        AssemblyDebugUi.Place(grid, GridLeft, GridTop, WorkroomStorageState.Columns*Cell, WorkroomStorageState.Rows*Cell);
+        for (var x = 1; x < WorkroomStorageState.Columns; x++)
+            AssemblyDebugUi.Place(AssemblyDebugUi.Image(grid.transform, "Column"+x, GridLine, false).gameObject,
                 x*Cell, 0, 1, WorkroomStorageState.Rows*Cell);
-        for (var y = 0; y <= WorkroomStorageState.Rows; y++)
-            AssemblyDebugUi.Place(AssemblyDebugUi.Image(grid.transform, "Row"+y, new Color(.34f,.32f,.36f,.75f), false).gameObject,
+        for (var y = 1; y < WorkroomStorageState.Rows; y++)
+            AssemblyDebugUi.Place(AssemblyDebugUi.Image(grid.transform, "Row"+y, GridLine, false).gameObject,
                 0, y*Cell, WorkroomStorageState.Columns*Cell, 1);
         ghostRoot = AssemblyDebugUi.New("InventoryDragPreview", canvas.transform);
         ghostRoot.SetActive(false);
@@ -76,6 +81,18 @@ internal sealed class WorkroomInventoryUi
         groupGhostRoot.SetActive(false);
         bandRoot = AssemblyDebugUi.Image(grid.transform, "SelectionBand", new Color(.28f,.65f,.91f,.30f), false).gameObject;
         bandRoot.SetActive(false);
+        var gridWidth = WorkroomStorageState.Columns*Cell;
+        var gridHeight = WorkroomStorageState.Rows*Cell;
+        PlaceRim(parent, "InventoryRimTop", GridLeft, GridTop, gridWidth, GridRimWidth);
+        PlaceRim(parent, "InventoryRimBottom", GridLeft, GridTop+gridHeight-GridRimWidth, gridWidth, GridRimWidth);
+        PlaceRim(parent, "InventoryRimLeft", GridLeft, GridTop, GridRimWidth, gridHeight);
+        PlaceRim(parent, "InventoryRimRight", GridLeft+gridWidth-GridRimWidth, GridTop, GridRimWidth, gridHeight);
+    }
+
+    private static void PlaceRim(Transform parent, string name, float x, float y, float width, float height)
+    {
+        var rim = AssemblyDebugUi.Image(parent, name, GridRim, false);
+        AssemblyDebugUi.Place(rim.gameObject, x, y, width, height);
     }
 
     internal void Update(bool interactive, WorkroomPanels panels)
@@ -128,7 +145,8 @@ internal sealed class WorkroomInventoryUi
         var itemHeld = WorkroomStorage.State.Find(held);
         if (itemHeld?.Place != "room" || epoch != WorkroomStorage.State.Epoch || Input.GetKeyDown(KeyCode.Escape))
         { Cancel(); return; }
-        if (((Vector2)Input.mousePosition-pressed).sqrMagnitude > DragThresholdSquared()) dragging = true;
+        if (!dragging && ((Vector2)Input.mousePosition-pressed).sqrMagnitude > DragThresholdSquared())
+        { dragging = true; RoomAudio.Play("pickup"); }
         var nativeDrag = ItemMouseDragHandler.current;
         var clockwise = Input.GetKeyDown(nativeDrag == null ? KeyCode.E : nativeDrag.rotateCWKey);
         var counterclockwise = Input.GetKeyDown(nativeDrag == null ? KeyCode.Q : nativeDrag.rotateCCWKey);
@@ -138,6 +156,7 @@ internal sealed class WorkroomInventoryUi
             // Keep the preview centre at the same offset from the mouse.
             offset += new Vector2(rotated.Width-heldShape!.Width, rotated.Height-heldShape.Height) * (Cell*.5f);
             heldShape = rotated; heldOrientation = WorkroomItemPose.Turn(heldOrientation, clockwise);
+            RoomAudio.Play("rotate");
             dragging = true;
         }
         if (dragging) ResetClicks();
@@ -177,7 +196,12 @@ internal sealed class WorkroomInventoryUi
             ResetClicks();
             if (assemblySlot != null) WorkroomComponentAssembly.Stage(id, assemblySlot, generation, orientation);
             else if (intoBox) WorkroomStorage.StoreRoom(id, generation, orientation);
-            else if (fits) WorkroomStorage.MoveRoom(id, x, y, generation, orientation);
+            else if (fits)
+            {
+                var beforeRevision = WorkroomStorage.State.Revision;
+                WorkroomStorage.MoveRoom(id, x, y, generation, orientation);
+                if (WorkroomStorage.State.Revision != beforeRevision) RoomAudio.Play("drop");
+            }
             else WorkroomStorage.Notify("invalid_position");
         }
         else if (!Input.GetMouseButton(0)) Cancel();
@@ -192,7 +216,8 @@ internal sealed class WorkroomInventoryUi
         var command = groupHeld!;
         if (epoch != WorkroomStorage.State.Epoch || command.Length == 0 || command.Any(item => !item.Unchanged))
         { ReleaseGroup(); ResetClicks(); WorkroomStorage.Notify("source_changed"); return; }
-        if (((Vector2)Input.mousePosition - pressed).sqrMagnitude >= DragThresholdSquared()) groupDragging = true;
+        if (!groupDragging && ((Vector2)Input.mousePosition - pressed).sqrMagnitude >= DragThresholdSquared())
+        { groupDragging = true; RoomAudio.Play("pickup"); }
         var intoBox = HitBox(panels, Input.mousePosition);
         var color = intoBox ? new Color(.65f,1,.65f,.75f) : new Color(1,.5f,.5f,.75f);
         if (groupDragging)

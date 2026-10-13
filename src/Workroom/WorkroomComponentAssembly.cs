@@ -28,7 +28,8 @@ internal static class WorkroomComponentAssembly
     }
     internal static bool ValidSlot(string slot) => WorkroomMachineAssembly.ValidSlot(slot) || slot == Disassembly || slot == EntryBoard || WorkroomComponentTemplates.All.Any(template => Slots(template).Contains(slot));
     internal static bool Ready(long epoch) => WorkroomStorage.State.Ready && WorkroomStorage.State.Epoch == epoch && !WorkroomStorage.Busy && !WorkroomItemCodec.CleanupPending;
-    internal static void Notice(string key, params object[] args) => WorkroomStorage.NotifyText(WorkroomComponentTemplates.Text(key, args));
+    internal static void Notice(string key, params object[] args)
+    { WorkroomStorage.NotifyText(WorkroomComponentTemplates.Text(key, args)); RoomAudio.Notice(key); }
     private static bool ProcessingItem(WorkroomItemCodec.Snapshot item) => WorkroomItemCodec.CanUseOne(item) &&
         (WorkroomComponentTemplates.TryWhole(item.Identifier, out _, out _, out _) || WorkroomComponentTemplates.TryPart(item.Identifier, out _, out _, out _) ||
             WorkroomRecyclingRules.WholeTarget(item));

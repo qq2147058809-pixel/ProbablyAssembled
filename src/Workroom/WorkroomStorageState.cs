@@ -11,7 +11,7 @@ namespace PCExpansion;
 internal sealed class WorkroomStorageState
 {
     internal const string SaveKey = "pcrepair.workroom.storage.v2";
-    internal const int Columns = 32, Rows = 8;
+    internal const int Columns = 32, Rows = 10;
     internal static readonly JsonSerializerOptions JsonOptions = new()
     { NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals };
 
@@ -38,6 +38,7 @@ internal sealed class WorkroomStorageState
     private int slot;
     private Document document = new();
     private readonly Dictionary<string, Record> slotIndex = new(StringComparer.Ordinal);
+    private readonly Dictionary<int, Record> rackIndex = new();
     private readonly Dictionary<string, Record> recordIndex = new(StringComparer.Ordinal);
     private readonly List<Record> roomItems = new();
     private readonly List<Record> pendingRecords = new();
@@ -60,6 +61,13 @@ internal sealed class WorkroomStorageState
     internal IReadOnlyList<Record> PendingRecords
     {
         get { EnsureIndex(); return pendingRecords; }
+    }
+    internal static string RackSlot(int index) => index is >= 0 and < 10
+        ? "rack." + index : throw new ArgumentOutOfRangeException(nameof(index));
+    internal static bool TryRackIndex(string? slot, out int index)
+    {
+        for (index = 0; index < 10; index++) if (slot == RackSlot(index)) return true;
+        index = -1; return false;
     }
 
     internal bool SameOwner() => owner != null && PlayerStore.IsInstanceExist() &&
@@ -154,13 +162,14 @@ internal sealed class WorkroomStorageState
     private void EnsureIndex()
     {
         if (indexedRevision == Revision) return;
-        slotIndex.Clear(); recordIndex.Clear(); roomItems.Clear(); pendingRecords.Clear();
+        slotIndex.Clear(); rackIndex.Clear(); recordIndex.Clear(); roomItems.Clear(); pendingRecords.Clear();
         roomOccupancy = new bool[Columns * Rows];
         excludedOccupancy = null; excludedId = null;
         foreach (var item in document.Items)
         {
             recordIndex.Add(item.Id, item);
             if (item.Place == "slot") slotIndex.Add(item.Slot, item);
+            if (item.Place == "rack" && TryRackIndex(item.Slot, out var rack)) rackIndex.Add(rack, item);
             if (item.Place == "cleanup" || item.Place == "delivery") pendingRecords.Add(item);
             if (item.Place == "room")
             {
@@ -181,6 +190,12 @@ internal sealed class WorkroomStorageState
         if (!Ready) return null;
         EnsureIndex();
         return slotIndex.TryGetValue(slotName, out var record) ? record : null;
+    }
+    internal Record? FindRack(int index)
+    {
+        if (!Ready || index is < 0 or >= 10) return null;
+        EnsureIndex();
+        return rackIndex.TryGetValue(index, out var record) ? record : null;
     }
 
     private bool[] RoomOccupancy(string? excluding)
@@ -372,14 +387,18 @@ internal sealed class WorkroomStorageState
         var ids = new HashSet<string>(StringComparer.Ordinal);
         var nativeIds = new HashSet<int>();
         var slots = new HashSet<string>(StringComparer.Ordinal);
+        var racks = new HashSet<int>();
         var occupied = new bool[Columns * Rows];
         foreach (var item in value.Items)
         {
             if (item == null || string.IsNullOrEmpty(item.Id) || !ids.Add(item.Id) ||
-                (item.Place != "box" && item.Place != "room" && item.Place != "cleanup" && item.Place != "delivery" && item.Place != "slot"))
+                (item.Place != "box" && item.Place != "room" && item.Place != "cleanup" && item.Place != "delivery" && item.Place != "slot" && item.Place != "rack"))
                 throw new InvalidOperationException("储物记录身份或去向无效。");
             if (item.Place == "slot" && (!WorkroomComponentAssembly.ValidSlot(item.Slot) || !slots.Add(item.Slot)))
                 throw new InvalidOperationException("装配槽位无效或重复。");
+            if (item.Place == "rack" && (!TryRackIndex(item.Slot, out var rack) || !racks.Add(rack) ||
+                !ServerRoomMachine.TryDefinition(item.Item.Identifier, out _)))
+                throw new InvalidOperationException("机架槽位或专用机器无效。");
             WorkroomItemCodec.Validate(item.Item);
             if (item.Item.Count != 1) throw new InvalidOperationException("当前储物记录只支持独立单件。");
             foreach (var id in WorkroomItemCodec.Identities(item.Item))

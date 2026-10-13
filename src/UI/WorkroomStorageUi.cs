@@ -15,6 +15,7 @@ internal sealed class WorkroomStorageUi
     internal const int Width = 540, Height = 424;
     private static readonly string[] categories = WorkroomStorageCatalog.Categories;
     private static readonly string[] conditions = { "all", "intact", "broken" };
+    private static readonly string[] types = { "all", "dismantled", "component" };
     private sealed class Row
     {
         internal GameObject Face = null!, Button = null!;
@@ -34,15 +35,19 @@ internal sealed class WorkroomStorageUi
     private readonly TMP_InputField search;
     private readonly TextMeshProUGUI searchHint, clearLabel, filterLabel, filterSummary;
     private readonly Button filterButton;
-    private readonly GameObject[] categoryButtons = new GameObject[categories.Length], conditionButtons = new GameObject[conditions.Length];
-    private readonly TextMeshProUGUI[] categoryLabels = new TextMeshProUGUI[categories.Length], conditionLabels = new TextMeshProUGUI[conditions.Length];
+    private readonly GameObject[] categoryButtons = new GameObject[categories.Length], conditionButtons = new GameObject[conditions.Length], typeButtons = new GameObject[types.Length];
+    private readonly TextMeshProUGUI[] categoryLabels = new TextMeshProUGUI[categories.Length], conditionLabels = new TextMeshProUGUI[conditions.Length], typeLabels = new TextMeshProUGUI[types.Length];
     private readonly TMP_FontAsset font;
     private readonly WorkroomItemInfo information = new();
     private int offset;
     private bool inRoom;
     private IReadOnlyList<WorkroomStorageCatalog.Group> catalog = Array.Empty<WorkroomStorageCatalog.Group>();
     private readonly List<WorkroomStorageCatalog.Group> items = new();
-    private string query = "", pendingQuery = "", category = "all", condition = "all";
+    private string query = "", pendingQuery = "", category = "all", condition = "all", type = "all";
+    // View teardown (leaving the store, canvas recreation) is not a save-session boundary.
+    // Keep only managed filter values; Epoch changes on storage Bind/Unbind, never on view disposal.
+    private static (long Epoch, string Query, string Category, string Condition, string Type) savedFilters =
+        (-1, "", "all", "all", "all");
     private long queryDue;
     private bool popupOwned;
     private int popupFrame = -1, popupNeutralFrames;
@@ -110,8 +115,16 @@ internal sealed class WorkroomStorageUi
             var key = conditions[i];
             var button = WorkroomPanelSkin.Button(canvas, popup.transform, "Condition" + key, WorkroomStorage.Text("condition." + key), font, 12,
                 () => { condition = key; ReadQuery(true); ChangedFilter(); });
-            AssemblyDebugUi.Place(button, 10 + i * 164, 74, 160, 28);
+            AssemblyDebugUi.Place(button, 10 + i * 82, 74, 78, 28);
             conditionButtons[i] = button; conditionLabels[i] = button.GetComponentInChildren<TextMeshProUGUI>();
+        }
+        for (var i = 0; i < types.Length; i++)
+        {
+            var key = types[i];
+            var button = WorkroomPanelSkin.Button(canvas, popup.transform, "Type" + key, TypeName(key), font, 12,
+                () => { type = key; ReadQuery(true); ChangedFilter(); });
+            AssemblyDebugUi.Place(button, 10 + (conditions.Length + i) * 82, 74, 78, 28);
+            typeButtons[i] = button; typeLabels[i] = button.GetComponentInChildren<TextMeshProUGUI>();
         }
         for (var i = 0; i < rows.Length; i++)
         {
@@ -163,6 +176,7 @@ internal sealed class WorkroomStorageUi
         cleanup.Run("storage.search", () =>
         {
             if (!WorkroomUiCleanup.IsAlive(search)) return;
+            ReadQuery(true);
             search.DeactivateInputField();
             var events = EventSystem.current;
             if (WorkroomUiCleanup.IsAlive(events) && events.currentSelectedGameObject != null &&
@@ -259,6 +273,7 @@ internal sealed class WorkroomStorageUi
     }
 
     private static string CategoryName(string key) => WorkroomStorage.Text("category." + key);
+    private static string TypeName(string key) => WorkroomStorage.Text("type." + key);
     internal static string FontText
     {
         get
@@ -266,15 +281,23 @@ internal sealed class WorkroomStorageUi
             var value = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-. /×";
             foreach (var key in categories) value += CategoryName(key);
             foreach (var key in conditions) value += WorkroomStorage.Text("condition." + key);
+            foreach (var key in types) value += TypeName(key);
             return value + WorkroomStorage.Text("search_hint") + WorkroomStorage.Text("clear_filters") + WorkroomStorage.Text("filters") +
-                WorkroomStorage.Text("current_filters", CategoryName("all"), WorkroomStorage.Text("condition.all")) +
-                WorkroomStorage.Text("no_matches") + WorkroomStorage.Text("group_summary", 0, 0, 0, 0, 0);
+                WorkroomStorage.Text("current_filters", CategoryName("all"), WorkroomStorage.Text("condition.all"), TypeName("all")) +
+                WorkroomStorage.Text("no_matches") + WorkroomStorage.Text("unsupported_item") +
+                WorkroomStorage.Text("group_summary", 0, 0, 0, 0, 0);
         }
     }
-    private void ChangedFilter() { offset = 0; filterDirty = true; information.Clear(); }
+    private void ChangedFilter()
+    {
+        offset = 0; filterDirty = true; information.Clear();
+        // A late Blur/Release from the old view must not overwrite the next save's filters.
+        if (filterEpoch == WorkroomStorage.State.Epoch)
+            savedFilters = (filterEpoch, query, category, condition, type);
+    }
     private void ClearFilters()
     {
-        search.text = query = pendingQuery = ""; category = condition = "all"; queryDue = 0; ChangedFilter();
+        search.text = query = pendingQuery = ""; category = condition = type = "all"; queryDue = 0; ChangedFilter();
     }
     private void ReadQuery(bool immediate = false)
     {
@@ -331,7 +354,16 @@ internal sealed class WorkroomStorageUi
         var state = WorkroomStorage.State;
         var newLocale = LanguageText.LocaleCode;
         if (filterEpoch != state.Epoch)
-        { filterEpoch = state.Epoch; CloseFilters(); Blur(); ClearFilters(); }
+        {
+            CloseFilters(); Blur();
+            filterEpoch = state.Epoch;
+            if (savedFilters.Epoch != filterEpoch) savedFilters = (filterEpoch, "", "all", "all", "all");
+            search.text = query = pendingQuery = savedFilters.Query;
+            category = savedFilters.Category; condition = savedFilters.Condition; type = savedFilters.Type;
+            queryDue = 0;
+            font.TryAddCharacters(query, out string _, true);
+            ChangedFilter();
+        }
         ReadQuery(!Composing && OwnsTextInput && (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)));
         var catalogChanged = revision != state.CatalogRevision || epoch != state.Epoch;
         var changed = catalogChanged || locale != newLocale;
@@ -350,17 +382,19 @@ internal sealed class WorkroomStorageUi
             filterLabel.text = WorkroomStorage.Text("filters");
             for (var i = 0; i < categories.Length; i++) categoryLabels[i].text = CategoryName(categories[i]);
             for (var i = 0; i < conditions.Length; i++) conditionLabels[i].text = WorkroomStorage.Text("condition." + conditions[i]);
+            for (var i = 0; i < types.Length; i++) typeLabels[i].text = TypeName(types[i]);
         }
         var redraw = changed || filterDirty;
         if (redraw)
         {
             items.Clear(); matchingCount = 0;
             foreach (var group in catalog)
-                if (group.Matches(query, category, condition)) { items.Add(group); matchingCount += group.Count; }
+                if (group.Filter(query, category, condition, type) is { } match) { items.Add(match); matchingCount += match.Count; }
             for (var i = 0; i < categories.Length; i++) WorkroomPanelSkin.Selected(categoryButtons[i], category == categories[i]);
             for (var i = 0; i < conditions.Length; i++) WorkroomPanelSkin.Selected(conditionButtons[i], condition == conditions[i]);
-            filterSummary.text = WorkroomStorage.Text("current_filters", CategoryName(category), WorkroomStorage.Text("condition." + condition));
-            WorkroomPanelSkin.Selected(filterButton.gameObject, category != "all" || condition != "all");
+            for (var i = 0; i < types.Length; i++) WorkroomPanelSkin.Selected(typeButtons[i], type == types[i]);
+            filterSummary.text = WorkroomStorage.Text("current_filters", CategoryName(category), WorkroomStorage.Text("condition." + condition), TypeName(type));
+            WorkroomPanelSkin.Selected(filterButton.gameObject, category != "all" || condition != "all" || type != "all");
             filterDirty = false;
         }
         if (Hit(Input.mousePosition) && Input.mouseScrollDelta.y != 0)

@@ -35,8 +35,8 @@ function Assert-PCExpansionChineseManual {
         }
         $root = $document.RootElement
         Assert-Fields $root @('contract','title','pages')
-        $contract = 'pcexpansion-computer-manual-v13'
-        if ((Read-ManualText $root.GetProperty('contract') 80) -cne $contract) { throw '中文手册契约不是v13。' }
+        $contract = 'pcexpansion-computer-manual-v14'
+        if ((Read-ManualText $root.GetProperty('contract') 80) -cne $contract) { throw '中文手册契约不是v14。' }
         if ((Read-ManualText $root.GetProperty('title') 80) -cne '电脑装机与交易手册') { throw '中文手册标题不匹配。' }
         $source = [IO.File]::ReadAllText((Join-Path $ProjectDir 'src\Infrastructure\ComputerManualPages.cs'))
         if (-not $source.Contains('public const string ContractVersion = "' + $contract + '";')) { throw '中文手册契约与源码不一致。' }
@@ -82,6 +82,6 @@ function Assert-PCExpansionChineseManual {
             }
         }
         if (-not [IO.File]::Exists((Join-Path $ProjectDir 'assets\icons\computer_manual_icon.png'))) { throw '缺少电脑手册封面。' }
-        Write-Host "中文原生电脑手册校验通过：v13、十页、$count 个独立图文元素与封面。"
+        Write-Host "中文原生电脑手册校验通过：v14、十页、$count 个独立图文元素与封面。"
     } finally { $document.Dispose() }
 }

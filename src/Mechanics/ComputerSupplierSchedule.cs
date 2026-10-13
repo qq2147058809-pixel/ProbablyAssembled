@@ -124,6 +124,8 @@ internal static class ComputerSupplierSchedule
             Arrange(__instance);
             // 原版和随机供应者的当日安排都结束后，再把周四江白固定到队首。
             SecuritySeizureMerchant.Arrange(__instance);
+            // 订货送货是本日最终队首；0504 电话访客仍独立留在队列中。
+            ServerRoomDeliverySchedule.OnShutterOpened(__instance);
         }
     }
 }

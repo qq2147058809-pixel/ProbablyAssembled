@@ -222,6 +222,8 @@ internal sealed class WorkroomComponentUi
         "assembly_body_hint", "assembly_actual_summary", "recycle_quantity", "recycle_quantity_edit", "recycle_quantity_hint",
         "processing_cash_recovery", "processing_invalid_quantity", "processing_missing_quantity", "processing_cash_limit",
         "processing_missing_cash", "processing_cash_header", "processing_cash_ready", "processing_recycle_batch_header",
+        "processing_recycle_quantity_needed", "processing_recycle_quantity_estimate",
+        "processing_recycle_quantity_zero", "processing_recycle_quantity_limit",
         "capacity_health_summary", "rotor_integrated", "power_integrated" }
         .Select(key => WorkroomComponentTemplates.Text(key, "", 0, 0, 0, 0, 0))) +
         string.Join("", WorkroomComponentTemplates.All.Select(template => template.Name + string.Join("", template.Kinds.Select(template.PartName)))) + "T0123456789×↑↓—−+_【】GBTB";

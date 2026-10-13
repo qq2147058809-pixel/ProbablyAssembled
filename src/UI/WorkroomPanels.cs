@@ -118,6 +118,7 @@ internal sealed class WorkroomPanels : IDisposable
         if (kind == Kind.Components)
         {
             if (!inRoom) return;
+            if (!ComponentsOpen) RoomAudio.Play("open");
             storage.Blur();
             storage.CloseFilters();
             components.Show(); canvas.gameObject.SetActive(true); return;
@@ -125,12 +126,14 @@ internal sealed class WorkroomPanels : IDisposable
         if (kind == Kind.Motherboard || kind == Kind.Case)
         {
             if (!inRoom) return;
+            RoomAudio.Play("open");
             storage.Blur();
             storage.CloseFilters();
             machines.Show(kind == Kind.Motherboard ? WorkroomMachineAssembly.Motherboard : WorkroomMachineAssembly.Case);
             canvas.gameObject.SetActive(true); return;
         }
         this.kind = kind;
+        if (!state.IsOpen) RoomAudio.Play("open");
         const int width = WorkroomStorageUi.Width, height = WorkroomStorageUi.Height;
         AssemblyDebugUi.Place(face, 686, 74, width, height);
         if (placed) AssemblyDebugUi.Rect(face).anchoredPosition = storagePosition;
@@ -198,6 +201,7 @@ internal sealed class WorkroomPanels : IDisposable
     {
         if (storage?.CloseFilters() == true) return;
         if (!state.IsOpen) return;
+        RoomAudio.Play("close");
         state.Close();
         HideFace();
     }

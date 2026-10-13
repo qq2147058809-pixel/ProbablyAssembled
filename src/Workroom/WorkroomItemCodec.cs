@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Il2Cpp;
 using UnityEngine;
@@ -214,14 +214,14 @@ internal static class WorkroomItemCodec
         var expected = snapshot.Footprint;
         for (var current = snapshot.Orientation; current != orientation; current = WorkroomItemPose.Turn(current, false))
             expected = WorkroomItemPose.Rotate(expected, false);
-        // Use the native save DTO: its serialized backing-field names must not
-        // be guessed. Only modifiedShape changes; base shape and origins stay.
+        // Use the native builder to verify the footprint, but never serialize
+        // the DTO again: its callbacks rebuild the saved tag lists.
         shape.orientation = orientation;
         var footprint = Footprint(shape.Build());
         if (!SameShape(expected, footprint)) throw new InvalidOperationException("旋转后的原版占格不一致。");
         var result = JsonSerializer.Deserialize<Snapshot>(JsonSerializer.Serialize(snapshot, WorkroomStorageState.JsonOptions),
             WorkroomStorageState.JsonOptions) ?? throw new InvalidOperationException("物品记录复制失败。");
-        result.Payload = JsonUtility.ToJson(native);
+        result.Payload = ReorientPayload(snapshot.Payload, snapshot.Orientation, orientation);
         result.Orientation = orientation;
         result.Footprint = footprint;
         Validate(result);
@@ -232,6 +232,53 @@ internal static class WorkroomItemCodec
             !SameShape(footprint, Footprint(restoredShape.Build())))
             throw new InvalidOperationException("旋转方向保存回读失败。");
         return result;
+    }
+
+    // Replace one UTF-8 number token. All other saved bytes, including native
+    // tag lists, unknown fields and numeric/string representations, stay intact.
+    private static string ReorientPayload(string payload, int previous, int orientation)
+    {
+        var bytes = Encoding.UTF8.GetBytes(payload);
+        var reader = new Utf8JsonReader(bytes);
+        var inItems = false;
+        var inShape = false;
+        var itemIndex = -1;
+        while (reader.Read())
+        {
+            if (reader.TokenType == JsonTokenType.PropertyName && reader.CurrentDepth == 1 &&
+                reader.ValueTextEquals("saveItems"))
+            {
+                if (!reader.Read() || reader.TokenType != JsonTokenType.StartArray)
+                    throw new InvalidOperationException("物品保存节点列表无效。");
+                inItems = true;
+            }
+            else if (inItems && reader.TokenType == JsonTokenType.StartObject && reader.CurrentDepth == 2)
+                itemIndex++;
+            else if (inItems && itemIndex == 0 && reader.TokenType == JsonTokenType.PropertyName &&
+                reader.CurrentDepth == 3 && reader.ValueTextEquals("itemModifiedShape"))
+            {
+                if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
+                    throw new InvalidOperationException("物品保存形状无效。");
+                inShape = true;
+            }
+            else if (inShape && reader.TokenType == JsonTokenType.PropertyName && reader.CurrentDepth == 4 &&
+                reader.ValueTextEquals("<orientation>k__BackingField"))
+            {
+                if (!reader.Read() || reader.TokenType != JsonTokenType.Number ||
+                    !reader.TryGetInt32(out var actual) || actual != previous)
+                    throw new InvalidOperationException("保存形状方向与快照不一致。");
+                var start = checked((int)reader.TokenStartIndex);
+                var end = checked((int)reader.BytesConsumed);
+                return Encoding.UTF8.GetString(bytes.AsSpan(0, start)) +
+                    orientation.ToString(System.Globalization.CultureInfo.InvariantCulture) +
+                    Encoding.UTF8.GetString(bytes.AsSpan(end));
+            }
+            else if (inShape && reader.TokenType == JsonTokenType.EndObject && reader.CurrentDepth == 3)
+                inShape = false;
+            else if (inItems && reader.TokenType == JsonTokenType.EndArray && reader.CurrentDepth == 1)
+                break;
+        }
+        throw new InvalidOperationException("物品保存形状缺少方向字段。");
     }
 
     private static bool SameShape(Shape a, Shape b) =>
@@ -285,7 +332,11 @@ internal static class WorkroomItemCodec
             timing.Mark("load-and-apply");
             var check = Capture(candidate.Root);
             timing.Mark("capture-check");
-            if (!Equivalent(snapshot, check)) throw new InvalidOperationException("恢复后的物品信息不一致。");
+            if (!Equivalent(snapshot, check))
+            {
+                ReportRestoreDifference(snapshot, check);
+                throw new InvalidOperationException("恢复后的物品信息不一致。");
+            }
             timing.Mark("equivalent");
             return candidate;
         }
@@ -341,6 +392,63 @@ internal static class WorkroomItemCodec
         return true;
     }
 
+    private static long nextRestoreDiagnostic;
+    private static void ReportRestoreDifference(Snapshot expected, Snapshot actual)
+    {
+        try
+        {
+            if (Environment.TickCount64 < nextRestoreDiagnostic) return;
+            nextRestoreDiagnostic = Environment.TickCount64 + 2000;
+            string? difference = expected.Identifier != actual.Identifier ? "Identifier" :
+                expected.Count != actual.Count ? "Count" :
+                expected.Nodes.Count != actual.Nodes.Count ? "Nodes.length" : null;
+            if (difference == null)
+            {
+                using var left = JsonDocument.Parse(expected.Payload);
+                using var right = JsonDocument.Parse(actual.Payload);
+                difference = FirstDifference(left.RootElement, right.RootElement, "Payload");
+            }
+            for (var i = 0; difference == null && i < expected.Nodes.Count; i++)
+                difference = FirstDifference(
+                    JsonSerializer.SerializeToElement(expected.Nodes[i], WorkroomStorageState.JsonOptions),
+                    JsonSerializer.SerializeToElement(actual.Nodes[i], WorkroomStorageState.JsonOptions), $"Nodes[{i}]");
+            // Only field paths are logged; never dump item payloads or player values.
+            var path = new string((difference ?? "unknown").Where(c => !char.IsControl(c)).Take(240).ToArray());
+            Core.Log?.Warning($"[PC-RESTORE-DIAG-20261012] item={Core.Clean(expected.Identifier)}; " +
+                $"orientation={expected.Orientation}; firstDifference={path}");
+        }
+        catch { /* Diagnostics must not replace the strict restore failure. */ }
+    }
+
+    private static string? FirstDifference(JsonElement a, JsonElement b, string path)
+    {
+        if (a.ValueKind != b.ValueKind) return path + ":kind";
+        if (a.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var field in a.EnumerateObject())
+            {
+                var child = path + "." + field.Name;
+                if (!b.TryGetProperty(field.Name, out var other)) return child + ":missing";
+                var difference = FirstDifference(field.Value, other, child);
+                if (difference != null) return difference;
+            }
+            foreach (var field in b.EnumerateObject())
+                if (!a.TryGetProperty(field.Name, out _)) return path + "." + field.Name + ":extra";
+            return null;
+        }
+        if (a.ValueKind == JsonValueKind.Array)
+        {
+            if (a.GetArrayLength() != b.GetArrayLength()) return path + ":length";
+            for (var i = 0; i < a.GetArrayLength(); i++)
+            {
+                var difference = FirstDifference(a[i], b[i], $"{path}[{i}]");
+                if (difference != null) return difference;
+            }
+            return null;
+        }
+        return a.GetRawText() == b.GetRawText() ? null : path + ":value";
+    }
+
     internal static bool StackLeaf(Snapshot item)
     {
         if (item.Nodes == null || item.Nodes.Count != 1 || item.Nodes[0] == null) return false;
@@ -354,143 +462,28 @@ internal static class WorkroomItemCodec
 
     internal static bool CanUseOne(Snapshot snapshot) => snapshot.Count == 1;
 
-    // A catalog group is a view over actual Count=1 instances, never a stack.
-    // Refuse unfamiliar graphs without rejecting or rewriting their storage.
-    internal static string? CatalogKey(Snapshot item)
+    // Display grouping never merges the Count=1 originals or their native state.
+    // Any machine, assembly, crate contents or unfamiliar graph stays on its own row.
+    internal static bool IsUnassembledSingle(Snapshot item)
     {
-        try
-        {
-            if (item.Count != 1 || item.Nodes == null || item.Nodes.Count != 1 || item.Nodes[0] == null ||
-                (Components.Find(item.Identifier) == null &&
-                 !WorkroomComponentTemplates.TryPart(item.Identifier, out _, out _, out _) && !IsRepairMaterial(item.Identifier))) return null;
-            var original = item.Nodes[0];
-            if (original.Composition != null || original.Machine != null || original.SlotItems == null ||
-                original.SlotItems.Count != 0 || original.Effects == null) return null;
-            // Current machine records require actual installed parts. Empty
-            // motherboard/case bodies have Machine=null and are eligible here.
-            Validate(item);
-            if (JsonNode.Parse(JsonSerializer.Serialize(item, WorkroomStorageState.JsonOptions)) is not JsonObject copy ||
-                copy[nameof(Snapshot.Payload)] is not JsonObject payload ||
-                payload["saveItems"] is not JsonArray saved || saved.Count != 1 || saved[0] is not JsonObject root ||
-                root["childItems"] is not JsonArray children || children.Count != 0 ||
-                root["childItemInventoryNode"] is not JsonArray inventories || inventories.Count != 0 ||
-                !StackInteger(root["uniqueId"], original.UniqueId) || !StackLong(root["uuid"], original.Uuid) ||
-                !StackInteger(root["unitCount"], 1) || !NormalizeStackPosition(root, item)) return null;
-
-            // The exact native shape, including unknown fields, remains in the
-            // key. Validate the actual rotated footprint before ignoring rotation.
-            var shape = (JsonObject)root["itemModifiedShape"]!;
-            var actual = ValidatePayloadShape(JsonSerializer.SerializeToElement(shape, WorkroomStorageState.JsonOptions));
-            if (!SameShape(actual, item.Footprint)) return null;
-            shape["<orientation>k__BackingField"] = 0;
-            var canonicalShape = ValidatePayloadShape(JsonSerializer.SerializeToElement(shape, WorkroomStorageState.JsonOptions));
-            copy[nameof(Snapshot.Orientation)] = 0;
-            copy[nameof(Snapshot.Footprint)] = JsonSerializer.SerializeToNode(canonicalShape, WorkroomStorageState.JsonOptions);
-            root["uniqueId"] = 0; root["uuid"] = 0L;
-            if (copy[nameof(Snapshot.Nodes)] is not JsonArray nodes || nodes[0] is not JsonObject node ||
-                node[nameof(Node.Scalars)] is not JsonObject scalars || node[nameof(Node.Features)] is not JsonArray features ||
-                node[nameof(Node.ModifiedState)] is not JsonObject modifiedState ||
-                !StackInteger(scalars["uniqueId"], original.UniqueId) || !StackInteger(scalars["unitCount"], 1)) return null;
-            node[nameof(Node.UniqueId)] = 0; node[nameof(Node.Uuid)] = 0L; scalars["uniqueId"] = 0;
-            // Some native items carry disabled, empty tags while otherwise
-            // identical items omit them. Ignore only these exact defaults in
-            // the comparison copy; the saved snapshot stays untouched.
-            IgnoreCatalogDefaultTag(modifiedState, "BOUGHT_PRICE_TAG");
-            IgnoreCatalogDefaultTag(modifiedState, "WINE_SCORE_INT");
-            foreach (var feature in features)
-            {
-                if (feature is not JsonObject featureObject || featureObject[nameof(Feature.Scalars)] is not JsonObject fields) return null;
-                if (fields["parentItemUniqueId"] is { } parent)
-                {
-                    if (parent is not JsonValue value || !value.TryGetValue<int>(out var id)) return null;
-                    if (id == original.UniqueId) fields["parentItemUniqueId"] = "@root";
-                }
-            }
-            using var buffer = new System.IO.MemoryStream();
-            using (var writer = new Utf8JsonWriter(buffer))
-                WriteCatalogCanonical(writer, JsonSerializer.SerializeToElement(copy, WorkroomStorageState.JsonOptions));
-            return System.Text.Encoding.UTF8.GetString(buffer.ToArray());
-        }
-        catch (Exception ex) when (ex is JsonException || ex is InvalidOperationException || ex is ArgumentException ||
-            ex is FormatException || ex is OverflowException || ex is KeyNotFoundException || ex is NotSupportedException)
-        { return null; }
+        if (item == null || item.Count != 1 || item.Nodes == null || item.Nodes.Count != 1 || item.Nodes[0] == null)
+            return false;
+        var node = item.Nodes[0];
+        return node.Composition == null && node.Machine == null && node.SlotItems != null && node.SlotItems.Count == 0;
     }
 
-    private static void WriteCatalogCanonical(Utf8JsonWriter writer, JsonElement value, string path = "")
+    internal static bool CanDisplayGroup(Snapshot item)
     {
-        if (value.ValueKind == JsonValueKind.Object)
-        {
-            var fields = value.EnumerateObject().OrderBy(field => field.Name, StringComparer.Ordinal).ToArray();
-            var names = new HashSet<string>(StringComparer.Ordinal);
-            writer.WriteStartObject();
-            foreach (var field in fields)
-            {
-                // Unknown serializer references cannot be safely rebound.
-                var fieldPath = path + "/" + field.Name;
-                var identity = field.Name.IndexOf("uuid", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    field.Name.IndexOf("uniqueId", StringComparison.OrdinalIgnoreCase) >= 0;
-                var knownIdentity = fieldPath is "/Payload/saveItems[]/uuid" or "/Payload/saveItems[]/uniqueId" or
-                    "/Nodes[]/Uuid" or "/Nodes[]/UniqueId" or "/Nodes[]/Scalars/uniqueId" or
-                    "/Nodes[]/Features[]/Scalars/parentItemUniqueId";
-                if (!names.Add(field.Name) || field.Name is "$ref" or "$id" || identity && !knownIdentity)
-                    throw new InvalidOperationException("目录比较包含未知引用或重复字段。");
-                writer.WritePropertyName(field.Name); WriteCatalogCanonical(writer, field.Value, fieldPath);
-            }
-            writer.WriteEndObject();
-        }
-        else if (value.ValueKind == JsonValueKind.Array)
-        {
-            writer.WriteStartArray();
-            foreach (var element in value.EnumerateArray()) WriteCatalogCanonical(writer, element, path + "[]");
-            writer.WriteEndArray();
-        }
-        else value.WriteTo(writer);
+        if (!IsUnassembledSingle(item)) return false;
+        if (Components.Find(item.Identifier) == null &&
+            !WorkroomComponentTemplates.TryPart(item.Identifier, out _, out _, out _) &&
+            !IsRepairMaterial(item.Identifier) && !ServerRoomMachine.TryDefinition(item.Identifier, out _))
+            return false;
+        try { Validate(item); return true; }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or ArgumentException or
+            FormatException or OverflowException or KeyNotFoundException or NotSupportedException)
+        { return false; }
     }
-
-    private static bool StackInteger(JsonNode? value, int expected) => value is JsonValue number &&
-        number.TryGetValue<int>(out var actual) && actual == expected;
-
-    private static bool StackLong(JsonNode? value, long expected) => value is JsonValue number &&
-        number.TryGetValue<long>(out var actual) && actual == expected;
-
-    private static void IgnoreCatalogDefaultTag(JsonObject modifiedState, string name)
-    {
-        if (modifiedState[name] is not JsonObject tag || tag.Count != 9 ||
-            tag["identifier"] is not JsonValue identifier || !identifier.TryGetValue<string>(out var id) || id != name ||
-            tag["identifierName"] is not JsonValue identifierName ||
-            !identifierName.TryGetValue<string>(out var displayName) || displayName != "TYPE-STRING_" + name ||
-            tag["valueEnabled"] is not JsonValue enabled || !enabled.TryGetValue<bool>(out var isEnabled) || isEnabled ||
-            tag["internalValueString"] is not JsonValue text || !text.TryGetValue<string>(out var stringValue) || stringValue != "" ||
-            !StackInteger(tag["valueInt"], 0) || !StackLong(tag["valueLong"], 0) ||
-            tag["valueFloat"] is not JsonValue floatValue || !floatValue.TryGetValue<float>(out var single) || single != 0 ||
-            tag["valueDouble"] is not JsonValue doubleValue || !doubleValue.TryGetValue<double>(out var twice) || twice != 0 ||
-            tag["valueBool"] is not JsonValue boolean || !boolean.TryGetValue<bool>(out var boolValue) || boolValue) return;
-        modifiedState.Remove(name);
-    }
-
-    private static bool NormalizeStackPosition(JsonObject root, Snapshot item)
-    {
-        // Native AcceptUnchecked writes the inventory placement into this shape.
-        // Ignore only its translation in the comparison copy, keeping the saved
-        // payload, base shape, shape offsets and all actual item state intact.
-        const string x = "<minX>k__BackingField", y = "<minY>k__BackingField";
-        if (root["itemModifiedShape"] is not JsonObject shape || shape.Count != 8 ||
-            shape[x] is not JsonValue xValue || !xValue.TryGetValue<int>(out _) ||
-            shape[y] is not JsonValue yValue || !yValue.TryGetValue<int>(out _) ||
-            !StackInteger(shape["<orientation>k__BackingField"], item.Orientation) ||
-            shape["<flipped>k__BackingField"] is not JsonValue flipped ||
-            !flipped.TryGetValue<bool>(out var mirror) || mirror != item.Flipped ||
-            shape["<width>k__BackingField"] is not JsonValue width ||
-            !width.TryGetValue<int>(out var w) || w <= 0 ||
-            shape["<height>k__BackingField"] is not JsonValue height ||
-            !height.TryGetValue<int>(out var h) || h <= 0 ||
-            shape["outside"] is not JsonValue outside || !outside.TryGetValue<int>(out _) ||
-            shape["data"] is not JsonArray data || data.Count == 0 ||
-            data.Any(cell => cell is not JsonValue value || !value.TryGetValue<int>(out _))) return false;
-        shape[x] = 0; shape[y] = 0;
-        return true;
-    }
-
     private static bool Equal(JsonElement a, JsonElement b)
     {
         if (a.ValueKind != b.ValueKind) return false;

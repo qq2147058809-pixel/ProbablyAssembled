@@ -1,5 +1,5 @@
 {
-  "contract": "pcexpansion-computer-manual-v13",
+  "contract": "pcexpansion-computer-manual-v14",
   "title": "电脑装机与交易手册",
   "pages": [
     {
@@ -18,7 +18,7 @@
         },
         {
           "type": "text",
-          "text": "本版本仅支持新建存档；配件拆装与维修统一在工作间进行。",
+          "text": "存档需有有效的1.0及以上标记；配件拆装与维修统一在工作间进行。",
           "x": 0.127,
           "y": 0.32844,
           "width": 0.76,
