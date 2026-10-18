@@ -27,7 +27,7 @@ internal static class WorkroomGameAdapter
         typeof(WorkroomStorageGroupReleasePatch), typeof(WorkroomStorageGroupDragPatch),
         typeof(WorkroomMultiSelectPressPatch), typeof(WorkroomMultiSelectReleasePatch), typeof(WorkroomMultiSelectMovePatch), typeof(WorkroomMultiSelectUpdatePatch),
         typeof(WorkroomStoreKeyClickPatch), typeof(WorkroomEntryHoverClickPatch),
-        typeof(WorkroomEntryTooltipPatch), typeof(WorkroomEntryTooltipLayerPatch), typeof(WorkroomEntryTooltipShowPatch) };
+        typeof(WorkroomEntryTooltipPatch), typeof(WorkroomEntryTooltipShowPatch) };
     private static bool ownsNavigation, regionIsolated;
     private static bool previousNavigation;
     private static EventSystem capturedEvents, navigationEvents;
@@ -115,7 +115,7 @@ internal static class WorkroomGameAdapter
     internal static void ReportPatchStatus()
     {
         var status = "[工作间接入] 补丁登记核对：" + installed.Count + "/" + required.Length + " 类。";
-        if (HooksReady) Core.Log?.Msg(status);
+        if (HooksReady) Core.Debug(status);
         else Core.Log?.Warning(status + "工作间接入未就绪。");
     }
 
@@ -139,8 +139,23 @@ internal static class WorkroomGameAdapter
 
     internal static bool AtStore()
     {
-        var map = MapUIManager.Instance;
-        return map != null && !map.isOutside && !map.inTransit;
+        return InventoryTransferAllowed();
+    }
+
+    // Native shop inventories remain alive outside. Admission follows the
+    // actual map/scene state, including both sides of a location transition.
+    // Identity recovery uses Inventories directly and must not use this gate.
+    internal static bool InventoryTransferAllowed()
+    {
+        try
+        {
+            var map = MapUIManager.Instance;
+            return map != null && map.currentLocation == MapUIManager.MapLocation.STORE &&
+                !map.isOutside && !map.inTransit &&
+                (map.UIScavengingPanel == null || !map.UIScavengingPanel.activeInHierarchy) &&
+                (map.scavengingScene == null || !map.scavengingScene.activeInHierarchy);
+        }
+        catch { return false; }
     }
 
     internal static bool EventsReady(EventSystem events) => events != null &&
@@ -320,7 +335,7 @@ internal static class WorkroomGameAdapter
                     }
                 }
             }
-            Core.Log?.Msg("[工作间高亮] phase=" + phase + "; pools=" + pools + "; visible=" + visible +
+            Core.Debug("[工作间高亮] phase=" + phase + "; pools=" + pools + "; visible=" + visible +
                 "; remaining=" + remaining + "; skipped=" + skipped);
         }
         catch (Exception ex)
@@ -494,7 +509,7 @@ internal static class WorkroomGameAdapter
         }
         regionIsolated = inside;
         refreshAt = discoverAt = 0;
-        Core.Log?.Msg(inside ? "[工作间遮盖] mode=opaque-overlay; native-visual-leases=none; hit-flags=" + hitTargets.Count :
+        Core.Debug(inside ? "[工作间遮盖] mode=opaque-overlay; native-visual-leases=none; hit-flags=" + hitTargets.Count :
             "[工作间遮盖] Overlay即将退出；店铺命中已恢复，等待出口输入释放。");
     }
 
@@ -647,7 +662,7 @@ internal static class WorkroomGameAdapter
     {
         if (Environment.TickCount64 < interactionNoticeAt) return;
         interactionNoticeAt = Environment.TickCount64 + 2000;
-        Core.Log?.Msg("[工作间隔离] 已拦截店铺交互：" + target);
+        Core.Debug("[工作间隔离] 已拦截店铺交互：" + target);
     }
 
     internal static void SetSharedInputBlocked(bool blocked)
@@ -802,7 +817,7 @@ internal static class WorkroomShopWindowPatch
 internal static class WorkroomMultiSelectPressPatch
 {
     private static bool Prefix(Il2CppSystem.Collections.Generic.ISet<KeyCode> __0) => !WorkroomTrial.OwnsTextInput && !WorkroomTrial.IsolatesStoreRegion &&
-        !WorkroomGameAdapter.OwnsMousePress(__0);
+        !WorkroomGameAdapter.OwnsMousePress(__0) && WorkroomQuickTransfer.AllowPress(__0);
 }
 
 [HarmonyPatch(typeof(ItemMultiSelectHandler), nameof(ItemMultiSelectHandler.OnEventRelease))]
@@ -903,11 +918,21 @@ internal static class WorkroomLoadPatch
         __state = new LoadState();
         // Refusing this load must leave both the live room and its modData intact.
         if (!WorkroomGameAdapter.SaveHooksReady || !WorkroomCashRepair.AllowSessionChange() ||
+            !WorkroomStoryTransfer.AllowSessionChange() || !LuoxiStory.AllowSessionChange() ||
+            !JiangbaiStory.AllowSessionChange() || !MysteriousContact.AllowSessionChange() ||
+            !NpcStoryProgress.AllowSessionChange() || !NpcSmallStories.AllowSessionChange() ||
             !ServerRoomRuntime.AllowSessionChange() ||
             !ServerRoomOrderStock.AllowSessionChange() ||
             !NpcStockOffers.AllowSessionChange()) return false;
         if (__originalMethod.Name == "LoadGame" && !SaveGeneration.PrepareLoad(__instance)) return false;
         __state.Started = true;
+        BusinessRuntime.ChangingSession();
+        WorkroomStoryTransfer.ResetSession();
+        LuoxiStory.ResetSession();
+        JiangbaiStory.ResetSession();
+        MysteriousContact.ResetSession();
+        NpcSmallStories.ResetSession();
+        NpcStoryProgress.ResetSession();
         WorkroomStorage.ResetSession();
         ServerRoomRuntime.ResetSession();
         ServerRoomOrderStock.ResetSession();
@@ -920,6 +945,7 @@ internal static class WorkroomLoadPatch
     private static Exception Finalizer(Exception __exception, PlayerStore __instance, LoadState __state)
     {
         if (__exception != null && __state?.Started == true) SaveGeneration.Failed();
+        if (__exception == null && __state?.Started == true) BusinessRuntime.Wake();
         return __exception;
     }
 }

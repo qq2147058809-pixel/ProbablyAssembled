@@ -131,9 +131,6 @@ internal static class WorkroomComponentParts
         if (node.Identifier != WorkroomComponentTemplates.ItemId(definition, part.Broken))
             throw new InvalidOperationException("部件身份与保存状态不符。");
     }
-    internal static GameItem Create(WorkroomComponentTemplates.Template template, string kind, int tier,
-        bool broken = false, long? intactValue = null, long? actualValue = null) =>
-        Create(WorkroomComponentTemplates.DefaultPart(template, kind, tier), broken, intactValue, actualValue);
     internal static GameItem Create(WorkroomComponentTemplates.PartDefinition definition,
         bool broken = false, long? intactValue = null, long? actualValue = null)
     {
@@ -181,6 +178,7 @@ internal static class WorkroomComponentParts
         if (tier is >= 1 and <= 5) item.EnableTag(Components.TierTags[tier - 1], false);
         if (broken) item.EnableTag(Components.BrokenTag, false); else item.DisableTag(Components.BrokenTag, false);
         item.DisableTag("BROKEN_MACHINE", false);
+        LowerAssemblerNpc.RefreshPurchaseEligibility(item);
         item.mayThisTargetItemFunc = null; item.canThisTargetItemFunc = null; item.onThisTargetItemFunc = null;
         item.mayActivateSlotItemFunc = null; item.canActivateSlotItemFunc = null; item.onActivateSlotItemFunc = null;
         item.soundDragStart = "module_drag"; item.soundDragEnd = "module_drop";
@@ -188,7 +186,9 @@ internal static class WorkroomComponentParts
     internal static string PartName(WorkroomComponentTemplates.PartDefinition definition, bool broken = false)
     {
         var name = definition.Family.PartName(definition.Kind);
-        if (definition.CapacityGB > 0) name = WorkroomComponentTemplates.Text("capacity_part_name", name, FormatCapacity(definition.CapacityGB));
+        if (definition.Family.Key == "psu" && definition.Kind == "power")
+            name = WorkroomComponentTemplates.Text("power_part_name", name, WorkroomComponentTemplates.PsuWatts(definition.Tier));
+        else if (definition.CapacityGB > 0) name = WorkroomComponentTemplates.Text("capacity_part_name", name, FormatCapacity(definition.CapacityGB));
         else if (definition.Specification != "") name = WorkroomComponentTemplates.Text("spec_part_name", name,
             WorkroomComponentTemplates.Text("spec_" + definition.Specification));
         else if (definition.Tier > 0) return WorkroomComponentTemplates.Text(broken ? "part_broken_name" : "part_name", name, definition.Tier);
@@ -202,7 +202,8 @@ internal static class WorkroomComponentParts
         if (definition.CapacityGB > 0) item.shortDescription += "\n" + WorkroomComponentTemplates.Text("capacity_part_description", FormatCapacity(definition.CapacityGB));
         else if (definition.Specification != "") item.shortDescription += "\n" + WorkroomComponentTemplates.Text("common_part_description");
         if (definition.Family.Key == "psu" && definition.Kind == "power")
-            item.shortDescription += "\n" + WorkroomComponentTemplates.Text("power_integrated");
+            item.shortDescription += "\n" + WorkroomComponentTemplates.Text("power_part_description", WorkroomComponentTemplates.PsuWatts(definition.Tier)) +
+                "\n" + WorkroomComponentTemplates.Text("power_integrated");
         if (definition.Family.Key == "fan" && definition.Kind == "rotor") item.shortDescription += "\n" + WorkroomComponentTemplates.Text("rotor_integrated");
         item.longDescription = item.shortDescription; item.flavorText = "";
     }
@@ -210,6 +211,14 @@ internal static class WorkroomComponentParts
     internal static string FormatCapacity(long capacity) => capacity >= 1024 && capacity % 1024 == 0 ? capacity / 1024 + "TB" : capacity + "GB";
     internal static string CapacityText(IEnumerable<WorkroomItemCodec.Snapshot> parts)
     {
+        var power = parts.Where(part => WorkroomComponentTemplates.TryPart(part.Identifier, out var family, out var kind, out _) &&
+            family.Key == "psu" && kind == "power").ToList();
+        if (power.Count > 0)
+        {
+            var rated = power.Sum(part => (long)WorkroomComponentTemplates.PsuWatts(WorkroomComponentTemplates.Definition(part.Identifier).Tier));
+            var working = power.Where(part => !part.Broken).Sum(part => (long)WorkroomComponentTemplates.PsuWatts(WorkroomComponentTemplates.Definition(part.Identifier).Tier));
+            return WorkroomComponentTemplates.Text("power_health_summary", power.Count, rated, working, WorkroomComponentTemplates.PsuTier(rated));
+        }
         var capacitive = parts.Where(part => WorkroomComponentTemplates.TryPart(part.Identifier, out _, out var kind, out _) &&
             kind is "memory" or "flash").ToList();
         if (capacitive.Count == 0) return "";
@@ -311,6 +320,9 @@ internal static class WorkroomComponentParts
             var capacity = parts.Sum(part => (long)(part.Nodes[0].Part?.CapacityGB ?? 0));
             return WorkroomComponentTemplates.RamTier(capacity);
         }
+        if (family.Key == "psu")
+            return WorkroomComponentTemplates.PsuTier(parts.Where(part => WorkroomComponentTemplates.Definition(part.Identifier).Kind == "power")
+                .Sum(part => (long)WorkroomComponentTemplates.PsuWatts(WorkroomComponentTemplates.Definition(part.Identifier).Tier)));
         return parts.Select(part => WorkroomComponentTemplates.TryPart(part.Identifier, out _, out var kind, out var tier) &&
             family.PerformanceKind(kind) ? tier : 0).Where(tier => tier > 0).DefaultIfEmpty(0).Min();
     }
@@ -406,7 +418,7 @@ internal static class WorkroomComponentParts
                     (Il2CppSystem.Func<GameItem>)(Func<GameItem>)(() => Create(captured, true)));
                 count += 2;
             }
-            Core.Log?.Msg("六类叶子部件工厂注册完成：" + count + " 个（完好/破损各 " + WorkroomComponentTemplates.Definitions.Count + " 个，仅当前配方）。");
+            Core.Debug("六类叶子部件工厂注册完成：" + count + " 个（完好/破损各 " + WorkroomComponentTemplates.Definitions.Count + " 个，仅当前配方）。");
         }
     }
 }

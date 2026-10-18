@@ -1,6 +1,6 @@
 {
   "ContractVersion": "pcexpansion-localization-v1",
-  "BaseCatalogSha256": "BC42DCA4523807C485A37C706A830DE62838DD2C6D353C0EDE751F119A1257E0",
-  "Entries": 737,
-  "ManualContractVersion": "pcexpansion-computer-manual-v14"
+  "BaseCatalogSha256": "3182264F5BC967AC3450BB99D7559D09A632510842A3A71C7D9F1D1E65C0F145",
+  "Entries": 1287,
+  "ManualContractVersion": "pcexpansion-computer-manual-v27"
 }

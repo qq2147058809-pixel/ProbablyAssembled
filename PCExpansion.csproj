@@ -46,6 +46,7 @@
     <EmbeddedResource Include="assets\audio\*.ogg" LogicalName="PCExpansion.Audio.%(Filename)%(Extension)" />
     <EmbeddedResource Include="src\Infrastructure\translations.zh.json" LogicalName="PCExpansion.Localization.zh.json" />
     <EmbeddedResource Include="src\Infrastructure\computer_manual.zh.json" LogicalName="PCExpansion.Manual.zh.json" />
+    <EmbeddedResource Include="Stories\npc-stories.json" LogicalName="PCExpansion.Stories.npc-stories.json" />
   </ItemGroup>
   <Target Name="RejectUnsupportedDirectBuild"
           BeforeTargets="CoreCompile"

@@ -61,12 +61,21 @@ internal static partial class ServerRoomOperations
         if (source == null || source.Place is not ("box" or "room") ||
             !ServerRoomMachine.TryDefinition(source.Item.Identifier, out var definition) || source.Item.Count != 1)
             throw new InvalidOperationException("请选择储物箱或工作间内的专用机箱。");
+        if (definition.Tier > ServerRoomState.HighestTier(current))
+            throw new InvalidOperationException("当前机房尚未解锁该档机箱，请先完成对应供电和散热扩建。");
         var nextState = ServerRoomState.Advance(current);
         nextState.Racks.Add(new ServerRoomState.RackReference
         {
             RackIndex = rack, RecordId = recordId, UniqueId = source.Item.Nodes[0].UniqueId,
             Kind = definition.Kind, CoinId = ServerRoomState.CoinIds[0], Priority = rack
         });
+        if (definition.Kind == ServerRoomMachine.Mining)
+        {
+            var identity = source.Item.Nodes[0].UniqueId;
+            var maintenance = nextState.Maintenance.SingleOrDefault(item => item.UniqueId == identity);
+            if (maintenance == null) nextState.Maintenance.Add(new ServerRoomState.Maintenance { UniqueId = identity, Tier = definition.Tier });
+            else if (maintenance.Tier != definition.Tier) throw new InvalidOperationException("箱体身份与维护型号不一致。");
+        }
         ServerRoomState.Validate(nextState);
         var nextStorage = WorkroomStorage.State.Items.Select(record => record.Id == recordId
             ? new WorkroomStorageState.Record { Id = record.Id, Place = "rack", Slot = WorkroomStorageState.RackSlot(rack), Item = record.Item }

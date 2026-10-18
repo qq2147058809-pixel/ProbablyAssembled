@@ -21,6 +21,7 @@ internal static class ServerRoomOrderStock
     private const string StockTag = "PCREPAIR_SERVER_ORDER_STOCK";
     private static long retryAt, warnAt;
     private static readonly HashSet<string> unresolvedPurchases = new(StringComparer.Ordinal);
+    internal static bool NeedsWork => unresolvedPurchases.Count != 0 || ServerRoomOrders.HasVisitOrders;
 
     internal static bool IsDelivery(StoreClient? client) =>
         PhoneAssemblerNpc.IsPhoneAssembler(client) && client!.IsTag(DeliveryTag);
@@ -90,6 +91,13 @@ internal static class ServerRoomOrderStock
         ServerRoomOrders.Dispatch(token, VisitDay(client), Requests(client));
     }
 
+    internal static string QueueIdentity(StoreClient client)
+    {
+        if (!IsDelivery(client)) throw new InvalidOperationException("送货来访身份已变化。");
+        return Visit(client) + ":" + VisitDay(client).ToString(CultureInfo.InvariantCulture) + ":" +
+            string.Join(",", Requests(client));
+    }
+
     internal static void Stock(PlayerStore store, StoreClient client)
     {
         if (!IsDelivery(client) || !store.isClientArrived || !ServerRoomOrders.Ready ||
@@ -103,7 +111,7 @@ internal static class ServerRoomOrderStock
         {
             if (!expected.Contains(order.Id)) throw new InvalidOperationException("来访货单与机房订单快照不一致。");
             if (order.Placed) continue;
-            var definition = ServerRoomMachine.DefinitionFor(order.Kind, order.Tier);
+            var identifier = ServerRoomOrderCatalog.Identifier(order.Kind, order.Tier);
             var itemOrderTag = ItemOrderPrefix + order.Id;
             var itemVisitTag = ItemVisitPrefix + token;
             var offered = NpcStockOffers.Probe(item => item.IsTag(itemOrderTag) && item.IsTag(itemVisitTag));
@@ -119,8 +127,8 @@ internal static class ServerRoomOrderStock
             try
             {
                 NpcStockOffers.Stock(store, client, StockTag, "DELIVERY_ORDER_" + order.Id,
-                    () => new List<string> { definition.Identifier }, 1, 1,
-                    id => id == definition.Identifier,
+                    () => new List<string> { identifier }, 1, 1,
+                    id => id == identifier,
                     item =>
                     {
                         item.EnableTag(itemOrderTag, false);
@@ -158,7 +166,7 @@ internal static class ServerRoomOrderStock
 
     internal static void Update(PlayerStore store)
     {
-        if (!ServerRoomOrders.Ready || Environment.TickCount64 < retryAt) return;
+        if (!NeedsWork || Environment.TickCount64 < retryAt || !ServerRoomOrders.Ready) return;
         retryAt = Environment.TickCount64 + 750;
         try
         {
@@ -176,7 +184,7 @@ internal static class ServerRoomOrderStock
 
     internal static bool BeforeSave()
     {
-        if (!ServerRoomOrders.BeforeSave()) return false;
+        if (!ServerRoomRuntime.ValidateCurrent() || !ServerRoomOrders.BeforeSave() || !ServerRoomDeliverySchedule.BeforeSave()) return false;
         if (!ServerRoomOrders.Ready) return unresolvedPurchases.Count == 0;
         try
         {
@@ -187,8 +195,8 @@ internal static class ServerRoomOrderStock
         catch (Exception ex) { Warn("机房预订成交待确认，暂缓保存：", ex); return false; }
     }
 
-    internal static bool AllowSessionChange() => unresolvedPurchases.Count == 0 ?
-        ServerRoomOrders.AllowSessionChange() : BeforeSave() && ServerRoomOrders.AllowSessionChange();
+    internal static bool AllowSessionChange() => ServerRoomDeliverySchedule.BeforeSave() &&
+        (unresolvedPurchases.Count == 0 ? ServerRoomOrders.AllowSessionChange() : BeforeSave() && ServerRoomOrders.AllowSessionChange());
 
     internal static void ResetSession()
     {
@@ -215,7 +223,7 @@ internal static class ServerRoomOrderStock
                 if (!item.IsTag(ItemOrderPrefix + order.Id) || !GeneralHelper.IsItemOwned(item)) continue;
                 if (purchased != null) throw new InvalidOperationException("同一预订出现多台已拥有机箱。");
                 if (!item.IsTag(ItemVisitPrefix + order.VisitId) ||
-                    Core.Clean(item.identifier) != ServerRoomMachine.DefinitionFor(order.Kind, order.Tier).Identifier)
+                    Core.Clean(item.identifier) != ServerRoomOrderCatalog.Identifier(order.Kind, order.Tier))
                     throw new InvalidOperationException("已拥有预订机箱的型号或来访凭据不一致。");
                 purchased = item;
             }
@@ -248,7 +256,8 @@ internal static class ServerRoomOrderStock
 
     private static bool VisitorLive(PlayerStore store, string token)
     {
-        if (store.isClientArrived && IsDelivery(store.currentClientInstance?.storeClient) &&
+        // The current reference also covers entry and departure animations.
+        if (IsDelivery(store.currentClientInstance?.storeClient) &&
             Visit(store.currentClientInstance!.storeClient) == token) return true;
         var queue = store.storeClientManager?.clientStack;
         if (queue != null)
@@ -278,7 +287,7 @@ internal static class ServerRoomOrderStock
             var id = tag.Substring(ClientOrderPrefix.Length);
             if (!ValidGuid(id) || !found.Add(id)) throw new InvalidOperationException("洛夕订货请求身份无效或重复。");
         }
-        if (found.Count > ServerRoomOrderState.Limit) throw new InvalidOperationException("洛夕订货请求超过三台。");
+        if (found.Count > ServerRoomOrderState.Limit) throw new InvalidOperationException("洛夕订货请求超过五笔。");
         return found.OrderBy(id => id, StringComparer.Ordinal).ToArray();
     }
 
@@ -328,9 +337,12 @@ internal static class ServerRoomOrderStock
         {
             try
             {
-                if (gameItem == null || !ServerRoomOrders.Ready || !GeneralHelper.IsItemOwned(gameItem)) return;
+                if (gameItem == null || !ServerRoomOrders.Ready) return;
                 var order = ServerRoomOrders.List().FirstOrDefault(entry => gameItem.IsTag(ItemOrderPrefix + entry.Id));
                 if (order == null) return;
+                // Native OnItemBought may precede its ownership write. The delayed work checks again.
+                ServerBusiness.Wake(__instance);
+                if (!GeneralHelper.IsItemOwned(gameItem)) return;
                 unresolvedPurchases.Add(order.Id);
                 ReconcileOwned(__instance);
             }

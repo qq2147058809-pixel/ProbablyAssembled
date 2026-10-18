@@ -43,17 +43,18 @@ internal static class WorkroomPanelSkin
         TMP_FontAsset font, float size, Action click, bool slot = false)
     {
         var face = AssemblyDebugUi.Image(parent, name, Color.white, true);
+        if (!slot) UiRoundedGeometry.Fill(face);
         var button = Add<Button>(face.gameObject);
         button.targetGraphic = face;
         button.transition = Selectable.Transition.None;
         button.onClick.AddListener(DelegateSupport.ConvertDelegate<UnityAction>((Action)(() =>
         {
-            if (RoomAudioSettingsUi.BlocksInput) return;
+            if (RoomAudioSettingsUi.BlocksInput || !AllowsButton(face.gameObject)) return;
             click();
             if (!slot && name is "Close" or "Previous" or "Next" or "WorkbenchProcessing" or "WorkbenchAssembly") RoomAudio.Play("ui");
         })));
         var binding = new Binding { Owner = owner, Root = face.gameObject, Window = Window(parent),
-            Button = button, Face = face, Slot = slot, Edges = Frame(face.gameObject, new Color(.65f,.67f,.58f,1)) };
+            Button = button, Face = face, Slot = slot, Edges = Frame(face.gameObject, new Color(.65f,.67f,.58f,1), slot ? 0 : UiRoundedGeometry.ControlRadius) };
         if (!slot)
         {
             binding.Label = AssemblyDebugUi.Text(face.transform, "Label", text, font, size);
@@ -74,8 +75,17 @@ internal static class WorkroomPanelSkin
     {
         if (bindings.TryGetValue(root.Pointer, out var binding)) binding.Selected = selected;
     }
-    private static Image[] Frame(GameObject root, Color color)
+    private static bool AllowsButton(GameObject button) => WorkroomPickerUi.OwnsInput
+        ? WorkroomPickerUi.AllowsButton(button) : WorkroomAutoFillUi.AllowsButton(button);
+    private static Image[] Frame(GameObject root, Color color, int radius = UiRoundedGeometry.ControlRadius)
     {
+        if (radius > 0)
+        {
+            var outline = AssemblyDebugUi.Image(root.transform, "RoundedFrame", color, false);
+            UiRoundedGeometry.Outline(outline, radius);
+            AssemblyDebugUi.Stretch(outline.gameObject);
+            return new[] { outline };
+        }
         var result = new Image[4];
         for (var i = 0; i < 4; i++)
         {
@@ -88,17 +98,20 @@ internal static class WorkroomPanelSkin
         }
         return result;
     }
-    internal static GameObject Panel(GameObject parent, string name, float x, float y, float width, float height, Color color)
+    internal static GameObject Panel(GameObject parent, string name, float x, float y, float width, float height, Color color,
+        int radius = UiRoundedGeometry.ControlRadius)
     {
         var face = AssemblyDebugUi.Image(parent.transform, name, color, false).gameObject;
+        UiRoundedGeometry.Fill(face.GetComponent<Image>(), radius);
         AssemblyDebugUi.Place(face, x, y, width, height);
-        Frame(face, new Color(.40f,.47f,.42f,1));
+        Frame(face, new Color(.40f,.47f,.42f,1), radius);
         return face;
     }
     internal static void Scene(GameObject parent, string theme, bool sidebar = true)
     {
         parent.GetComponent<Image>().color = new Color(.12f,.16f,.15f,1);
-        Frame(parent, new Color(.55f,.58f,.49f,1));
+        UiRoundedGeometry.Fill(parent.GetComponent<Image>(), UiRoundedGeometry.WindowRadius);
+        Frame(parent, new Color(.55f,.58f,.49f,1), UiRoundedGeometry.WindowRadius);
         var scene = AssemblyDebugUi.Image(parent.transform, "OperationSurface", Color.white, false);
         scene.sprite = WorkroomArt.Get("workroom_panel_"+theme);
         AssemblyDebugUi.Place(scene.gameObject, sidebar ? SceneX : 6, SceneY, 528, 352);
@@ -118,7 +131,7 @@ internal static class WorkroomPanelSkin
         foreach (var binding in bindings.Values)
         {
             if (binding.Owner.Pointer != owner.Pointer || !binding.Root.activeInHierarchy) continue;
-            var hover = allowPress && front != null && binding.Window.Pointer == front.Pointer && Input.mousePresent &&
+            var hover = allowPress && AllowsButton(binding.Root) && front != null && binding.Window.Pointer == front.Pointer && Input.mousePresent &&
                 RectTransformUtility.RectangleContainsScreenPoint(AssemblyDebugUi.Rect(binding.Root), Input.mousePosition, null);
             if (hover && binding.Button.interactable && Input.GetMouseButtonDown(0)) pressed = binding;
             Paint(binding, !binding.Button.interactable ? 4 : hover && ReferenceEquals(pressed, binding) ? 2 : hover ? 1 : binding.Selected ? 3 : 0);

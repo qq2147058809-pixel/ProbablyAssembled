@@ -10,6 +10,8 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
+using BrowserTone = PCExpansion.ServerRoomBrowserTheme.Tone;
+
 namespace PCExpansion;
 
 /// <summary>机房场景与经营电脑；只读状态，资产操作交给统一命令。</summary>
@@ -51,8 +53,6 @@ internal sealed partial class ServerRoomView : IDisposable
     private readonly List<ActionWidget> widgets = new(), sourceRows = new(), installedRows = new();
     private readonly List<TextMeshProUGUI> sourceTexts = new(), installedTexts = new();
     private ActionWidget primaryAction, backAction, takeAction;
-    private ActionWidget firstOrderAction, secondOrderAction, thirdOrderAction;
-    private ActionWidget firstOrderCancel, secondOrderCancel, thirdOrderCancel;
     private ActionWidget sourcePrevious, sourceNext, installedPrevious, installedNext, cpuChoice, ramChoice;
     private GameObject actions, lists;
     private TextMeshProUGUI noticeLabel, sourceHeading, installedHeading, sourcePageLabel, installedPageLabel;
@@ -83,6 +83,9 @@ internal sealed partial class ServerRoomView : IDisposable
     private string selectedServer = "";
     private bool keyboardOwned;
     private Action confirmation;
+    private ActionWidget confirmDetails;
+    private string confirmationSummary = "", confirmationDetails = "", confirmationAcceptLabel = "";
+    private bool confirmationExpanded;
     private string confirmationRun;
     private int confirmationSlot, confirmationDay, confirmationCash;
     private long confirmationRevision, confirmationStorageEpoch, confirmationStorageRevision;
@@ -94,7 +97,7 @@ internal sealed partial class ServerRoomView : IDisposable
         "confirmation_expired", "operation_summary", "upgrade", "operation_hint", "rack_summary", "manage", "running", "stopped",
         "coin.anchor", "coin.matrix", "coin.stellar", "coin.pulse", "coin.singularity" };
 
-    internal bool OwnsTextInput => !disposing && (keyboardOwned || AssemblyDebugUi.Alive(quantity) && quantity.isFocused);
+    internal bool OwnsTextInput => !disposing && (keyboardOwned || AnyBrowserInputFocused());
 
     internal bool Alive
     {
@@ -114,6 +117,7 @@ internal sealed partial class ServerRoomView : IDisposable
                 !AssemblyDebugUi.Alive(browserFrame) || !AssemblyDebugUi.Alive(browserDesktop) ||
                 !AssemblyDebugUi.Alive(browserRack) || !AssemblyDebugUi.Alive(browserCatalog) ||
                 !AssemblyDebugUi.Alive(browserSidebar) || !AssemblyDebugUi.Alive(coinMenu) ||
+                !HardcoreAlive ||
                 !(sceneHover?.Alive ?? false)) return false;
             foreach (var button in sceneButtons) if (!AssemblyDebugUi.Alive(button)) return false;
             foreach (var button in panelButtons) if (!AssemblyDebugUi.Alive(button)) return false;
@@ -179,7 +183,7 @@ internal sealed partial class ServerRoomView : IDisposable
         if (sampleFrame != Time.frameCount)
         {
             sampleFrame = Time.frameCount;
-            var focused = AssemblyDebugUi.Alive(quantity) && quantity.isFocused;
+            var focused = AnyBrowserInputFocused();
             if (focused) { keyboardOwned = true; inputNeutralFrames = 0; }
             else if (keyboardOwned)
             {
@@ -198,7 +202,11 @@ internal sealed partial class ServerRoomView : IDisposable
             if (wasOpen && !panelState.IsOpen) ClearSelection();
         }
         canvas.gameObject.SetActive(visible);
-        RefreshIfChanged();
+        if (visible)
+        {
+            RefreshJiangbaiResident();
+            RefreshIfChanged();
+        }
         SyncInteraction();
     }
 
@@ -317,6 +325,7 @@ internal sealed partial class ServerRoomView : IDisposable
         AssemblyDebugUi.Stretch(speakerArt.gameObject);
         sceneHover.AddRoomSprite(speaker, speakerArt.sprite, speakerRect, canvas, parent, null, null,
             () => RoomAudio.Text("speaker_hint"));
+        DrawJiangbaiResident();
     }
 
     private void DrawRack(Transform parent, float x, int firstSlot)
@@ -347,7 +356,8 @@ internal sealed partial class ServerRoomView : IDisposable
 
     private TMP_InputField MakeQuantity(Transform parent)
     {
-        var background = AssemblyDebugUi.Image(parent, "Quantity", WebPaper, true);
+        var background = AssemblyDebugUi.Image(parent, "Quantity", ServerRoomBrowserTheme.ColorFor(WebPaper), true);
+        UiRoundedGeometry.Fill(background);
         AssemblyDebugUi.Place(background.gameObject, 856, 88, 242, 44);
         WebBorder(background.transform, "InputBorder", 0, 0, 242, 44);
         var viewport = AssemblyDebugUi.New("TextViewport", background.transform);
@@ -361,11 +371,13 @@ internal sealed partial class ServerRoomView : IDisposable
         input.pointSize = 18; input.lineType = TMP_InputField.LineType.SingleLine;
         input.contentType = TMP_InputField.ContentType.Standard;
         input.characterLimit = 21; input.richText = false; input.restoreOriginalTextOnEscape = false;
-        input.navigation = new Navigation { mode = Navigation.Mode.None }; input.transition = Selectable.Transition.None;
-        input.customCaretColor = true; input.caretColor = WebInk;
-        input.selectionColor = new Color(.25f, .55f, .88f, .35f); input.text = "0.1";
+        input.navigation = new Navigation { mode = Navigation.Mode.None }; input.transition = Selectable.Transition.ColorTint;
+        input.customCaretColor = true; input.caretColor = ServerRoomBrowserTheme.ColorFor(WebInk);
+        SetBrowserTone(background, WebPaper);
+        RegisterBrowserSelectable(input);
+        input.selectionColor = ServerRoomBrowserTheme.Selection; input.text = "0.1";
         input.onValueChanged.AddListener(Il2CppInterop.Runtime.DelegateSupport.ConvertDelegate<UnityEngine.Events.UnityAction<string>>(
-            (string value) => RefreshBrowserTradeAmount()));
+            (string value) => TradeInputChanged()));
         return input;
     }
 
@@ -373,9 +385,8 @@ internal sealed partial class ServerRoomView : IDisposable
     {
         if (!panelState.Open(true)) return;
         ClearSelection();
-        mode = PanelMode.Computer;
         panelTitle.text = Text("computer_title");
-        SetPage(0);
+        browserMinimized = false; RefreshContent();
         SyncInteraction();
     }
 
@@ -405,7 +416,7 @@ internal sealed partial class ServerRoomView : IDisposable
     private ActionWidget Widget(Transform parent, string name, float x, float y, float w, float h)
     {
         var widget = new ActionWidget();
-        widget.Root = Button(parent, name, x, y, w, h, WebPaper, true,
+        widget.Root = Button(parent, name, x, y, w, h, ServerRoomBrowserTheme.ColorFor(WebPaper), true,
             () => { if (widget.Allowed) widget.Action?.Invoke(); });
         widget.Control = widget.Root.GetComponent<Button>();
         widget.Label = WebLabel(widget.Root.transform, "Label", "", 4, 0, w - 8, h, h < 36 ? 14 : 16, false);
@@ -424,7 +435,7 @@ internal sealed partial class ServerRoomView : IDisposable
     private void Bind(ActionWidget widget, string text, bool allowed, Action action, bool show = true)
     {
         widget.Action = action; widget.Allowed = allowed;
-        widget.Label.text = text; widget.Label.color = allowed ? WebInk : WebMuted; widget.Root.SetActive(show);
+        widget.Label.text = text; StyleWidget(widget); widget.Root.SetActive(show);
     }
 
     private void Execute(Action action)
@@ -437,7 +448,7 @@ internal sealed partial class ServerRoomView : IDisposable
         SyncInteraction();
         var before = ServerRoomRuntime.Current;
         var beforeRevision = before?.Revision;
-        var beforeOrders = ServerRoomOrders.Current?.Revision;
+        var beforeOrders = ServerRoomOrders.CurrentRevision;
         var beforeStorage = WorkroomStorage.State.Revision;
         var beforeCount = WorkroomStorage.State.Items.Count;
         try
@@ -445,7 +456,7 @@ internal sealed partial class ServerRoomView : IDisposable
             action(); notice = M2("success"); noticeIsError = false;
             var after = ServerRoomRuntime.Current;
             if (!ServerRoomRuntime.Pending && !WorkroomCashRepair.Pending &&
-                (after?.Revision != beforeRevision || ServerRoomOrders.Current?.Revision != beforeOrders || WorkroomStorage.State.Revision != beforeStorage))
+                (after?.Revision != beforeRevision || ServerRoomOrders.CurrentRevision != beforeOrders || WorkroomStorage.State.Revision != beforeStorage))
             {
                 var cue = "confirm";
                 if (before != null && after != null)
@@ -474,12 +485,13 @@ internal sealed partial class ServerRoomView : IDisposable
         notice = M2("error", exception.Message);
         noticeIsError = true;
         if (AssemblyDebugUi.Alive(noticeLabel))
-        { noticeLabel.text = notice; noticeLabel.color = new Color(.72f, .20f, .16f, 1); }
+        { noticeLabel.text = notice; SetBrowserTone(noticeLabel, BrowserTone.Error); }
         Core.Log?.Warning("机房界面操作失败：" + exception);
     }
 
     private void ClearFocus()
     {
+        ClearHardcoreFocus();
         if (AssemblyDebugUi.Alive(quantity) && quantity.isFocused)
         { keyboardOwned = true; inputNeutralFrames = 0; quantity.DeactivateInputField(); }
         var events = EventSystem.current;
@@ -491,10 +503,8 @@ internal sealed partial class ServerRoomView : IDisposable
 
     private void ClearSelection()
     {
-        ClearFocus(); ClearBrowserSelection(); selectedRack = -1; selectedPage = sourcePage = installedPage = 0;
-        CancelConfirmation(); minerPage = leasePage = 0; selectedServer = "";
-        partKind = "cpu"; notice = ""; selectedOrderId = ""; noticeIsError = false;
-        foreach (var widget in widgets) { widget.Action = null; widget.Allowed = false; }
+        // Closing a window is not a command to discard a draft or pending order.
+        ClearFocus(); CloseBrowserMenus();
         renderedRevision = "";
     }
 
@@ -503,12 +513,13 @@ internal sealed partial class ServerRoomView : IDisposable
         try
         {
             var current = ServerRoomRuntime.Current;
+            EnsureHardcoreSession(current);
             var ready = ServerRoomRuntime.Ready && current != null;
             var visit = ready ? ServerRoomOperations.ActiveVisitId() : "";
             var revision = (current?.Run ?? "") + "/" + current?.Slot + "/" + current?.Revision + "/" +
                 WorkroomStorage.State.Epoch + "/" + WorkroomStorage.State.Revision + "/" + ready + "/" +
-                ServerRoomRuntime.Error + "/" + visit + "/" + ServerRoomOrders.Current?.Revision + "/" + selectedOrderId + "/" +
-                LanguageText.LocaleCode + "/" + Cash() + "/" + Today() + "/" + ServerRoomDaily.AllowCommands;
+                ServerRoomRuntime.Error + "/" + visit + "/" + ServerRoomOrders.CurrentRevision + "/" + selectedOrderId + "/" +
+                LanguageText.LocaleCode + "/" + Cash() + "/" + Today() + "/" + ServerRoomDaily.AllowCommands + "/" + LuoxiStory.Unlocked;
             if (revision == renderedRevision) return;
             renderedRevision = revision;
             var unlocked = ready ? ServerRoomState.UnlockedSlots(current) : 0;
@@ -520,11 +531,11 @@ internal sealed partial class ServerRoomView : IDisposable
                 var lease = entry == null ? null : current.Leases.FirstOrDefault(item => item.RecordId == entry.RecordId);
                 var fact = entry == null ? null : facts[entry.RecordId];
                 var unpaid = entry != null && forecast.Unpaid.Contains(entry.RecordId);
-                var state = RackVisualState(rack >= unlocked, entry, lease != null, fact);
+                var state = RackVisualState(rack >= unlocked, entry, lease != null, fact, forecast);
                 RefreshRackArtwork(rack, rack < unlocked ? entry : null);
                 var status = rack >= unlocked ? Text("locked") : entry == null ? Text("empty") :
                     lease != null ? M3("leased") : !fact.CanRun ? M3("cannot_run") :
-                    !entry.PoweredOn ? M3("manual_stop") : unpaid ? M3("unpaid") : M3("running");
+                    !entry.PoweredOn ? M3("manual_stop") : PlanReason(forecast, entry.RecordId);
                 rackLabels[rack].text = status;
                 rackHoverDetails[rack] = entry == null || rack >= unlocked ? status :
                     M2(entry.Kind) + " · " + (lease != null ? M3("lease_locked", lease.RemainingDays, lease.DueDay) :
@@ -538,12 +549,13 @@ internal sealed partial class ServerRoomView : IDisposable
     }
 
     private static ServerRoomStatusArt.State RackVisualState(bool locked, ServerRoomState.RackReference entry,
-        bool leased, ServerRoomEconomy.MachineFact fact)
+        bool leased, ServerRoomEconomy.MachineFact fact, Forecast forecast)
     {
         if (locked) return ServerRoomStatusArt.State.Locked;
         if (entry == null) return ServerRoomStatusArt.State.Empty;
         if (leased) return ServerRoomStatusArt.State.Leased;
-        return entry.PoweredOn && fact.CanRun ? ServerRoomStatusArt.State.Running : ServerRoomStatusArt.State.Stopped;
+        return entry.PoweredOn && fact.CanRun && forecast != null && !forecast.Stopped.Contains(entry.RecordId)
+            ? ServerRoomStatusArt.State.Running : ServerRoomStatusArt.State.Stopped;
     }
 
     private void RefreshRackArtwork(int rack, ServerRoomState.RackReference entry)
@@ -564,6 +576,7 @@ internal sealed partial class ServerRoomView : IDisposable
     private void RefreshContent()
     {
         if (!built || disposing || !panelState.IsOpen) return;
+        EnsureHardcoreSession(ServerRoomRuntime.Current);
         foreach (var widget in widgets) { widget.Root.SetActive(false); widget.Allowed = false; widget.Action = null; }
         foreach (var label in sourceTexts.Concat(installedTexts)) { label.text = ""; label.gameObject.SetActive(false); }
         sourceHeading.text = installedHeading.text = sourcePageLabel.text = installedPageLabel.text = "";
@@ -576,15 +589,17 @@ internal sealed partial class ServerRoomView : IDisposable
         try
         {
             var current = ServerRoomRuntime.Current;
+            EnsureHardcoreSession(current);
             if (!ServerRoomRuntime.Ready || current == null)
                 panelBody.text = M2("unavailable", ServerRoomRuntime.Error ?? "");
             else if (mode == PanelMode.Computer) RefreshComputer(current);
             else if (mode == PanelMode.Catalog) RefreshCatalog(current);
             else RefreshRack(current);
+            RefreshHardcore(current);
             RefreshConfirmation();
             RefreshBrowserShell(current);
             noticeLabel.text = notice != "" ? notice : ServerRoomRuntime.Ready && current != null ? Web("ready") : M3("not_ready");
-            noticeLabel.color = noticeIsError ? new Color(.72f, .20f, .16f, 1) : WebMuted;
+            SetBrowserTone(noticeLabel, noticeIsError ? BrowserTone.Error : WebMuted);
             // Source models and error strings can introduce characters absent from
             // the static controls; prepare the actual displayed text as well.
             AssemblyDebugFonts.Prepare(Text("title"), string.Join("", allLabels.Select(label => label.text)));
@@ -604,6 +619,7 @@ internal sealed partial class ServerRoomView : IDisposable
         panelTitle.text = Text("computer_title");
         if (current.Enabled)
         {
+            if (hardcorePage != HardcorePage.None) return;
             if (selectedPage == 0) RefreshOverview(current);
             else if (selectedPage == 1) RefreshMining(current);
             else if (selectedPage == 2) RefreshTrading(current);
@@ -614,37 +630,48 @@ internal sealed partial class ServerRoomView : IDisposable
         actions.SetActive(true);
         Bind(primaryAction, M2("enable", ServerRoomState.EnableCost), Cash() >= ServerRoomState.EnableCost,
             () => Execute(ServerRoomOperations.Enable));
-        StyleWidget(primaryAction, WebBlue, Color.white);
+        StyleWidget(primaryAction, WebBlue, BrowserTone.OnAccent);
         slotStatus.text = Web("available_cash") + "：" + Web("cash_unit", Cash());
     }
 
     private static int Cash() => PlayerStore.IsInstanceExist() && PlayerStore.instance != null ? PlayerStore.instance.GetCash() : 0;
     private static int Today() => StoreStation.Instance != null ? StoreStation.GetDayCounter() : -1;
-    private static string PriceNumber(decimal value) => value.ToString(value > 1000000000m ? "0.###E+0" : "0.########", CultureInfo.InvariantCulture);
-    private static string Quantity(long units) => (units / 10m).ToString("0.0", CultureInfo.InvariantCulture);
-    private static string Progress(ServerRoomState.Fraction fraction)
+    private static string PriceNumber(decimal value) => value != 0m && Math.Abs(value) < .01m
+        ? value.ToString("0.###E+0", CultureInfo.InvariantCulture)
+        : decimal.Round(value, 2, MidpointRounding.AwayFromZero)
+            .ToString(Math.Abs(value) > 1000000000m ? "0.##E+0" : "0.##", CultureInfo.InvariantCulture);
+    private static string AveragePrice(decimal cost, long microUnits)
     {
-        var n = BigInteger.Parse(fraction.Numerator, CultureInfo.InvariantCulture);
-        var d = BigInteger.Parse(fraction.Denominator, CultureInfo.InvariantCulture);
-        return Number((decimal)(n * 10000 / d) / 100m);
+        if (microUnits == 0) return "0";
+        try { return PriceNumber(cost / (microUnits / 1000000m)); }
+        catch (OverflowException)
+        {
+            // A valid total cost divided by a fractional holding can exceed decimal's range.
+            return ((double)cost / (microUnits / 1000000d)).ToString("0.##E+0", CultureInfo.InvariantCulture);
+        }
     }
+    private static string Quantity(long units) => (units / 1000000m).ToString("0.######", CultureInfo.InvariantCulture);
     private sealed class Forecast
     {
         internal int Demand, Payable;
         internal HashSet<string> Unpaid = new(StringComparer.Ordinal);
-        internal decimal[] Compute = new decimal[5];
+        internal decimal[] Produced = new decimal[5];
+        internal HashSet<string> Stopped = new(StringComparer.Ordinal);
+        internal ServerRoomEconomy.OperatingPlan Plan = new();
     }
     private static Forecast ForecastNight(ServerRoomState.Document current, IReadOnlyList<ServerRoomEconomy.MachineFact> machines)
     {
-        var result = new Forecast(); var cash = Cash(); var facts = machines.ToDictionary(fact => fact.RecordId, StringComparer.Ordinal);
-        foreach (var rack in current.Racks.Where(rack => rack.Kind == "mining" && rack.PoweredOn).OrderBy(rack => rack.Priority).ThenBy(rack => rack.RackIndex))
+        var result = new Forecast();
+        if (current.Network.Day == null) return result;
+        result.Demand = ServerRoomEconomy.Plan(current, machines, int.MaxValue).Fees;
+        var plan = ServerRoomEconomy.Plan(current, machines, Math.Max(0, Cash()));
+        result.Plan = plan;
+        result.Payable = plan.Fees;
+        foreach (var machine in plan.Machines)
         {
-            var fact = facts[rack.RecordId];
-            if (!fact.CanRun) continue;
-            result.Demand += fact.DailyFee;
-            if (cash < fact.DailyFee) { result.Unpaid.Add(rack.RecordId); continue; }
-            cash -= fact.DailyFee; result.Payable += fact.DailyFee;
-            result.Compute[ServerRoomMarket.CoinIndex(rack.CoinId)] += fact.EffectiveCompute;
+            if (!machine.Runs) result.Stopped.Add(machine.RecordId);
+            if (machine.Reason == "cash") result.Unpaid.Add(machine.RecordId);
+            if (machine.Runs) result.Produced[machine.Coin] += machine.Production.ProducedCoin;
         }
         return result;
     }
@@ -665,7 +692,7 @@ internal sealed partial class ServerRoomView : IDisposable
                 var fact = facts[reference.RecordId];
                 var lease = current.Leases.FirstOrDefault(item => item.RecordId == reference.RecordId);
                 var status = lease != null ? M3("lease_locked", lease.RemainingDays, lease.DueDay) : !fact.CanRun ? M3("cannot_run") :
-                    !reference.PoweredOn ? M3("manual_stop") : forecast.Unpaid.Contains(reference.RecordId) ? M3("unpaid") : M3("running");
+                    !reference.PoweredOn ? M3("manual_stop") : forecast.Unpaid.Contains(reference.RecordId) ? M3("unpaid") : forecast.Stopped.Contains(reference.RecordId) ? M3("cannot_run") : M3("running");
                 text = M3("overview_card", i + 1, M2(reference.Kind), status, Number(fact.EffectiveCompute), fact.DailyFee,
                     reference.Kind == "mining" ? CoinName(reference.CoinId) : "");
             }
@@ -687,16 +714,16 @@ internal sealed partial class ServerRoomView : IDisposable
             var index = minerPage * 5 + i;
             if (index >= miners.Length) continue;
             var rack = miners[index]; var fact = facts[rack.RecordId];
-            var status = !fact.CanRun ? M3("cannot_run") : !rack.PoweredOn ? M3("manual_stop") : forecast.Unpaid.Contains(rack.RecordId) ? M3("unpaid") : M3("on");
+            var status = !rack.PoweredOn ? M3("manual_stop") : PlanReason(forecast, rack.RecordId);
             minerTexts[i].gameObject.SetActive(true);
-            minerTexts[i].text = M3("miner_row", rack.RackIndex + 1, Number(fact.EffectiveCompute), fact.DailyFee, rack.Priority + 1, status);
+            minerTexts[i].text = H("miner_row", rack.RackIndex + 1, ModeName(rack.Mode), Number(ServerRoomEconomy.Health(current, rack.UniqueId)), status);
             Bind(minerPower[i], rack.PoweredOn ? M3("stop") : M3("run"), rack.PoweredOn || fact.CanRun,
                 () => Execute(() => ServerRoomOperations.Power(rack.RecordId, !rack.PoweredOn)));
             var row = i;
             Bind(minerCoin[i], CoinName(rack.CoinId), true, () => OpenBrowserCoinMenu(rack.RecordId, row));
             Bind(minerUp[i], "↑", rack.Priority > 0, () => Execute(() => ServerRoomOperations.Priority(rack.RecordId, rack.Priority - 1)));
             Bind(minerDown[i], "↓", rack.Priority < 9, () => Execute(() => ServerRoomOperations.Priority(rack.RecordId, rack.Priority + 1)));
-            Bind(minerConfigure[i], M3("configure"), true, () => OpenSlot(rack.RackIndex + 1));
+            Bind(minerConfigure[i], H("machine"), true, () => OpenMachine(rack.RecordId));
             StyleWidget(minerPower[i], rack.PoweredOn ? WebSelected : WebPaper, rack.PoweredOn ? WebBlue : WebMuted);
             StyleWidget(minerCoin[i]); StyleWidget(minerUp[i]); StyleWidget(minerDown[i]); StyleWidget(minerConfigure[i], WebPaper, WebBlue);
         }
@@ -704,8 +731,8 @@ internal sealed partial class ServerRoomView : IDisposable
         miningPager.text = M2("page", minerPage + 1, Math.Max(1, (miners.Length + 4) / 5));
         Bind(miningPrevious, M2("previous"), minerPage > 0, () => { minerPage--; RefreshContent(); SyncInteraction(); });
         Bind(miningNext, M2("next"), (minerPage + 1) * 5 < miners.Length, () => { minerPage++; RefreshContent(); SyncInteraction(); });
-        var gains = Enumerable.Range(0, 5).Where(i => forecast.Compute[i] > 0)
-            .Select(i => CoinName(ServerRoomState.CoinIds[i]) + "+" + Number(forecast.Compute[i] / ServerRoomMarket.BasePrice(i) * 100) + "%");
+        var gains = Enumerable.Range(0, 5).Where(i => forecast.Produced[i] > 0)
+            .Select(i => CoinName(ServerRoomState.CoinIds[i]) + "+" + PriceNumber(forecast.Produced[i]));
         miningOutput.text = M3("mining_output", string.Join(" / ", gains));
     }
     private bool TradingReady(ServerRoomState.Document current)
@@ -727,13 +754,12 @@ internal sealed partial class ServerRoomView : IDisposable
         }
         var ready = TradingReady(current); var wallet = current.Coins[selectedCoin];
         var price = current.Market.Initialized ? current.Market.Prices[selectedCoin] : 0;
-        var average = wallet.Units10 == 0 ? "0" : ((double)wallet.Cost / (wallet.Units10 / 10d)).ToString("0.########", CultureInfo.InvariantCulture);
-        if (average.Length > 20) average = ((double)wallet.Cost / (wallet.Units10 / 10d)).ToString("0.###E+0", CultureInfo.InvariantCulture);
-        tradingHint.text = ready ? M3("trading_hint") : M3("not_ready");
+        var average = AveragePrice(wallet.Cost, wallet.MicroUnits);
+        tradingHint.text = ready ? H("trade_hint") : M3("not_ready");
         quantity.interactable = ready;
         Bind(tradeBuy, M3("buy"), ready, () => PreviewTrade(true, false));
-        Bind(tradeSell, M3("sell"), ready && wallet.Units10 > 0, () => PreviewTrade(false, false));
-        Bind(tradeAll, M3("sell_all", Quantity(wallet.Units10)), ready && wallet.Units10 > 0, () => PreviewTrade(false, true));
+        Bind(tradeSell, M3("sell"), ready && wallet.MicroUnits > 0, () => PreviewTrade(false, false));
+        Bind(tradeAll, M3("sell_all", Quantity(wallet.MicroUnits)), ready && wallet.MicroUnits > 0, () => PreviewTrade(false, true));
         RefreshBrowserWallet(current, wallet, price, average);
         DrawHistory(current.Market);
     }
@@ -767,13 +793,23 @@ internal sealed partial class ServerRoomView : IDisposable
     {
         var current = ServerRoomRuntime.Current ?? throw new InvalidOperationException(M3("not_ready"));
         var id = ServerRoomState.CoinIds[selectedCoin];
-        var units = all ? current.Coins[selectedCoin].Units10 : ServerRoomTradeMath.ParseUnits(quantity.text);
+        var units = all ? current.Coins[selectedCoin].MicroUnits : TradeInputUnits();
+        var maximum = ServerRoomOperations.MaximumTrade(id, buy);
+        if (units > maximum) { ShowTradeLimit(buy, maximum); return; }
         var quote = ServerRoomOperations.TradeQuote(id, units, buy);
         var day = current.Market.QuoteDay.Value; var price = quote.Price;
-        ShowConfirmation(M3("trade_terms", buy ? M3("buy") : M3("sell"), CoinName(id), day,
+        var cashBefore = Cash();
+        var summary = H("trade_summary", buy ? M3("buy") : M3("sell"), CoinName(id), Quantity(units),
+            H(buy ? "trade_payment" : "trade_receipt"), Math.Abs(quote.CashDelta), checked(cashBefore + quote.CashDelta));
+        if (buy && quote.Value + quote.Fee < 1m)
+            summary += "\n\n" + H("trade_small_order", Math.Abs(quote.CashDelta));
+        var details = H("trade_terms", buy ? M3("buy") : M3("sell"), CoinName(id), day,
             PriceNumber(price), Quantity(units), PriceNumber(quote.Value), PriceNumber(quote.Fee),
-            Math.Abs(quote.CashDelta), Cash()),
-            () => ServerRoomOperations.TradeConfirmed(id, units, buy, day, price));
+            Math.Abs(quote.CashDelta), cashBefore, PriceNumber(quote.Value / quote.Quantity),
+            PriceNumber(Math.Abs(quote.CashDelta) / quote.Quantity));
+        ShowConfirmation(summary,
+            () => ServerRoomOperations.TradeConfirmed(id, units, buy, day, price, quote.Revision, quote.NetBefore),
+            details, H(buy ? "trade_confirm_buy" : "trade_confirm_sell"));
     }
     private void RefreshOperation(ServerRoomState.Document current)
     {
@@ -801,8 +837,9 @@ internal sealed partial class ServerRoomView : IDisposable
             if (index >= servers.Length) continue;
             var rack = servers[index]; var fact = ServerRoomOperations.MachineFact(current, rack.RecordId);
             var lease = current.Leases.FirstOrDefault(item => item.RecordId == rack.RecordId);
+            var dailyFee = lease?.DailyFee ?? ServerRoomMiningModel.ElectricityCost(fact.Watts, current.Network.ElectricityFactor);
             Bind(leaseRows[i], M3("lease_row", rack.RecordId == selectedServer ? "▶" : "", rack.RackIndex + 1,
-                Number(fact.EffectiveCompute), fact.DailyFee, lease != null ? M3("lease_locked", lease.RemainingDays, lease.DueDay) :
+                Number(fact.EffectiveCompute), dailyFee, lease != null ? M3("lease_locked", lease.RemainingDays, lease.DueDay) :
                     fact.CanRun ? M3("stopped") : M3("cannot_run")), true,
                 () => { selectedServer = rack.RecordId; RefreshContent(); SyncInteraction(); });
             StyleWidget(leaseRows[i], rack.RecordId == selectedServer ? WebSelected : WebPaper);
@@ -834,16 +871,17 @@ internal sealed partial class ServerRoomView : IDisposable
         }
         catch { Bind(widget, M3("lease_button", days, "—"), false, null); }
     }
-    private void ShowConfirmation(string terms, Action action)
+    private void ShowConfirmation(string terms, Action action, string details = "", string acceptLabel = "")
     {
         ClearFocus();
         var current = ServerRoomRuntime.Current ?? throw new InvalidOperationException(M3("not_ready"));
         confirmationRun = current.Run; confirmationSlot = current.Slot; confirmationRevision = current.Revision;
         confirmationDay = Today(); confirmationCash = Cash();
         confirmationStorageEpoch = WorkroomStorage.State.Epoch; confirmationStorageRevision = WorkroomStorage.State.Revision;
-        confirmation = action; confirmText.text = terms;
+        confirmation = action; confirmationSummary = terms; confirmationDetails = details;
+        confirmationAcceptLabel = acceptLabel; confirmationExpanded = false;
         RefreshConfirmation(); SyncInteraction();
-        AssemblyDebugFonts.Prepare(Text("title"), terms + M3("confirm") + M3("cancel"));
+        AssemblyDebugFonts.Prepare(Text("title"), terms + details + acceptLabel + H("trade_details_show") + H("trade_details_hide") + M3("confirm") + M3("cancel"));
     }
     private bool ConfirmationCurrent()
     {
@@ -856,19 +894,45 @@ internal sealed partial class ServerRoomView : IDisposable
     {
         if (confirmation != null && !ConfirmationCurrent())
         { CancelConfirmation(); notice = M3("confirmation_expired"); noticeIsError = true; }
-        confirmShield.SetActive(confirmation != null);
+        confirmShield.SetActive(confirmation != null && !browserMinimized);
         if (confirmation == null) return;
-        Bind(confirmAccept, M3("confirm"), true, () =>
+        RefreshConfirmationLayout();
+        Bind(confirmAccept, string.IsNullOrEmpty(confirmationAcceptLabel) ? M3("confirm") : confirmationAcceptLabel, true, () =>
         {
             if (!ConfirmationCurrent()) { CancelConfirmation(); ShowError(new InvalidOperationException(M3("confirmation_expired"))); SyncInteraction(); return; }
             var action = confirmation; CancelConfirmation(); Execute(action);
         });
         Bind(confirmCancel, M3("cancel"), true, () => { CancelConfirmation(); SyncInteraction(); });
-        StyleWidget(confirmAccept, WebBlue, Color.white); StyleWidget(confirmCancel);
+        StyleWidget(confirmAccept, WebBlue, BrowserTone.OnAccent); StyleWidget(confirmCancel);
+    }
+    private void RefreshConfirmationLayout()
+    {
+        var hasDetails = !string.IsNullOrEmpty(confirmationDetails);
+        var expanded = hasDetails && confirmationExpanded;
+        var width = expanded ? 820f : 580f;
+        var height = expanded ? 530f : 420f;
+        AssemblyDebugUi.Place(confirmFace, (BrowserWidth - width) / 2, expanded ? 18 : 74, width, height);
+        AssemblyDebugUi.Place(confirmText.gameObject, 24, 66, width - 48, expanded ? 348 : hasDetails ? 240 : 260);
+        confirmText.fontSize = expanded ? 16 : 17;
+        confirmText.richText = hasDetails;
+        confirmText.text = confirmationSummary + (expanded ? "\n\n" + confirmationDetails : "");
+        AssemblyDebugUi.Place(confirmCancel.Root, width - 318, height - 62, 128, 38);
+        AssemblyDebugUi.Place(confirmAccept.Root, width - 176, height - 62, 152, 38);
+        AssemblyDebugUi.Place(confirmDetails.Root, 24, height - 106, width - 48, 32);
+        AssemblyDebugUi.Place(confirmDetails.Label.gameObject, 4, 0, width - 56, 32);
+        Bind(confirmDetails, H(expanded ? "trade_details_hide" : "trade_details_show"), hasDetails, () =>
+        {
+            if (!ConfirmationCurrent()) { RefreshConfirmation(); SyncInteraction(); return; }
+            confirmationExpanded = !confirmationExpanded;
+            RefreshConfirmationLayout(); SyncInteraction();
+        }, hasDetails);
+        StyleWidget(confirmDetails, WebPaper, WebBlue);
     }
     private void CancelConfirmation()
     {
         confirmation = null;
+        confirmationSummary = confirmationDetails = confirmationAcceptLabel = ""; confirmationExpanded = false;
+        if (confirmDetails != null && AssemblyDebugUi.Alive(confirmDetails.Root)) confirmDetails.Root.SetActive(false);
         if (AssemblyDebugUi.Alive(confirmShield)) confirmShield.SetActive(false);
     }
 
@@ -901,14 +965,26 @@ internal sealed partial class ServerRoomView : IDisposable
         panelBody.text = M3("rack_summary", MachineName(definition), info.Parts.Count, Number(capacity.BaseCompute),
             Number(capacity.EffectiveCompute), capacity.MemoryGB, capacity.RequiredMemoryGB, Number(capacity.Fraction * 100),
             capacity.DailyFee, lease != null ? M3("lease_locked", lease.RemainingDays, lease.DueDay) :
-                reference.PoweredOn ? M3("running") : capacity.CanRun ? M3("manual_stop") : M3("cannot_run"));
+            reference.PoweredOn ? M3("running") : capacity.CanRun ? M3("manual_stop") : M3("cannot_run"));
+        ServerRoomMiningModel.Capability miningCapacity = null;
+        if (reference.Kind == ServerRoomMachine.Mining)
+        {
+            var facts = ServerRoomOperations.MachineFacts(current); var fact = facts.Single(f => f.RecordId == reference.RecordId);
+            var forecast = ForecastNight(current, facts); var health = ServerRoomEconomy.Health(current, reference.UniqueId);
+            var planned = forecast.Plan.Machines.FirstOrDefault(m => m.RecordId == reference.RecordId);
+            miningCapacity = ServerRoomMiningModel.Evaluate(fact.Tier, fact.Cards, ServerRoomMarket.CoinIndex(reference.CoinId), reference.Mode, health);
+            var shown = planned?.Runs == true ? planned.Capacity : miningCapacity;
+            panelBody.text = H("parts_summary", MachineName(definition), CoinName(reference.CoinId), ModeName(reference.Mode),
+                planned?.Runs == true ? ModeName(planned.Mode) : "—", Number(shown.EffectiveHash), Number(shown.Watts), Number(health),
+                reference.PoweredOn ? PlanReason(forecast, reference.RecordId) : M3("manual_stop"));
+        }
         slotDiagram.SetActive(true);
         Bind(takeAction, M2("take"), movable, () => Execute(() => ServerRoomOperations.TakeBody(selectedRack)));
         if (reference.Kind == "mining")
             Bind(rackPower, reference.PoweredOn ? M3("stop") : M3("run"), reference.PoweredOn || capacity.CanRun,
                 () => Execute(() => ServerRoomOperations.Power(reference.RecordId, !reference.PoweredOn)));
         Bind(rackOperate, M3("manage"), true, () =>
-        { selectedServer = reference.RecordId; SetPage(reference.Kind == "mining" ? 1 : 3); });
+        { if (reference.Kind == "mining") OpenMachine(reference.RecordId); else { selectedServer = reference.RecordId; SetPage(3); } });
         if (definition.Kind == ServerRoomMachine.Server)
         {
             Bind(cpuChoice, M2("cpu"), true, () => SetPartKind("cpu"));
@@ -925,8 +1001,11 @@ internal sealed partial class ServerRoomView : IDisposable
             if (index >= installed.Length) continue;
             var part = installed[index]; var label = installedTexts[row]; label.gameObject.SetActive(true);
             var gpu = part.Kind == "gpu" ? capacity.Gpus.FirstOrDefault(card => card.Index == part.Index) : null;
+            var gpuPosition = gpu == null ? -1 : capacity.Gpus.ToList().FindIndex(card => card.Index == part.Index);
+            var selectedCard = gpuPosition >= 0 ? miningCapacity?.Cards.ElementAtOrDefault(gpuPosition) : null;
             label.text = gpu == null ? M2("installed_row", M2(part.Kind), part.Index + 1, Display(part.Item), part.Item.Value) :
-                M2("gpu_row", part.Index + 1, Display(part.Item), gpu.MemoryGB, gpu.RequiredMemoryGB, Number(gpu.EffectiveCompute), part.Item.Value);
+                H("installed_gpu", part.Index + 1, Display(part.Item), gpu.MemoryGB, VramMinimum(ServerRoomMarket.CoinIndex(reference.CoinId)),
+                    selectedCard != null && selectedCard.Reason.Length > 0 ? ReasonName(selectedCard.Reason) : H("card_eligible"));
             Bind(installedRows[row], M2("remove"), movable,
                 () => Execute(() => ServerRoomOperations.Remove(selectedRack, part.Kind, part.Index)));
         }
@@ -957,6 +1036,8 @@ internal sealed partial class ServerRoomView : IDisposable
             var record = sources[index]; var label = sourceTexts[row]; label.gameObject.SetActive(true);
             var intact = bodies || ServerRoomMachine.IntactComponent(record.Item);
             label.text = M2("source_row", Display(record.Item), M2(record.Place), record.Item.Value);
+            if (bodies && record.Item.Nodes.Count > 0 && SavedMaintenance(record.Item.Nodes[0].UniqueId) is { } savedHealth)
+                label.text += H("source_health", Number(savedHealth.Health));
             Bind(sourceRows[row], !intact ? M2("damaged") : !space ? M2("no_slot") : M2(bodies ? "rack" : "install"),
                 movable && intact && space, () => Execute(() =>
                 { if (bodies) ServerRoomOperations.RackBody(selectedRack, record.Id); else ServerRoomOperations.Install(selectedRack, record.Id); }));
@@ -964,6 +1045,9 @@ internal sealed partial class ServerRoomView : IDisposable
         if (sources.Length == 0) sourceHeading.text = M2("empty_list");
         Pager(true, sources.Length);
     }
+
+    private static ServerRoomState.Maintenance SavedMaintenance(int uniqueId) =>
+        ServerRoomRuntime.Current?.Maintenance.FirstOrDefault(m => m.UniqueId == uniqueId);
 
     private void Pager(bool source, int count)
     {
@@ -986,10 +1070,14 @@ internal sealed partial class ServerRoomView : IDisposable
         foreach (var button in panelButtons) button.interactable = ready && panelState.IsOpen && !modal;
         foreach (var widget in widgets)
             widget.Control.interactable = ready && panelState.IsOpen && !commandBusy && widget.Allowed &&
-                (!modal || ReferenceEquals(widget, confirmAccept) || ReferenceEquals(widget, confirmCancel));
+                (!modal || ReferenceEquals(widget, confirmAccept) || ReferenceEquals(widget, confirmCancel) || ReferenceEquals(widget, confirmDetails) || ReferenceEquals(widget, browserTheme) ||
+                    ReferenceEquals(widget, browserMinimize) || ReferenceEquals(widget, browserExit) || ReferenceEquals(widget, taskbarExit) ||
+                    browserMinimized && (desktopSites.Contains(widget) || taskbarSites.Contains(widget)));
         if (AssemblyDebugUi.Alive(quantity))
             quantity.interactable = ready && panelState.IsOpen && !browserMinimized && !modal && mode == PanelMode.Computer && selectedPage == 2 &&
+                hardcorePage == HardcorePage.None &&
                 ServerRoomRuntime.Current is { } current && TradingReady(current);
+        SyncHardcoreInputs(ready && panelState.IsOpen && !browserMinimized && !modal);
         panelMask.SetActive(panelState.BlocksInput);
         panelFace.SetActive(panelState.IsOpen);
     }
@@ -1025,6 +1113,7 @@ internal sealed partial class ServerRoomView : IDisposable
         actions = lists = null;
         m3Content = overviewPage = miningPage = tradingPage = operationPage = chart = confirmShield = confirmFace = null;
         quantity = null; confirmation = null; keyboardOwned = false; inputNeutralFrames = 0;
+        confirmDetails = null; confirmationSummary = confirmationDetails = confirmationAcceptLabel = ""; confirmationExpanded = false;
         overviewCards.Clear(); coinTabs.Clear(); leaseRows.Clear(); minerTexts.Clear();
         minerPower.Clear(); minerCoin.Clear(); minerUp.Clear(); minerDown.Clear(); minerConfigure.Clear(); chartLines.Clear();
         miningSummary = miningOutput = miningPager = tradingSummary = tradingHint = chartHigh = chartLow = chartDays = null;

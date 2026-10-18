@@ -37,7 +37,7 @@ internal static class AssemblerContactAccess
                 store.modData = new Il2CppSystem.Collections.Generic.Dictionary<string, string>();
             if (store.modData.ContainsKey(UnlockKey) && store.modData[UnlockKey] == "1") return true;
             store.modData[UnlockKey] = "1";
-            Core.Log?.Msg("[深空装机] 当前存档已永久解锁 0504；名片丢失不再影响联系。");
+            Core.Debug("[深空装机] 当前存档已永久解锁 0504；名片丢失不再影响联系。");
             return true;
         }
         catch (Exception ex)

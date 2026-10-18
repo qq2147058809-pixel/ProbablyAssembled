@@ -17,12 +17,15 @@ internal sealed class WorkroomInventoryUi
     private static readonly Color GridBackground = new(142f/255f, 155f/255f, 139f/255f, 1f);
     private static readonly Color GridLine = new(.33f, .39f, .35f, .62f);
     private static readonly Color GridRim = new(.15f, .17f, .21f, 1f);
+    private static readonly WorkroomPanels.Kind[] Workbenches =
+        { WorkroomPanels.Kind.Components, WorkroomPanels.Kind.Motherboard, WorkroomPanels.Kind.Case };
     private sealed class ItemView
     {
         internal GameObject Root = null!;
         internal Image Icon = null!;
         internal TextMeshProUGUI Count = null!;
         internal GameObject Selection = null!;
+        internal GameObject Compatible = null!;
     }
     private sealed class GroupView
     {
@@ -38,6 +41,7 @@ internal sealed class WorkroomInventoryUi
     private string? held;
     private string? lastClicked;
     private long clickEpoch, clickRevision;
+    private long clickInteraction;
     private float clickedAt;
     private Vector2 clickedPosition;
     private WorkroomItemCodec.Shape? heldShape;
@@ -51,11 +55,17 @@ internal sealed class WorkroomInventoryUi
     private readonly Dictionary<string, GroupView> groupIcons = new(StringComparer.Ordinal);
     private Vector2 groupPoint;
     private bool groupDragging;
+    private long groupPreviewRevision = -1, matPreviewRevision = -1;
+    private int groupPreviewX, groupPreviewY, matPreviewOrientation;
+    private string? matPreviewId;
+    private WorkroomPanels.Kind matPreviewTarget;
+    private bool groupPreviewFits, matPreviewFits;
     private long selectionEpoch = -1;
     private bool bandPending, banding;
     private Vector2 bandStart, bandPressed;
     private int escapeFrame = -1;
     private long selectionVersion, paintedVersion = -1, paintedRevision = -1, paintedEpoch = -1;
+    private long highlightedRevision = -1;
     internal bool IsDragging => held != null || groupHeld != null || bandPending;
     internal bool HasSelection => selectionEpoch == WorkroomStorage.State.Epoch && selected.Count > 0;
     internal bool OwnsEscape => IsDragging || HasSelection || escapeFrame == Time.frameCount;
@@ -103,16 +113,20 @@ internal sealed class WorkroomInventoryUi
         if (revision != WorkroomStorage.State.Revision || epoch != WorkroomStorage.State.Epoch) Refresh();
         PruneSelection();
         PaintSelection();
+        PaintCompatibility();
         if (panels.OwnsTextInput) { ResetClicks(); information.Clear(); return; }
         if (!interactive || !WorkroomStorage.State.Ready) { Cancel(); return; }
         var point = panels.HitWindow(Input.mousePosition) ? null : GridPoint(Input.mousePosition);
         var hovered = point.HasValue ? WorkroomStorage.State.RoomItems.LastOrDefault(item => Hit(item, point.Value)) : null;
-        if (clickEpoch != WorkroomStorage.State.Epoch || clickRevision != WorkroomStorage.State.Revision ||
+        if (clickEpoch != WorkroomStorage.State.Epoch || clickRevision != WorkroomStorage.State.Revision || clickInteraction != panels.QuickStageToken ||
             Input.GetKeyDown(KeyCode.Escape) || (Input.GetMouseButtonDown(0) && hovered == null)) ResetClicks();
         if (Input.GetKeyDown(KeyCode.Escape) && OwnsEscape)
         { escapeFrame = Time.frameCount; Cancel(); return; }
         information.Update(!IsDragging && !Input.GetMouseButton(0) && !panels.IsDragging
             ? panels.HoveredAssembly(Input.mousePosition) ?? hovered : null);
+        if (!IsDragging && !panels.IsDragging && hovered != null &&
+            WorkroomQuickTransfer.TryReturn(hovered.Id, WorkroomStorage.State.Epoch))
+        { ResetClicks(); information.Clear(); ClearSelection(WorkroomStorage.State.Epoch); return; }
         if (bandPending) { UpdateBand(); return; }
         if (groupHeld != null) { UpdateGroup(panels, hovered); return; }
         if (held == null && point.HasValue && hovered == null && Input.GetMouseButtonDown(0) && !panels.IsDragging)
@@ -173,10 +187,15 @@ internal sealed class WorkroomInventoryUi
         var x = point.HasValue ? Mathf.RoundToInt((point.Value.x-offset.x)/Cell) : -1;
         var y = point.HasValue ? Mathf.RoundToInt((point.Value.y-offset.y)/Cell) : -1;
         var intoBox = HitBox(panels, Input.mousePosition);
+        var onRecycling = panels.HitRecycling(Input.mousePosition);
+        var intoRecycling = onRecycling && WorkroomBatchRecycling.Eligible(itemHeld.Item);
         var assemblySlot = panels.ResolveAssembly(Input.mousePosition, itemHeld.Item);
         var intoAssembly = assemblySlot != null && WorkroomComponentAssembly.Accepts(assemblySlot, itemHeld.Item);
+        var workbench = HitWorkbench(panels, Input.mousePosition);
+        var onMat = workbench.HasValue;
+        var intoMat = onMat && MatFits(held, heldOrientation, workbench!.Value);
         var fits = point.HasValue && WorkroomStorage.State.Fits(size, x, y, held);
-        ghost.color = intoBox || intoAssembly || fits ? new Color(.65f,1,.65f,.75f) : new Color(1,.5f,.5f,.75f);
+        ghost.color = intoRecycling || intoBox || intoAssembly || intoMat || fits ? new Color(.65f,1,.65f,.75f) : new Color(1,.5f,.5f,.75f);
         if (panels.PreviewOpen)
         {
             panels.RoomPreview(ghost.sprite, rect.anchoredPosition, rect.sizeDelta, ghost.color,
@@ -194,8 +213,18 @@ internal sealed class WorkroomInventoryUi
                 return;
             }
             ResetClicks();
-            if (assemblySlot != null) WorkroomComponentAssembly.Stage(id, assemblySlot, generation, orientation);
+            if (onRecycling)
+            {
+                WorkroomStorageDragPatch.MarkConsumed();
+                panels.AddRecycling(new[] { id }, generation);
+            }
+            else if (assemblySlot != null) WorkroomComponentAssembly.Stage(id, assemblySlot, generation, orientation);
             else if (intoBox) WorkroomStorage.StoreRoom(id, generation, orientation);
+            else if (onMat)
+            {
+                WorkroomStorageDragPatch.MarkConsumed();
+                panels.StageFromMat(id, generation, orientation, workbench!.Value);
+            }
             else if (fits)
             {
                 var beforeRevision = WorkroomStorage.State.Revision;
@@ -211,6 +240,45 @@ internal sealed class WorkroomInventoryUi
         (panels.StorageOpen && panels.HitStorage(point)) ||
         (!panels.BlocksInput && !panels.HitWindow(point) && InReferenceRect(point, 1065,542,202,143));
 
+    // Click and drag share the scene entrances. A covering window owns its
+    // complete area, including incompatible drops and empty body space.
+    private WorkroomPanels.Kind? HitWorkbench(WorkroomPanels panels, Vector2 point)
+    {
+        if (panels.BlocksInput || panels.IsDragging || panels.OwnsTextInput || panels.HitWindow(point)) return null;
+        foreach (var kind in Workbenches)
+        {
+            var area = WorkroomView.WorkbenchRect(kind);
+            if (InReferenceRect(point, area.x, area.y, area.width, area.height)) return kind;
+        }
+        return null;
+    }
+
+    private bool MatFits(string id, int orientation, WorkroomPanels.Kind target)
+    {
+        var state = WorkroomStorage.State;
+        if (!WorkroomComponentAssembly.Ready(epoch) || state.PendingRecords.Count != 0 || WorkroomCashRepair.Pending)
+        { matPreviewRevision = -1; return false; }
+        if (matPreviewId != id || matPreviewRevision != state.Revision || matPreviewOrientation != orientation || matPreviewTarget != target)
+        {
+            matPreviewFits = WorkroomMatTransfer.TryPlan(id, epoch, orientation, target, out _, out _);
+            matPreviewId = id; matPreviewRevision = state.Revision; matPreviewOrientation = orientation; matPreviewTarget = target;
+        }
+        return matPreviewFits;
+    }
+
+    private bool GroupFits(WorkroomStorage.RoomDrop[] command, int dx, int dy)
+    {
+        var state = WorkroomStorage.State;
+        if (!WorkroomComponentAssembly.Ready(epoch) || state.PendingRecords.Count != 0)
+        { groupPreviewRevision = -1; return false; }
+        if (groupPreviewRevision != state.Revision || groupPreviewX != dx || groupPreviewY != dy)
+        {
+            groupPreviewFits = WorkroomGroupMove.CanMove(command, dx, dy, epoch);
+            groupPreviewRevision = state.Revision; groupPreviewX = dx; groupPreviewY = dy;
+        }
+        return groupPreviewFits;
+    }
+
     private void UpdateGroup(WorkroomPanels panels, WorkroomStorageState.Record? hovered)
     {
         var command = groupHeld!;
@@ -219,13 +287,23 @@ internal sealed class WorkroomInventoryUi
         if (!groupDragging && ((Vector2)Input.mousePosition - pressed).sqrMagnitude >= DragThresholdSquared())
         { groupDragging = true; RoomAudio.Play("pickup"); }
         var intoBox = HitBox(panels, Input.mousePosition);
-        var color = intoBox ? new Color(.65f,1,.65f,.75f) : new Color(1,.5f,.5f,.75f);
+        var onRecycling = panels.HitRecycling(Input.mousePosition);
+        var intoRecycling = onRecycling && command.All(item => WorkroomBatchRecycling.Eligible(item.Item));
+        var point = panels.HitWindow(Input.mousePosition) ? null : GridPoint(Input.mousePosition);
+        var dx = point.HasValue ? Mathf.RoundToInt((point.Value.x-groupPoint.x)/Cell) : 0;
+        var dy = point.HasValue ? Mathf.RoundToInt((point.Value.y-groupPoint.y)/Cell) : 0;
+        var fits = point.HasValue && GroupFits(command, dx, dy);
+        var onMat = HitWorkbench(panels, Input.mousePosition).HasValue;
+        var color = intoRecycling || intoBox || fits ? new Color(.65f,1,.65f,.75f) : new Color(1,.5f,.5f,.75f);
         if (groupDragging)
         {
             ResetClicks();
             var parent = AssemblyDebugUi.Rect(groupGhostRoot.transform.parent.gameObject);
             var scale = Mathf.Abs(grid.transform.lossyScale.x / parent.lossyScale.x);
             RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, Input.mousePosition, CanvasCamera, out var mouse);
+            if (point.HasValue)
+                mouse += new Vector2((groupPoint.x+dx*Cell-point.Value.x)*scale,
+                    -(groupPoint.y+dy*Cell-point.Value.y)*scale);
             var root = AssemblyDebugUi.Rect(groupGhostRoot);
             root.anchorMin = root.anchorMax = new Vector2(.5f,.5f); root.pivot = new Vector2(0,1);
             root.anchoredPosition = mouse;
@@ -246,16 +324,18 @@ internal sealed class WorkroomInventoryUi
                     (item.Y*Cell-groupPoint.y)*scale, size.x, size.y);
                 WorkroomItemSprite.Pose(image, item.Item.Orientation, item.Item.Flipped, size);
             }
-            groupGhostRoot.transform.SetAsLastSibling(); groupGhostRoot.SetActive(!panels.PreviewOpen);
-            // The common panel preview is above its canvas; show the first
-            // selected item there while the full formation follows outside.
-            if (panels.PreviewOpen)
+            var panelPreview = panels.PreviewOpen && !point.HasValue;
+            groupGhostRoot.transform.SetAsLastSibling(); groupGhostRoot.SetActive(!panelPreview);
+            // Keep the complete formation visible over the uncovered room grid.
+            // Only use the panel's higher preview while outside that grid.
+            if (panelPreview)
             {
                 var first = command[0]; var image = groupIcons[first.Id].Icon;
                 var size = new Vector2(first.Item.Footprint.Width*Cell*scale, first.Item.Footprint.Height*Cell*scale);
                 var position = mouse + new Vector2((first.X*Cell-groupPoint.x)*scale, -(first.Y*Cell-groupPoint.y)*scale);
                 panels.RoomPreview(image.sprite, position, size, color, first.Item.Orientation, first.Item.Flipped, true);
             }
+            else panels.RoomPreview(null!, Vector2.zero, Vector2.zero, Color.clear, 0, false, false);
         }
         if (Input.GetMouseButtonUp(0))
         {
@@ -268,15 +348,31 @@ internal sealed class WorkroomInventoryUi
                 return;
             }
             ResetClicks();
-            if (intoBox || panels.HitWindow(Input.mousePosition)) WorkroomStorageDragPatch.MarkConsumed();
-            if (intoBox)
+            if (intoBox || onMat || point.HasValue || panels.HitWindow(Input.mousePosition)) WorkroomStorageDragPatch.MarkConsumed();
+            if (onRecycling)
+            {
+                if (panels.AddRecycling(command.Select(item => item.Id).ToArray(), generation)) ClearSelection(generation);
+            }
+            else if (intoBox)
             {
                 WorkroomStorage.StoreRoomGroup(command, generation);
                 PruneSelection(); PaintSelection();
             }
+            else if (onMat)
+            {
+                WorkroomStorage.NotifyText(LanguageText.Get("workroom.mat.single"));
+                RoomAudio.Play("warning");
+            }
+            else if (point.HasValue)
+            {
+                var beforeRevision = WorkroomStorage.State.Revision;
+                if (WorkroomGroupMove.Move(command, dx, dy, generation) &&
+                    WorkroomStorage.State.Revision != beforeRevision) RoomAudio.Play("drop");
+                PruneSelection(); PaintSelection();
+            }
             else WorkroomStorage.Notify("invalid_position");
-            // A group has no room formation placement or rotation. A missed
-            // target/header release keeps every record at its original place.
+            // No group rotation or automatic repacking. Missed/blocked targets
+            // retain every original record; a valid move preserves the selection.
         }
         else if (!Input.GetMouseButton(0)) { ReleaseGroup(); ResetClicks(); }
     }
@@ -336,7 +432,7 @@ internal sealed class WorkroomInventoryUi
         if (Input.GetMouseButtonUp(0))
         {
             bandPending = banding = false; bandRoot.SetActive(false);
-            Core.Log?.Msg($"[工作间框选] selected={selected.Count}; frame={Time.frameCount}");
+            Core.Debug($"[工作间框选] selected={selected.Count}; frame={Time.frameCount}");
             PaintSelection(); return;
         }
         if (!Input.GetMouseButton(0)) Cancel();
@@ -392,7 +488,8 @@ internal sealed class WorkroomInventoryUi
                 AssemblyDebugUi.Place(count.gameObject, 2, 0, 80, 16);
                 var selection = AssemblyDebugUi.Image(root.transform, "Selected", new Color(.28f,.65f,.91f,.27f), false).gameObject;
                 AssemblyDebugUi.Stretch(selection); selection.SetActive(false);
-                view = new ItemView { Root = root, Icon = image, Count = count, Selection = selection }; icons[item.Id] = view;
+                var compatible = WorkroomCandidateHighlight.Frame(root.transform, "Compatible"); compatible.SetActive(false);
+                view = new ItemView { Root = root, Icon = image, Count = count, Selection = selection, Compatible = compatible }; icons[item.Id] = view;
             }
             AssemblyDebugUi.Place(view.Root, item.X*Cell, item.Y*Cell, item.Item.Footprint.Width*Cell, item.Item.Footprint.Height*Cell);
             view.Icon.sprite = Icon(item.Item);
@@ -401,6 +498,16 @@ internal sealed class WorkroomInventoryUi
             view.Count.text = item.Item.Count > 1 ? item.Item.Count.ToString() : "";
         }
         revision = WorkroomStorage.State.Revision; epoch = WorkroomStorage.State.Epoch;
+        highlightedRevision = -1;
+    }
+
+    private void PaintCompatibility()
+    {
+        if (highlightedRevision == WorkroomCandidateHighlight.Revision) return;
+        foreach (var record in WorkroomStorage.State.RoomItems)
+            if (icons.TryGetValue(record.Id, out var view))
+                view.Compatible.SetActive(WorkroomCandidateHighlight.Matches(record.Item));
+        highlightedRevision = WorkroomCandidateHighlight.Revision;
     }
 
     internal static Sprite? Icon(WorkroomItemCodec.Snapshot item)
@@ -445,10 +552,11 @@ internal sealed class WorkroomInventoryUi
     {
         held = null; heldShape = null; dragging = false;
         heldOrientation = 0; pressed = offset = Vector2.zero;
+        matPreviewId = null; matPreviewRevision = -1;
     }
 
     private void ResetGroup()
-    { groupHeld = null; groupIds.Clear(); groupDragging = false; groupPoint = Vector2.zero; }
+    { groupHeld = null; groupIds.Clear(); groupDragging = false; groupPoint = Vector2.zero; groupPreviewRevision = -1; }
 
     private void ReleaseGroup()
     { ResetGroup(); WorkroomUiCleanup.Deactivate(groupGhostRoot); }
@@ -475,13 +583,14 @@ internal sealed class WorkroomInventoryUi
         var threshold = ItemMouseDoubleClickHandler.current?.doubleclickTimeThresholdSeconds ?? .3f;
         if (!float.IsFinite(threshold) || threshold <= 0) threshold = .3f;
         var now = Time.unscaledTime;
-        if (lastClicked == id && clickEpoch == generation && clickRevision == WorkroomStorage.State.Revision &&
+        if (lastClicked == id && clickEpoch == generation && clickRevision == WorkroomStorage.State.Revision && clickInteraction == panels.QuickStageToken &&
             now >= clickedAt && now-clickedAt <= threshold &&
             ((Vector2)Input.mousePosition-clickedPosition).sqrMagnitude <= 16)
         {
             ResetClicks(); information.Clear(); panels.QuickStage(id, generation); return;
         }
         lastClicked = id; clickEpoch = generation; clickRevision = WorkroomStorage.State.Revision;
+        clickInteraction = panels.QuickStageToken;
         clickedAt = now; clickedPosition = Input.mousePosition;
     }
 

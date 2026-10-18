@@ -7,42 +7,45 @@ using System.Text;
 
 namespace PCExpansion;
 
-/// <summary>Pure, replayable implementation of the approved C market. No native cash or clock access.</summary>
+/// <summary>Pure, replayable market with persistent latent trends. No native cash or clock access.</summary>
 internal static class ServerRoomMarket
 {
     private static readonly decimal[] Bases = { 50m, 200m, 800m, 100m, 1500m };
-    private static readonly double[] Ordinary = { .04, .08, .12, .20, .30 };
-    private static readonly double[] ExtremeProbability = { .02, .04, .06, .10, .12 };
-    private static readonly double[] UpLow = { .10, .20, .30, .40, .60 };
-    private static readonly double[] UpHigh = { .20, .35, .50, .65, 1.20 };
-    private static readonly double[] DownLow = { .10, .20, .30, .40, .50 };
-    private static readonly double[] DownHigh = { .20, .35, .50, .65, .80 };
+    private static readonly double[] Ordinary = { .025, .045, .065, .09, .11 };
+    private static readonly double[] ExtremeProbability = { .01, .015, .025, .035, .04 };
+    private static readonly double[] UpLow = { .05, .08, .12, .15, .18 };
+    private static readonly double[] UpHigh = { .10, .15, .22, .30, .33 };
+    private static readonly double[] DownLow = { .05, .08, .12, .15, .18 };
+    private static readonly double[] DownHigh = { .10, .15, .22, .30, .33 };
     private static readonly decimal[] Jump = { .15m, .25m, .35m, .45m, .60m };
-    private static readonly double[] OrdinaryCorrection = DriftCorrections(false);
-    private static readonly double[] ExtremeCorrection = DriftCorrections(true);
+    private static readonly double[] OrdinaryUpProbability = BalancedProbabilities(false);
+    private static readonly double[] ExtremeUpProbability = BalancedProbabilities(true);
+    // Representation guards, not economic support/resistance. In particular the old
+    // base * .0001 floor no longer changes a coin's chance of rising.
+    private const decimal MinimumPrice = .000000000001m;
 
-    private static double[] DriftCorrections(bool extreme)
+    private static double[] BalancedProbabilities(bool extreme)
     {
         var result = new double[5];
         for (var i = 0; i < result.Length; i++)
         {
             // For the sampled arcsine magnitude, E[log(a+b*sin²(theta))]
             // is 2*log((sqrt(a)+sqrt(a+b))/2). Balance gains against losses
-            // in log space so repeated percentage moves have no base-price drift.
+            // in log space so ordinary percentage moves do not systematically
+            // destroy value. This has no dependence on the current/initial price.
             var upLow = extreme ? UpLow[i] : 0;
             var upHigh = extreme ? UpHigh[i] : Ordinary[i];
             var downLow = extreme ? DownLow[i] : 0;
             var downHigh = extreme ? DownHigh[i] : Ordinary[i];
             var gain = 2 * Math.Log((Math.Sqrt(1 + upLow) + Math.Sqrt(1 + upHigh)) / 2);
             var loss = 2 * Math.Log((Math.Sqrt(1 - downLow) + Math.Sqrt(1 - downHigh)) / 2);
-            result[i] = Math.Log(-loss / gain);
+            result[i] = -loss / (gain - loss);
         }
         return result;
     }
 
     internal static decimal BasePrice(int index) { RequireIndex(index); return Bases[index]; }
-    internal static decimal BasePrice(string id) => BasePrice(CoinIndex(id));
-    internal static decimal LowerPrice(int index) => BasePrice(index) * .0001m;
+    internal static decimal LowerPrice(int index) { RequireIndex(index); return MinimumPrice; }
     internal static decimal UpperPrice(int index) => BasePrice(index) * 10000m;
     internal static int CoinIndex(string id)
     {
@@ -96,22 +99,24 @@ internal static class ServerRoomMarket
             var extreme = new bool[5];
             for (var i = 0; i < 5; i++) extreme[i] = random.Uniform() < ExtremeProbability[i] * (boomActive ? 2 : 1);
             var commonNormal = random.Normal();
+            var commonTrend = Trend(run, slot, day, -1);
             var directions = new bool[5];
             for (var i = 0; i < 5; i++)
             {
-                // Keep the event's original 70% base-price bias. Ordinary days
-                // compensate each sampled branch without changing its magnitude.
-                var balance = boomActive ? Math.Log(.7 / .3) :
-                    extreme[i] ? ExtremeCorrection[i] : OrdinaryCorrection[i];
-                var logOdds = balance - .6 * Math.Log((double)(source.Prices[i] / Bases[i]));
-                var upProbability = 1 / (1 + Math.Exp(-logOdds));
+                // Public and coin-specific phases persist across several days,
+                // but neither absolute price nor player trades affect direction.
+                // Symmetric offsets preserve each branch's zero-log-drift baseline
+                // over randomly drawn ordinary phases. Shocks can oppose a trend.
+                var trend = .65 * commonTrend + .35 * Trend(run, slot, day, i);
+                var balanced = extreme[i] ? ExtremeUpProbability[i] : OrdinaryUpProbability[i];
+                var upProbability = boomActive ? .7 : balanced + .28 * trend;
                 var direction = Math.Sqrt(.65) * commonNormal + Math.Sqrt(.35) * random.Normal();
                 directions[i] = NormalCdf(direction) < upProbability;
             }
             for (var i = 0; i < 5; i++)
                 next.Prices[i] = SamplePrice(i, source.Prices[i], extreme[i], directions[i], random);
         }
-        // Ending an event keeps the current price and restores the ordinary model above.
+        // Ending an event keeps the current price and restores ordinary phases.
         AppendHistory(next, day);
         Validate(next);
         return next;
@@ -150,29 +155,34 @@ internal static class ServerRoomMarket
         var upHigh = extreme ? UpHigh[i] : Ordinary[i];
         var downLow = extreme ? DownLow[i] : 0;
         var downHigh = extreme ? DownHigh[i] : Ordinary[i];
-        var upCap = Math.Min(upHigh, (double)(UpperPrice(i) / price - 1m));
-        var downCap = Math.Min(downHigh, (double)(1m - LowerPrice(i) / price));
-        var upPossible = upCap > upLow + 1e-14;
-        var downPossible = downCap > downLow + 1e-14;
-        if (!upPossible && !downPossible) throw new InvalidOperationException("该行情分支没有合法幅度。");
-        if (!upPossible) up = false;
-        else if (!downPossible) up = true;
         var low = up ? upLow : downLow;
         var high = up ? upHigh : downHigh;
-        var cap = up ? upCap : downCap;
-        var width = high - low;
-        var maximumCdf = 2 / Math.PI * Math.Asin(Math.Sqrt(Math.Min(1, Math.Max(0, (cap - low) / width))));
-        // Condition the original arcsine distribution; never clip a sampled daily return.
-        for (var attempt = 0; attempt < 128; attempt++)
+        var sine = Math.Sin(Math.PI * random.Uniform() / 2);
+        var magnitude = (decimal)(low + (high - low) * sine * sine);
+        var proposed = price * (1m + (up ? magnitude : -magnitude));
+        // At the remote representation guards only, saturate rather than force a
+        // reversal or resample upward. Further down days can remain at the minimum;
+        // no zero/delisting state, extra reward or guaranteed recovery is created.
+        return Math.Min(UpperPrice(i), Math.Max(MinimumPrice, proposed));
+    }
+
+    private static double Trend(string run, int slot, int day, int coin)
+    {
+        // Independent 256-day windows bound work even at int.MaxValue day. Each
+        // window starts at a random phase age, then draws 6..20-day phases. Window
+        // seams do not reset prices or force a direction/alternating cycle.
+        var epoch = day / 256;
+        var random = new ReplayRandom(Context("phase.v1." + coin.ToString(CultureInfo.InvariantCulture),
+            run, slot, epoch, false, ""));
+        var remaining = day % 256 + (int)(random.Uniform() * 20);
+        while (true)
         {
-            var sine = Math.Sin(Math.PI * random.Uniform() * maximumCdf / 2);
-            var magnitude = (decimal)(low + width * sine * sine);
-            var proposed = price * (1m + (up ? magnitude : -magnitude));
-            // Decimal conversion may round a double endpoint. Resample that representational edge.
-            if (proposed > LowerPrice(i) && proposed < UpperPrice(i) &&
-                magnitude >= (decimal)low && magnitude <= (decimal)high) return proposed;
+            var duration = 6 + (int)(random.Uniform() * 15);
+            var draw = random.Uniform();
+            var trend = draw < .3 ? -1d : draw < .7 ? 0d : 1d;
+            if (remaining < duration) return trend;
+            remaining -= duration;
         }
-        throw new InvalidOperationException("行情抽样未形成可表示的合法价格。");
     }
 
     private static void ApplyFirstJump(List<decimal> prices)

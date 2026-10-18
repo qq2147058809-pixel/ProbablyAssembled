@@ -32,7 +32,7 @@ internal static class CaseUnboxing
         {
             Core.Log?.Warning("LockUpContainer 失败（锁定标签已生效）：" + ex.Message);
         }
-        Core.Log?.Msg("[深空装机] 物资箱已生成：T" + tier + "，配件已随机装填并上锁。");
+        Core.Debug("[深空装机] 物资箱已生成：T" + tier + "，配件已随机装填并上锁。");
     }
 
     /// <summary>仅用于工作间隔离候选，成功提交前不改变库存中的原机箱。</summary>
@@ -55,46 +55,28 @@ internal static class CaseUnboxing
 
     private static void RollLoot(GameItem caseItem, int tier)
     {
-        var models = new List<string>();
-        for (var i = 0; i < CaseContents.SlotTags.Length; i++)
-        {
-            var def = CaseContents.SlotTags[i];
-            if (Rng.NextDouble() >= CaseEconomy.LootChance) continue;
-
-            var tierRoll = CaseEconomy.RollLootTier(tier, Rng);
-            var broken = Rng.NextDouble() < CaseEconomy.BrokenChance;
-            var id = "pcrepair." + StemOfTag(def) + "_t" + tierRoll + (broken ? "_broken" : "");
-            models.Add(id);
-        }
-
-        if (models.Count == 0)
-        {
-            var minimumTier = CaseEconomy.MinimumLootTier(tier);
-            models.Add("pcrepair.component_cpu_t" + minimumTier);
-            Core.Log?.Msg("[深空装机] 物资箱随机结果为空，保底生成 T" + minimumTier + " CPU。");
-        }
+        var plan = CaseLootPlanner.Roll(tier, Rng);
         // Finish every random choice before calling factories. Each temporary
         // entity has a cleanup custodian; no partial usable envelope is published.
         var contents = new List<WorkroomItemCodec.Snapshot>();
-        foreach (var model in models)
+        long actualValue = 0;
+        foreach (var model in plan.Models)
+        {
             contents.Add(WorkroomComponentParts.CaptureFactory(() => Components.Create(model)));
+            actualValue = checked(actualValue + contents[contents.Count - 1].Value);
+        }
+        if (actualValue != plan.TotalValue)
+            throw new InvalidOperationException("物资箱实际内容价值与固定出货计划不一致。");
         WorkroomCrateContents.Write(caseItem, contents);
-        Core.Log?.Msg("[深空装机] 物资箱完整记录已固定：" + contents.Count + " 件（T" + Math.Max(1, tier - 2) + " 至 T" + Math.Min(5, tier + 1) + "）。");
-    }
-
-    private static string StemOfTag(string componentTag)
-    {
-        foreach (var type in Components.All)
-            if (type.Tag == componentTag)
-                return type.Stem;
-        return "component_cpu";
+        Core.Debug("[深空装机] 物资箱完整记录已固定：" + contents.Count + " 件，基础价值 " +
+            plan.TotalValue + "/" + CaseEconomy.CratePrice(tier) + "（仅基础估值）。");
     }
 
     internal static void Notify(string message)
     {
         try
         {
-            StoreUIManager.Instance?.Notify(message, "#FFFFFF");
+            ModOperationNotice.Show(message);
         }
         catch (Exception ex)
         {

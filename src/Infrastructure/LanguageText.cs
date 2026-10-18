@@ -78,28 +78,32 @@ public static class LanguageText
             WarnOnce(key, "未找到中文文本：" + key);
             return "文字暂不可用";
         }
-        var useEnglish = english != null && english.ContainsKey(key);
-        if (english != null && !useEnglish) WarnOnce(key, "缺少译文，回退中文：" + key);
+        var useEnglish = english != null && english.ContainsKey(key) &&
+            StoryContent.Text(key, fallback) == fallback;
+        if (english != null && !english.ContainsKey(key)) WarnOnce(key, "缺少译文，回退中文：" + key);
         var template = Resolve(key, useEnglish);
         try { return Format(template, arguments, useEnglish); }
         catch (FormatException)
         {
             WarnOnce(key, "译文格式不匹配，回退中文：" + key);
-            try { return Format(fallback, arguments, false); }
+            try { return Format(StoryContent.Text(key, fallback), arguments, false); }
             catch (FormatException) { return "文字暂不可用"; }
         }
     }
 
-    // 延迟解析嵌套名称和列表，使整条中文回退不会混入已提前翻译的英文参数。
+    // 延迟解析名称，使整条中文回退不会混入已提前翻译的英文参数。
     internal static object Argument(string key) => new TextArgument(key);
-    internal static object List(IEnumerable<string> keys) => new TextList(keys);
-    internal static object Template(string key, params object[] arguments) => new FormattedTextArgument(key, arguments);
 
     private static string Resolve(string key, bool useEnglish)
     {
+        if (Chinese.TryGetValue(key, out var baseline))
+        {
+            var external = StoryContent.Text(key, baseline);
+            if (external != baseline) return external;
+        }
         if (useEnglish && english != null && english.TryGetValue(key, out var translation)) return translation;
         if (useEnglish) WarnOnce(key, "缺少译文，回退中文：" + key);
-        return Chinese.TryGetValue(key, out var text) ? text : "文字暂不可用";
+        return Chinese.TryGetValue(key, out var text) ? StoryContent.Text(key, text) : "文字暂不可用";
     }
 
     private static string Format(string template, object[] arguments, bool useEnglish)
@@ -110,10 +114,6 @@ public static class LanguageText
             values[index] = arguments[index] switch
             {
                 TextArgument text => Resolve(text.Key, useEnglish),
-                FormattedTextArgument text => Format(Resolve(text.Key, useEnglish), text.Arguments,
-                    useEnglish && english != null && english.ContainsKey(text.Key)),
-                TextList list => string.Join(Resolve("list.separator", useEnglish),
-                    Array.ConvertAll(list.Keys, key => Resolve(key, useEnglish))),
                 _ => arguments[index]
             };
         }
@@ -152,20 +152,4 @@ public static class LanguageText
         internal TextArgument(string key) => Key = key;
     }
 
-    private sealed class TextList
-    {
-        internal readonly string[] Keys;
-        internal TextList(IEnumerable<string> keys) => Keys = new List<string>(keys).ToArray();
-    }
-
-    private sealed class FormattedTextArgument
-    {
-        internal readonly string Key;
-        internal readonly object[] Arguments;
-        internal FormattedTextArgument(string key, object[] arguments)
-        {
-            Key = key;
-            Arguments = (object[])arguments.Clone();
-        }
-    }
 }

@@ -10,7 +10,7 @@ using UnityEngine.UI;
 
 namespace PCExpansion;
 
-/// <summary>只向原版 books 追加一个根；直属十个子对象供原版导航使用。</summary>
+/// <summary>只向原版 books 追加一个根；直属页面子对象供原版导航使用。</summary>
 internal static class ComputerManualUI
 {
     private const string RootName = "PCREPAIR_ComputerManual";
@@ -54,12 +54,14 @@ internal static class ComputerManualUI
 
     private static int Ensure(MultiPageUIManager manager)
     {
+        NpcVisitPerformance.Begin(NpcVisitPerformance.ManualBuild);
         try { return EnsureCore(manager); }
         catch (Exception ex)
         {
             Core.Log?.Warning("电脑手册管理器尚未就绪：" + ex.Message);
             return -1;
         }
+        finally { NpcVisitPerformance.End(NpcVisitPerformance.ManualBuild); }
     }
 
     private static int EnsureCore(MultiPageUIManager manager)
@@ -407,14 +409,14 @@ internal static class ComputerManualUI
 
     private static void RefreshLanguage()
     {
-        if (owner == null) return;
+        // An unopened/closed manual needs no Unity objects or font/icon work.
+        // Open will compare the current page revision before calling native OpenUI;
+        // never append a placeholder, since native Reset/ShowPage need real pages.
+        if (owner == null || owner.panel == null || !owner.panel.activeSelf || book == null || !book.activeSelf)
+            return;
+        var index = FindIndex(owner);
+        if (index < 0 || owner.currentBookIndex != index) return;
         Ensure(owner);
-    }
-
-    [HarmonyPatch(typeof(MultiPageUIManager), nameof(MultiPageUIManager.Start))]
-    internal static class StartPatch
-    {
-        private static void Postfix(MultiPageUIManager __instance) => Ensure(__instance);
     }
 
     [HarmonyPatch(typeof(MultiPageUIManager), nameof(MultiPageUIManager.ShowPage), new[] { typeof(int) })]

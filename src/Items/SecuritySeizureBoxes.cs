@@ -6,7 +6,6 @@ using System.Security.Cryptography;
 using System.Text;
 using HarmonyLib;
 using Il2Cpp;
-using Il2CppInterop.Runtime.InteropTypes;
 
 namespace PCExpansion;
 
@@ -58,20 +57,6 @@ internal static class SecuritySeizureBoxes
 
     internal static bool IsBox(GameItem? item) => item != null &&
         Core.Clean(item.identifier) is LargeId or SmallId;
-
-    private static void SetContentsOwned(Il2CppObjectBase? node, bool owned)
-    {
-        if (node == null) return;
-        var graph = node.TryCast<GraphNodeStorage>();
-        if (graph?.children == null) return;
-        foreach (var child in graph.children)
-        {
-            if (child == null) continue;
-            var item = child.TryCast<GameItem>();
-            if (item != null) GeneralHelper.SetItemOwned(item, owned);
-            SetContentsOwned(child, owned);
-        }
-    }
 
     private static GameItem Create(bool large)
     {
@@ -374,7 +359,7 @@ internal static class SecuritySeizureBoxes
                 if (placed.Sum(part => (long)part.unitValue) != plan.Value)
                     throw new InvalidOperationException("江白箱子实际回款与装填计划不一致。");
                 var occupied = plan.Whole.Sum(whole => whole.Type.Width * whole.Type.Height) + plan.Leaves.Count;
-                Core.Log?.Msg("[治安收缴] " + (large ? "大" : "小") + "盒已固定内容：" +
+                Core.Debug("[治安收缴] " + (large ? "大" : "小") + "盒已固定内容：" +
                     placed.Count + " 件，占 " + occupied + "/" + (large ? 30 : 15) +
                     " 格，基础回款 " + plan.Value + "/" + (large ? LargePrice : SmallPrice) + "。");
                 return placed;
@@ -407,7 +392,7 @@ internal static class SecuritySeizureBoxes
         {
             __instance.Set(LargeId, (Il2CppSystem.Func<GameItem>)(Func<GameItem>)(() => Create(true)));
             __instance.Set(SmallId, (Il2CppSystem.Func<GameItem>)(Func<GameItem>)(() => Create(false)));
-            Core.Log?.Msg("已注册江白收缴配件盒。");
+            Core.Debug("已注册江白收缴配件盒。");
         }
     }
 
@@ -462,7 +447,7 @@ internal static class SecuritySeizureBoxes
         private static void Postfix(GameItem item, bool own)
         {
             if (!IsBox(item)) return;
-            try { SetContentsOwned(item.contentWindow, own); }
+            try { SecuritySeizureOwnership.Synchronize(item, own); }
             catch (Exception ex) { Core.Log?.Error("收缴盒内部归属同步失败：" + ex); }
         }
     }

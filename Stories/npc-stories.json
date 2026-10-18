@@ -1,0 +1,1573 @@
+{
+  "schemaVersion": 1,
+  "texts": {
+    "luoxi.story.offer_1": "最近和治安部闹得有点僵，有批东西不能再放我店里了。",
+    "luoxi.story.offer_2": "来路不太干净，都是好东西。你替我保管保管，过两天我来拿",
+    "luoxi.story.accept": "行，替你保管三天。",
+    "luoxi.story.refuse": "这事我不接。",
+    "luoxi.story.accepted": "清单在这儿。你怎么收拾我不管，我回来时，东西和里面的零件都得是原来的。",
+    "luoxi.story.refused": "行，不勉强你。以后生意照做。",
+    "luoxi.story.first": "三天到了。我那边处理得差不多了，东西拿回来吧。",
+    "luoxi.story.final": "两天了。这回能把东西还我了吗？",
+    "luoxi.story.return": "归还寄存货物。",
+    "luoxi.story.not_ready": "还没凑齐。",
+    "luoxi.story.first_missing": "货物还没处理好吗？那我过两天再来看看。",
+    "luoxi.story.failed_1": "。。。",
+    "luoxi.story.failed_2": "没关系，以后买卖照做吧。",
+    "luoxi.story.complete_1": "一样不少。行，这回算我欠你个人情。",
+    "luoxi.story.complete_2": "这张显卡拿着。以后要配件，在机房电脑上订，我顺路送来。我卖给你的东西，都给你便宜一成。",
+    "luoxi.story.unlocked": "已归还全部原物；获得完好T4显卡；解锁每日配件订购；共享预订上限3→5；洛夕出售商品永久九折。",
+    "luoxi.story.reward": "领取完好T4显卡。",
+    "luoxi.story.reward_received": "已领取完好T4显卡。",
+    "luoxi.story.reward_pending": "显卡已为你留好。腾出库存位置后，洛夕到店时可继续领取。",
+    "luoxi.story.counter_full": "这批货得一起交给你。先给柜台和你的库存腾出足够位置，再来收货。",
+    "luoxi.story.receive": "位置腾好了，收下整批货物。",
+    "luoxi.story.missing": "尚未齐备或状态不符：{0}。装入其他机器的配件需先拆出；原物与内部原件必须完好。",
+    "luoxi.story.keeping": "先替我收好，等我回来再交。",
+    "luoxi.story.recovery": "货物交接状态尚在确认，请稍后重试。",
+    "jiangbai.story.offer_1": "啧，这几天不小心惹了点麻烦事",
+    "jiangbai.story.offer_2": "喂，让我在你这躲几天。",
+    "jiangbai.story.offer_3": "等我走之前会给你奖励的",
+    "jiangbai.story.accept": "行，在这里住吧。",
+    "jiangbai.story.refuse": "不行，你找别处吧。",
+    "jiangbai.story.accepted": "那我先过去了。",
+    "jiangbai.story.refused": "啧，算了。",
+    "jiangbai.story.farewell_1": "这几天谢了",
+    "jiangbai.story.farewell_2": "这破机房有够吵的",
+    "jiangbai.story.farewell_3": "给你个号码，下次你犯事了打这个，电话里的人会帮你解决。",
+    "jiangbai.story.recovery": "稍等一下。",
+    "jiangbai.contact.name": "神秘人",
+    "jiangbai.contact.line1": "犯事了？",
+    "jiangbai.contact.line2": "我来解决。",
+    "jiangbai.contact.card_name": "神秘人的名片",
+    "jiangbai.contact.card_description": "一张只留下号码27571的名片。",
+    "smallstory.L1-001": "你这些坏件，还分得挺细。",
+    "smallstory.L1-002": "我见过有人收回来就往角落一扔，过两天连自己都认不出来。",
+    "smallstory.L1-003": "你收这些东西，打算怎么处理？",
+    "smallstory.L1-101": "拆开修修，然后卖了。",
+    "smallstory.L1-102": "嗯。",
+    "smallstory.L1-103": "好好处理也不错。",
+    "smallstory.L1-201": "都是挣钱，怎么赚钱怎么来",
+    "smallstory.L1-202": "倒也没错。",
+    "smallstory.L1-203": "干咱这行挣的都是些辛苦钱。",
+    "smallstory.L1-901": "该修修该扔扔，没啥用的别留着。",
+    "smallstory.L1-902": "行，咱们接着做生意。",
+    "smallstory.L2-001": "我那儿有个老客，前两天又把电脑抱来了。",
+    "smallstory.L2-002": "电源坏了，别的倒还行，他不想整台换。",
+    "smallstory.L2-003": "我手头缺个合适的，你这有没有t1电源？",
+    "smallstory.L2-004": "自己修好的也行，找到替代的也行，我照正常收购价买。",
+    "smallstory.L2-101": "行，给你留意着。",
+    "smallstory.L2-102": "谢了。",
+    "smallstory.L2-103": "他就想老伙计多用几年。",
+    "smallstory.L2-201": "我这阵子忙，恐怕顾不上。",
+    "smallstory.L2-202": "行，我再问问别人。",
+    "smallstory.L2-203": "别为这事耽误你自己的活。",
+    "smallstory.L2-301": "上次说的电源，你找着了吗？",
+    "smallstory.L2-302": "电源在这儿，你看看。",
+    "smallstory.L2-303": "还没找到合适的。",
+    "smallstory.L2-304": "不急，别随便拿个坏的凑数就行。",
+    "smallstory.L2-310": "这只可以，我收下了。",
+    "smallstory.L2-311": "电源的钱已经给你了。",
+    "smallstory.L2-312": "这点材料也拿着，省得你白忙。",
+    "smallstory.L2-320": "我要的是完好的一档电源，你再找找。",
+    "smallstory.L2-321": "先别急，东西和钱还没对好，咱们等会儿再办。",
+    "smallstory.L2-330": "电源的钱已经结清了，材料先放我这儿，你腾出地方再拿。",
+    "smallstory.L2-331": "地方腾好了，把材料给我吧。",
+    "smallstory.L2-332": "拿好，这回都齐了。",
+    "smallstory.L2-333": "还是放不下，我先替你留着。",
+    "smallstory.L2-901": "行了，那我走了。",
+    "smallstory.L2-UI01": "需要：完好T1电源×1。",
+    "smallstory.L2-314": "我回去给他装上，省得他天天来问。",
+    "smallstory.L3-001": "上次那批货，已经处理好了。",
+    "smallstory.L3-002": "干得不错。",
+    "smallstory.L3-003": "你那几天有没有忍不住拆开看看？",
+    "smallstory.L3-101": "我照着清单收好的，没敢乱动。",
+    "smallstory.L3-102": "你倒是真当回事。",
+    "smallstory.L3-103": "这回没找错人。",
+    "smallstory.L3-201": "拆开看过，后来都给你装回去了。",
+    "smallstory.L3-202": "瞅瞅也正常。",
+    "smallstory.L3-203": "能原样交回来，我也不管你怎么收拾。",
+    "smallstory.L3-901": "谢了。",
+    "smallstory.L3-902": "不翻旧账了，看看今天的货吧。",
+    "smallstory.L3-301": "前阵子问你寄存那事，我另有安排了。",
+    "smallstory.L3-302": "你不用一直惦记着。",
+    "smallstory.L3-303": "后来找到地方了？",
+    "smallstory.L3-304": "嗯。",
+    "smallstory.L3-305": "东西好好的。",
+    "smallstory.L3-306": "当时确实不太方便。",
+    "smallstory.L3-307": "我知道。",
+    "smallstory.L3-308": "生意照做。",
+    "smallstory.L3-401": "今天有货要看，还是有东西要卖？",
+    "smallstory.L3-402": "上次那事，是我没办好。",
+    "smallstory.L3-403": "嗯，过去了。",
+    "smallstory.L3-404": "以后货款当面结，咱们省点麻烦。",
+    "smallstory.L3-405": "今天还做生意吗？",
+    "smallstory.L3-406": "做，把货拿出来吧。",
+    "smallstory.L4-001": "忙着呢？",
+    "smallstory.L4-002": "我那儿多了点维修材料，顺路给你带了一份。",
+    "smallstory.L4-003": "你这儿总能用上。",
+    "smallstory.L4-101": "那我收下了，多少钱？",
+    "smallstory.L4-102": "真要跟你算钱，我就摆柜台上了。",
+    "smallstory.L4-103": "拿着，下回少往地上掉两颗就行。",
+    "smallstory.L4-201": "你自己也得用，还是留着吧。",
+    "smallstory.L4-202": "我那边够用。",
+    "smallstory.L4-203": "行，你不要我就带回去，也别跟我客气个没完。",
+    "smallstory.L4-301": "你先腾点地方，这份我给你留着。",
+    "smallstory.L4-302": "地方腾好了，给我吧。",
+    "smallstory.L4-303": "拿好，丢了可别再找我要。",
+    "smallstory.L4-304": "还没腾够呢，我先留着。",
+    "smallstory.L4-901": "那份你已经拿了，别跟我装忘。",
+    "smallstory.L5-001": "今天的账算完了吧？",
+    "smallstory.L5-002": "不急着走，我问你个事。",
+    "smallstory.L5-003": "你当初怎么想到开这么一家店的？",
+    "smallstory.L5-101": "挣钱，总得找个活干。",
+    "smallstory.L5-102": "这理由够实在。",
+    "smallstory.L5-103": "不过能让你天天开门的，应该也不全是账上的数吧。",
+    "smallstory.L5-201": "喜欢修东西，修好了就挺高兴。",
+    "smallstory.L5-202": "嗯，这个我懂。",
+    "smallstory.L5-203": "这辈子也就和这些玩意打交道了。",
+    "smallstory.L5-301": "想有个自己的地方。",
+    "smallstory.L5-302": "那就更不能随便关了。",
+    "smallstory.L5-303": "东西多乱都行，起码门一开，知道今天该干什么。",
+    "smallstory.L5-901": "我刚开店那阵，也没想清楚以后能成什么样。",
+    "smallstory.L5-902": "后来东西越堆越多，认识的人也越来越多，就一直开着了。",
+    "smallstory.L5-903": "你也开久一点吧。",
+    "smallstory.L5-904": "哪天我路过，起码还有个能坐下说话的地方。",
+    "smallstory.L5-G01": "又忙上了？先把手里的活收好，我不急。",
+    "smallstory.L5-G02": "门开着就好，我还以为你今天偷懒。",
+    "smallstory.J1-001": "你刚才想叫我什么？",
+    "smallstory.J1-002": "别跟那些人一样，一听我爸是谁，说话都变了。",
+    "smallstory.J1-003": "我有名字，江白，两个字，很难记？",
+    "smallstory.J1-101": "江白，记住了。",
+    "smallstory.J1-102": "这不就行了。",
+    "smallstory.J1-103": "以后少来那些没用的称呼。",
+    "smallstory.J1-201": "行，江白大小姐。",
+    "smallstory.J1-202": "你故意的是吧？",
+    "smallstory.J1-203": "啧，后面三个字给我省了。",
+    "smallstory.J1-901": "别光顾着说话，我带的货你看不看？",
+    "smallstory.J1-902": "想买就挑，不买我还得去别处。",
+    "smallstory.J2-001": "你这儿能找着普通一点的风扇吗？",
+    "smallstory.J2-002": "一档的，完好就行，别一上来就给我挑最贵的。",
+    "smallstory.J2-003": "替我找一只，钱不会少你的。",
+    "smallstory.J2-101": "行。",
+    "smallstory.J2-102": "这回总算有人听明白了。",
+    "smallstory.J2-103": "找着了再给我。",
+    "smallstory.J2-201": "我这阵子顾不上，帮不了你。",
+    "smallstory.J2-202": "行。",
+    "smallstory.J2-203": "别到时候随便拿个破的塞给我就行。",
+    "smallstory.J2-301": "我要的风扇，有着落没有？",
+    "smallstory.J2-302": "找到了，这只怎么样？",
+    "smallstory.J2-303": "还没找到合适的。",
+    "smallstory.J2-304": "那就下回，我又没催你。",
+    "smallstory.J2-310": "嗯，就是这种。",
+    "smallstory.J2-311": "钱给你了，别再替我换个更贵的。",
+    "smallstory.J2-312": "你是不是也想问，我怎么不直接挑个好的？",
+    "smallstory.J2-320": "我说的是完好的一档风扇，你再看看。",
+    "smallstory.J2-321": "先放着，东西和钱还没弄明白。",
+    "smallstory.J2-401": "你也不像差这点钱。",
+    "smallstory.J2-402": "我说了普通的，你们怎么都先看价钱？",
+    "smallstory.J2-403": "贵一点，就不用问我想要什么了？",
+    "smallstory.J2-501": "你说要什么，我就找什么。",
+    "smallstory.J2-502": "对，就这么简单。",
+    "smallstory.J2-503": "也没见这话有多难懂。",
+    "smallstory.J2-901": "我拿它干什么，自己会想。",
+    "smallstory.J2-902": "这回谢了。",
+    "smallstory.J2-903": "风扇我拿了，钱也结了，你还惦记什么？",
+    "smallstory.J2-UI01": "需要：完好T1风扇×1。",
+    "smallstory.J3-001": "你那机房的风扇，还是那么吵？",
+    "smallstory.J3-002": "我走了以后，耳朵倒是清静了。",
+    "smallstory.J3-003": "不过那几天，睡得还行。",
+    "smallstory.J3-101": "你不是一直嫌弃那破机房吗？",
+    "smallstory.J3-102": "吵归吵，也没说一晚上都睡不着。",
+    "smallstory.J3-103": "至少没人半夜把我叫起来，问我到底打算怎么办。",
+    "smallstory.J3-201": "下次有事，记得提前打个招呼。",
+    "smallstory.J3-202": "知道了，别念。",
+    "smallstory.J3-203": "也不是每回都来得及说。",
+    "smallstory.J3-901": "上回那几天，确实多亏你了。",
+    "smallstory.J3-902": "就说这一遍，你听见就行。",
+    "smallstory.J4-001": "刚才有人问我，有一箱旧东西能不能便宜点卖。",
+    "smallstory.J4-002": "那箱不卖。",
+    "smallstory.J4-101": "里面有什么，连你都舍不得卖？",
+    "smallstory.J4-102": "一台旧电脑，还有几张照片。",
+    "smallstory.J4-103": "不值几个钱。",
+    "smallstory.J4-201": "有纪念意义就好好留着。",
+    "smallstory.J4-202": "我就是这个意思。",
+    "smallstory.J4-203": "偏有人觉得只要加点钱，就什么都好商量。",
+    "smallstory.J4-901": "有人还等着拿回去，值多少钱是另一回事。",
+    "smallstory.J4-902": "我卖你的货照原来的清单来，那一箱另外处理。",
+    "smallstory.J4-903": "行了，不说这事了。",
+    "smallstory.J5-001": "嘿。",
+    "smallstory.J5-002": "路过，进来看看。",
+    "smallstory.J5-101": "我还以为你又要来躲几天。",
+    "smallstory.J5-102": "少咒我。",
+    "smallstory.J5-103": "你就不能盼我有点别的事？",
+    "smallstory.J5-201": "进来吧，今天正好没那么忙。",
+    "smallstory.J5-202": "看出来了，你总算没埋在一堆零件里。",
+    "smallstory.J5-203": "我还以为你每天就打算这么过。",
+    "smallstory.J5-901": "不用腾地方，也没什么要你保管的。",
+    "smallstory.J5-902": "就是看看你这店还开着没有。",
+    "smallstory.J5-903": "有生意你先忙，我又没催你。",
+    "smallstory.J5-G01": "还活着呢？行，看来你这店一时半会儿关不了。",
+    "smallstory.J5-G02": "路过，进来看看，你忙你的。"
+  },
+  "parameters": {
+    "luoxi.core.turnover": 5000,
+    "L2.turnover": 2500,
+    "L5.turnover": 10000,
+    "L4.delayDays": 3,
+    "L5.delayDays": 5,
+    "J5.delayDays": 7
+  },
+  "smallGraph": {
+    "L1-001": {
+      "Id": "L1-001",
+      "Next": "L1-002",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L1-002": {
+      "Id": "L1-002",
+      "Next": "L1-003",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L1-003": {
+      "Id": "L1-003",
+      "Next": null,
+      "Choices": [
+        "L1-101",
+        "L1-201"
+      ],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L1-101": {
+      "Id": "L1-101",
+      "Next": "L1-102",
+      "Choices": [],
+      "Command": null,
+      "Player": true,
+      "Complete": false
+    },
+    "L1-201": {
+      "Id": "L1-201",
+      "Next": "L1-202",
+      "Choices": [],
+      "Command": null,
+      "Player": true,
+      "Complete": false
+    },
+    "L1-102": {
+      "Id": "L1-102",
+      "Next": "L1-103",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L1-103": {
+      "Id": "L1-103",
+      "Next": "L1-901",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L1-901": {
+      "Id": "L1-901",
+      "Next": "L1-902",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L1-902": {
+      "Id": "L1-902",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": true
+    },
+    "L1-202": {
+      "Id": "L1-202",
+      "Next": "L1-203",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L1-203": {
+      "Id": "L1-203",
+      "Next": "L1-901",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L2-001": {
+      "Id": "L2-001",
+      "Next": "L2-002",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L2-002": {
+      "Id": "L2-002",
+      "Next": "L2-003",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L2-003": {
+      "Id": "L2-003",
+      "Next": "L2-004",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L2-004": {
+      "Id": "L2-004",
+      "Next": null,
+      "Choices": [
+        "L2-101",
+        "L2-201"
+      ],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L2-101": {
+      "Id": "L2-101",
+      "Next": "L2-102",
+      "Choices": [],
+      "Command": "accept:L2",
+      "Player": true,
+      "Complete": false
+    },
+    "L2-201": {
+      "Id": "L2-201",
+      "Next": "L2-202",
+      "Choices": [],
+      "Command": "refuse:L2",
+      "Player": true,
+      "Complete": false
+    },
+    "L2-102": {
+      "Id": "L2-102",
+      "Next": "L2-103",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L2-103": {
+      "Id": "L2-103",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L2-202": {
+      "Id": "L2-202",
+      "Next": "L2-203",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L2-203": {
+      "Id": "L2-203",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": true
+    },
+    "L2-301": {
+      "Id": "L2-301",
+      "Next": null,
+      "Choices": [
+        "L2-302",
+        "L2-303"
+      ],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L2-302": {
+      "Id": "L2-302",
+      "Next": "L2-310",
+      "Choices": [],
+      "Command": "handin:L2",
+      "Player": true,
+      "Complete": false
+    },
+    "L2-303": {
+      "Id": "L2-303",
+      "Next": "L2-304",
+      "Choices": [],
+      "Command": null,
+      "Player": true,
+      "Complete": false
+    },
+    "L2-310": {
+      "Id": "L2-310",
+      "Next": "L2-311",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L2-311": {
+      "Id": "L2-311",
+      "Next": "L2-312",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L2-312": {
+      "Id": "L2-312",
+      "Next": "L2-314",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L2-314": {
+      "Id": "L2-314",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": true
+    },
+    "L2-304": {
+      "Id": "L2-304",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L2-320": {
+      "Id": "L2-320",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L2-321": {
+      "Id": "L2-321",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L2-330": {
+      "Id": "L2-330",
+      "Next": null,
+      "Choices": [
+        "L2-331"
+      ],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L2-331": {
+      "Id": "L2-331",
+      "Next": "L2-332",
+      "Choices": [],
+      "Command": "claim:L2",
+      "Player": true,
+      "Complete": false
+    },
+    "L2-332": {
+      "Id": "L2-332",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": true
+    },
+    "L2-333": {
+      "Id": "L2-333",
+      "Next": null,
+      "Choices": [
+        "L2-331"
+      ],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L2-901": {
+      "Id": "L2-901",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L3-001": {
+      "Id": "L3-001",
+      "Next": "L3-002",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L3-002": {
+      "Id": "L3-002",
+      "Next": "L3-003",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L3-003": {
+      "Id": "L3-003",
+      "Next": null,
+      "Choices": [
+        "L3-101",
+        "L3-201"
+      ],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L3-101": {
+      "Id": "L3-101",
+      "Next": "L3-102",
+      "Choices": [],
+      "Command": null,
+      "Player": true,
+      "Complete": false
+    },
+    "L3-201": {
+      "Id": "L3-201",
+      "Next": "L3-202",
+      "Choices": [],
+      "Command": null,
+      "Player": true,
+      "Complete": false
+    },
+    "L3-102": {
+      "Id": "L3-102",
+      "Next": "L3-103",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L3-103": {
+      "Id": "L3-103",
+      "Next": "L3-901",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L3-901": {
+      "Id": "L3-901",
+      "Next": "L3-902",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L3-902": {
+      "Id": "L3-902",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": true
+    },
+    "L3-202": {
+      "Id": "L3-202",
+      "Next": "L3-203",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L3-203": {
+      "Id": "L3-203",
+      "Next": "L3-901",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L3-301": {
+      "Id": "L3-301",
+      "Next": "L3-302",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L3-302": {
+      "Id": "L3-302",
+      "Next": null,
+      "Choices": [
+        "L3-303",
+        "L3-306"
+      ],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L3-303": {
+      "Id": "L3-303",
+      "Next": "L3-304",
+      "Choices": [],
+      "Command": null,
+      "Player": true,
+      "Complete": false
+    },
+    "L3-306": {
+      "Id": "L3-306",
+      "Next": "L3-307",
+      "Choices": [],
+      "Command": null,
+      "Player": true,
+      "Complete": false
+    },
+    "L3-304": {
+      "Id": "L3-304",
+      "Next": "L3-305",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L3-305": {
+      "Id": "L3-305",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": true
+    },
+    "L3-307": {
+      "Id": "L3-307",
+      "Next": "L3-308",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L3-308": {
+      "Id": "L3-308",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": true
+    },
+    "L3-401": {
+      "Id": "L3-401",
+      "Next": null,
+      "Choices": [
+        "L3-402",
+        "L3-405"
+      ],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L3-402": {
+      "Id": "L3-402",
+      "Next": "L3-403",
+      "Choices": [],
+      "Command": null,
+      "Player": true,
+      "Complete": false
+    },
+    "L3-405": {
+      "Id": "L3-405",
+      "Next": "L3-406",
+      "Choices": [],
+      "Command": null,
+      "Player": true,
+      "Complete": false
+    },
+    "L3-403": {
+      "Id": "L3-403",
+      "Next": "L3-404",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L3-404": {
+      "Id": "L3-404",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": true
+    },
+    "L3-406": {
+      "Id": "L3-406",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": true
+    },
+    "L4-001": {
+      "Id": "L4-001",
+      "Next": "L4-002",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L4-002": {
+      "Id": "L4-002",
+      "Next": "L4-003",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L4-003": {
+      "Id": "L4-003",
+      "Next": null,
+      "Choices": [
+        "L4-101",
+        "L4-201"
+      ],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L4-101": {
+      "Id": "L4-101",
+      "Next": "L4-102",
+      "Choices": [],
+      "Command": "claim:L4",
+      "Player": true,
+      "Complete": false
+    },
+    "L4-201": {
+      "Id": "L4-201",
+      "Next": "L4-202",
+      "Choices": [],
+      "Command": "refuse:L4",
+      "Player": true,
+      "Complete": false
+    },
+    "L4-102": {
+      "Id": "L4-102",
+      "Next": "L4-103",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L4-103": {
+      "Id": "L4-103",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": true
+    },
+    "L4-202": {
+      "Id": "L4-202",
+      "Next": "L4-203",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L4-203": {
+      "Id": "L4-203",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": true
+    },
+    "L4-301": {
+      "Id": "L4-301",
+      "Next": null,
+      "Choices": [
+        "L4-302"
+      ],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L4-302": {
+      "Id": "L4-302",
+      "Next": "L4-303",
+      "Choices": [],
+      "Command": "claim:L4",
+      "Player": true,
+      "Complete": false
+    },
+    "L4-303": {
+      "Id": "L4-303",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": true
+    },
+    "L4-304": {
+      "Id": "L4-304",
+      "Next": null,
+      "Choices": [
+        "L4-302"
+      ],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L4-901": {
+      "Id": "L4-901",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L5-001": {
+      "Id": "L5-001",
+      "Next": "L5-002",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L5-002": {
+      "Id": "L5-002",
+      "Next": "L5-003",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L5-003": {
+      "Id": "L5-003",
+      "Next": null,
+      "Choices": [
+        "L5-101",
+        "L5-201",
+        "L5-301"
+      ],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L5-101": {
+      "Id": "L5-101",
+      "Next": "L5-102",
+      "Choices": [],
+      "Command": null,
+      "Player": true,
+      "Complete": false
+    },
+    "L5-201": {
+      "Id": "L5-201",
+      "Next": "L5-202",
+      "Choices": [],
+      "Command": null,
+      "Player": true,
+      "Complete": false
+    },
+    "L5-301": {
+      "Id": "L5-301",
+      "Next": "L5-302",
+      "Choices": [],
+      "Command": null,
+      "Player": true,
+      "Complete": false
+    },
+    "L5-102": {
+      "Id": "L5-102",
+      "Next": "L5-103",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L5-103": {
+      "Id": "L5-103",
+      "Next": "L5-901",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L5-901": {
+      "Id": "L5-901",
+      "Next": "L5-902",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L5-902": {
+      "Id": "L5-902",
+      "Next": "L5-903",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L5-903": {
+      "Id": "L5-903",
+      "Next": "L5-904",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L5-904": {
+      "Id": "L5-904",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": true
+    },
+    "L5-202": {
+      "Id": "L5-202",
+      "Next": "L5-203",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L5-203": {
+      "Id": "L5-203",
+      "Next": "L5-901",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L5-302": {
+      "Id": "L5-302",
+      "Next": "L5-303",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "L5-303": {
+      "Id": "L5-303",
+      "Next": "L5-901",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J1-001": {
+      "Id": "J1-001",
+      "Next": "J1-002",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J1-002": {
+      "Id": "J1-002",
+      "Next": "J1-003",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J1-003": {
+      "Id": "J1-003",
+      "Next": null,
+      "Choices": [
+        "J1-101",
+        "J1-201"
+      ],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J1-101": {
+      "Id": "J1-101",
+      "Next": "J1-102",
+      "Choices": [],
+      "Command": null,
+      "Player": true,
+      "Complete": false
+    },
+    "J1-201": {
+      "Id": "J1-201",
+      "Next": "J1-202",
+      "Choices": [],
+      "Command": null,
+      "Player": true,
+      "Complete": false
+    },
+    "J1-102": {
+      "Id": "J1-102",
+      "Next": "J1-103",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J1-103": {
+      "Id": "J1-103",
+      "Next": "J1-901",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J1-901": {
+      "Id": "J1-901",
+      "Next": "J1-902",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J1-902": {
+      "Id": "J1-902",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": true
+    },
+    "J1-202": {
+      "Id": "J1-202",
+      "Next": "J1-203",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J1-203": {
+      "Id": "J1-203",
+      "Next": "J1-901",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J2-001": {
+      "Id": "J2-001",
+      "Next": "J2-002",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J2-002": {
+      "Id": "J2-002",
+      "Next": "J2-003",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J2-003": {
+      "Id": "J2-003",
+      "Next": null,
+      "Choices": [
+        "J2-101",
+        "J2-201"
+      ],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J2-101": {
+      "Id": "J2-101",
+      "Next": "J2-102",
+      "Choices": [],
+      "Command": "accept:J2",
+      "Player": true,
+      "Complete": false
+    },
+    "J2-201": {
+      "Id": "J2-201",
+      "Next": "J2-202",
+      "Choices": [],
+      "Command": "refuse:J2",
+      "Player": true,
+      "Complete": false
+    },
+    "J2-102": {
+      "Id": "J2-102",
+      "Next": "J2-103",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J2-103": {
+      "Id": "J2-103",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J2-202": {
+      "Id": "J2-202",
+      "Next": "J2-203",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J2-203": {
+      "Id": "J2-203",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": true
+    },
+    "J2-301": {
+      "Id": "J2-301",
+      "Next": null,
+      "Choices": [
+        "J2-302",
+        "J2-303"
+      ],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J2-302": {
+      "Id": "J2-302",
+      "Next": "J2-310",
+      "Choices": [],
+      "Command": "handin:J2",
+      "Player": true,
+      "Complete": false
+    },
+    "J2-303": {
+      "Id": "J2-303",
+      "Next": "J2-304",
+      "Choices": [],
+      "Command": null,
+      "Player": true,
+      "Complete": false
+    },
+    "J2-310": {
+      "Id": "J2-310",
+      "Next": "J2-311",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J2-311": {
+      "Id": "J2-311",
+      "Next": "J2-312",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J2-312": {
+      "Id": "J2-312",
+      "Next": null,
+      "Choices": [
+        "J2-401",
+        "J2-501"
+      ],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J2-304": {
+      "Id": "J2-304",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J2-320": {
+      "Id": "J2-320",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J2-321": {
+      "Id": "J2-321",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J2-401": {
+      "Id": "J2-401",
+      "Next": "J2-402",
+      "Choices": [],
+      "Command": null,
+      "Player": true,
+      "Complete": false
+    },
+    "J2-501": {
+      "Id": "J2-501",
+      "Next": "J2-502",
+      "Choices": [],
+      "Command": null,
+      "Player": true,
+      "Complete": false
+    },
+    "J2-402": {
+      "Id": "J2-402",
+      "Next": "J2-403",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J2-403": {
+      "Id": "J2-403",
+      "Next": "J2-901",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J2-901": {
+      "Id": "J2-901",
+      "Next": "J2-902",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J2-902": {
+      "Id": "J2-902",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": true
+    },
+    "J2-502": {
+      "Id": "J2-502",
+      "Next": "J2-503",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J2-503": {
+      "Id": "J2-503",
+      "Next": "J2-901",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J2-903": {
+      "Id": "J2-903",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J3-001": {
+      "Id": "J3-001",
+      "Next": "J3-002",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J3-002": {
+      "Id": "J3-002",
+      "Next": "J3-003",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J3-003": {
+      "Id": "J3-003",
+      "Next": null,
+      "Choices": [
+        "J3-101",
+        "J3-201"
+      ],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J3-101": {
+      "Id": "J3-101",
+      "Next": "J3-102",
+      "Choices": [],
+      "Command": null,
+      "Player": true,
+      "Complete": false
+    },
+    "J3-201": {
+      "Id": "J3-201",
+      "Next": "J3-202",
+      "Choices": [],
+      "Command": null,
+      "Player": true,
+      "Complete": false
+    },
+    "J3-102": {
+      "Id": "J3-102",
+      "Next": "J3-103",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J3-103": {
+      "Id": "J3-103",
+      "Next": "J3-901",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J3-901": {
+      "Id": "J3-901",
+      "Next": "J3-902",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J3-902": {
+      "Id": "J3-902",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": true
+    },
+    "J3-202": {
+      "Id": "J3-202",
+      "Next": "J3-203",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J3-203": {
+      "Id": "J3-203",
+      "Next": "J3-901",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J4-001": {
+      "Id": "J4-001",
+      "Next": "J4-002",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J4-002": {
+      "Id": "J4-002",
+      "Next": null,
+      "Choices": [
+        "J4-101",
+        "J4-201"
+      ],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J4-101": {
+      "Id": "J4-101",
+      "Next": "J4-102",
+      "Choices": [],
+      "Command": null,
+      "Player": true,
+      "Complete": false
+    },
+    "J4-201": {
+      "Id": "J4-201",
+      "Next": "J4-202",
+      "Choices": [],
+      "Command": null,
+      "Player": true,
+      "Complete": false
+    },
+    "J4-102": {
+      "Id": "J4-102",
+      "Next": "J4-103",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J4-103": {
+      "Id": "J4-103",
+      "Next": "J4-901",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J4-901": {
+      "Id": "J4-901",
+      "Next": "J4-902",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J4-902": {
+      "Id": "J4-902",
+      "Next": "J4-903",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J4-903": {
+      "Id": "J4-903",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": true
+    },
+    "J4-202": {
+      "Id": "J4-202",
+      "Next": "J4-203",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J4-203": {
+      "Id": "J4-203",
+      "Next": "J4-901",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J5-001": {
+      "Id": "J5-001",
+      "Next": "J5-002",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J5-002": {
+      "Id": "J5-002",
+      "Next": null,
+      "Choices": [
+        "J5-101",
+        "J5-201"
+      ],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J5-101": {
+      "Id": "J5-101",
+      "Next": "J5-102",
+      "Choices": [],
+      "Command": null,
+      "Player": true,
+      "Complete": false
+    },
+    "J5-201": {
+      "Id": "J5-201",
+      "Next": "J5-202",
+      "Choices": [],
+      "Command": null,
+      "Player": true,
+      "Complete": false
+    },
+    "J5-102": {
+      "Id": "J5-102",
+      "Next": "J5-103",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J5-103": {
+      "Id": "J5-103",
+      "Next": "J5-901",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J5-901": {
+      "Id": "J5-901",
+      "Next": "J5-902",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J5-902": {
+      "Id": "J5-902",
+      "Next": "J5-903",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J5-903": {
+      "Id": "J5-903",
+      "Next": null,
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": true
+    },
+    "J5-202": {
+      "Id": "J5-202",
+      "Next": "J5-203",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    },
+    "J5-203": {
+      "Id": "J5-203",
+      "Next": "J5-901",
+      "Choices": [],
+      "Command": null,
+      "Player": false,
+      "Complete": false
+    }
+  }
+}

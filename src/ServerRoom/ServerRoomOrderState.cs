@@ -9,7 +9,7 @@ namespace PCExpansion;
 internal static class ServerRoomOrderState
 {
     internal const string SaveKey = "pcexpansion.server-room.orders.v2";
-    internal const int Version = 2, Limit = 3;
+    internal const int Version = 2, Limit = 5, OriginalLimit = 3;
     private static readonly JsonSerializerOptions JsonOptions = new() { MaxDepth = 16 };
 
     internal sealed class Document
@@ -26,6 +26,8 @@ internal static class ServerRoomOrderState
         public List<Order> Orders { get; set; } = new();
         // Tombstones survive removal from Orders and prevent late native purchase replay.
         public List<Purchase> Purchased { get; set; } = new();
+        public int CatalogDay { get; set; } = -1;
+        public List<ServerRoomOrderCatalog.Model> Catalog { get; set; } = new();
         internal ServerRoomState.Binding? RuntimeBinding { get; set; }
     }
 
@@ -38,6 +40,7 @@ internal static class ServerRoomOrderState
         public string VisitId { get; set; } = "";
         public int DueDay { get; set; }
         public bool Placed { get; set; }
+        public int OrderDay { get; set; } = -1;
     }
 
     internal sealed class Purchase
@@ -45,6 +48,9 @@ internal static class ServerRoomOrderState
         public Purchase() { }
         public string OrderId { get; set; } = "";
         public string VisitId { get; set; } = "";
+        public string Kind { get; set; } = "";
+        public int Tier { get; set; }
+        public int OrderDay { get; set; } = -1;
     }
 
     internal sealed class Change
@@ -73,14 +79,23 @@ internal static class ServerRoomOrderState
     {
         using var parsed = JsonDocument.Parse(raw, new JsonDocumentOptions { MaxDepth = 16 });
         var root = parsed.RootElement;
-        CheckObject(root, "Version", "Run", "Slot", "Revision", "LastVisitId", "LastVisitDay", "LastVisitArrived", "DispatchedVisits", "Orders", "Purchased");
+        // Two explicit current-v2 layouts: the existing machine-only envelope,
+        // or the complete extended envelope. Partial extensions are rejected.
+        var extended = root.TryGetProperty("CatalogDay", out _);
+        var fields = new[] { "Version", "Run", "Slot", "Revision", "LastVisitId", "LastVisitDay", "LastVisitArrived", "DispatchedVisits", "Orders", "Purchased" };
+        CheckObject(root, extended ? fields.Concat(new[] { "CatalogDay", "Catalog" }).ToArray() : fields);
         foreach (var visit in Array(root, "DispatchedVisits"))
             if (visit.ValueKind != JsonValueKind.String) throw new InvalidOperationException("预订来访身份不是字符串。");
-        foreach (var order in Array(root, "Orders")) CheckObject(order, "Id", "Kind", "Tier", "VisitId", "DueDay", "Placed");
-        foreach (var purchase in Array(root, "Purchased")) CheckObject(purchase, "OrderId", "VisitId");
+        foreach (var order in Array(root, "Orders")) CheckObject(order, extended ? new[] { "Id", "Kind", "Tier", "VisitId", "DueDay", "Placed", "OrderDay" } : new[] { "Id", "Kind", "Tier", "VisitId", "DueDay", "Placed" });
+        foreach (var purchase in Array(root, "Purchased")) CheckObject(purchase, extended ? new[] { "OrderId", "VisitId", "Kind", "Tier", "OrderDay" } : new[] { "OrderId", "VisitId" });
+        if (extended) foreach (var model in Array(root, "Catalog")) CheckObject(model, "Kind", "Tier");
         var value = JsonSerializer.Deserialize<Document>(raw, JsonOptions)
             ?? throw new InvalidOperationException("预订记录不是对象。");
         Validate(value);
+        if (!extended && (value.Orders.Count > OriginalLimit || value.Orders.Any(order => ServerRoomOrderCatalog.IsComponent(order.Kind)) ||
+            value.Purchased.GroupBy(purchase => purchase.VisitId).Any(group => group.Count() > OriginalLimit) ||
+            value.Purchased.Count(purchase => purchase.VisitId == value.LastVisitId) + value.Orders.Count(order => order.VisitId != "") > OriginalLimit))
+            throw new InvalidOperationException("原机箱预订封套包含扩展订单。");
         if (value.Run != run || value.Slot != slot)
             throw new InvalidOperationException("预订记录不属于当前 run 或档槽。");
         return value;
@@ -96,28 +111,49 @@ internal static class ServerRoomOrderState
         return result;
     }
 
-    internal static Change PrepareAdd(Document source, string orderId, string kind, int tier, int today)
+    internal static Change PrepareRefreshCatalog(Document source, int today, IReadOnlyList<ServerRoomOrderCatalog.Model> selection)
     {
-        Validate(source); Model(kind, tier);
-        RequireDay(today);
-        if (today < source.LastVisitDay) throw new InvalidOperationException("预订日期早于最新来访。");
-        if (!Id(orderId) || source.Orders.Any(order => order.Id == orderId) ||
-            source.Purchased.Any(purchase => purchase.OrderId == orderId))
-            throw new InvalidOperationException("预订身份无效或重复。");
-        if (source.Orders.Count >= Limit) throw new InvalidOperationException("最多保留三台未购买的专用机箱预订。");
-        var next = Advance(source);
-        next.Orders.Add(new Order { Id = orderId, Kind = kind, Tier = tier, DueDay = checked(today + 1) });
+        Validate(source); RequireDay(today);
+        if (today < source.CatalogDay || today < source.LastVisitDay) throw new InvalidOperationException("配件目录日期倒退。");
+        if (today == source.CatalogDay) return new Change(Clone(source), false);
+        if (selection == null) throw new InvalidOperationException("每日配件目录缺失。");
+        var next = Advance(source); next.CatalogDay = today;
+        next.Catalog = selection.Select(model => new ServerRoomOrderCatalog.Model { Kind = model.Kind, Tier = model.Tier }).ToList();
         return Checked(next);
     }
 
-    internal static Change PrepareReplace(Document source, string orderId, string kind, int tier)
+    internal static bool Available(Document source, string kind, int tier, int today, string exceptOrder = "") =>
+        source.CatalogDay == today && source.Catalog.Any(model => model.Kind == kind && model.Tier == tier) &&
+        !source.Orders.Any(order => order.Id != exceptOrder && order.Kind == kind && order.Tier == tier && order.OrderDay == today) &&
+        !source.Purchased.Any(purchase => purchase.Kind == kind && purchase.Tier == tier && purchase.OrderDay == today);
+
+    internal static Change PrepareAdd(Document source, string orderId, string kind, int tier, int today, int limit = OriginalLimit)
+    {
+        Validate(source); Model(kind, tier);
+        RequireDay(today);
+        if (today < source.LastVisitDay || today < source.CatalogDay) throw new InvalidOperationException("预订日期早于最新来访或配件目录。");
+        if (!Id(orderId) || source.Orders.Any(order => order.Id == orderId) ||
+            source.Purchased.Any(purchase => purchase.OrderId == orderId))
+            throw new InvalidOperationException("预订身份无效或重复。");
+        if (limit != OriginalLimit && limit != Limit || source.Orders.Count >= limit) throw new InvalidOperationException("未购买订单已达共享上限。");
+        if (ServerRoomOrderCatalog.IsComponent(kind) && !Available(source, kind, tier, today)) throw new InvalidOperationException("该配件今日不可预订。");
+        var next = Advance(source);
+        next.Orders.Add(new Order { Id = orderId, Kind = kind, Tier = tier, DueDay = checked(today + 1), OrderDay = ServerRoomOrderCatalog.IsComponent(kind) ? today : -1 });
+        return Checked(next);
+    }
+
+    internal static Change PrepareReplace(Document source, string orderId, string kind, int tier, int today = -1)
     {
         Validate(source); Model(kind, tier);
         var order = Find(source, orderId);
         Editable(order);
+        if (today >= 0 && (today < source.LastVisitDay || today < source.CatalogDay)) throw new InvalidOperationException("修改订单日期倒退。");
         if (order.Kind == kind && order.Tier == tier) return new Change(Clone(source), false);
+        if (ServerRoomOrderCatalog.IsComponent(kind) && !Available(source, kind, tier, today, orderId)) throw new InvalidOperationException("该配件今日不可预订。");
         var next = Advance(source); var replacement = Find(next, orderId);
         replacement.Kind = kind; replacement.Tier = tier;
+        replacement.OrderDay = ServerRoomOrderCatalog.IsComponent(kind) ? today : -1;
+        if (replacement.OrderDay >= 0) replacement.DueDay = checked(today + 1);
         return Checked(next);
     }
 
@@ -229,7 +265,7 @@ internal static class ServerRoomOrderState
             throw new InvalidOperationException("该订单未在成交回调的来访中上柜。");
         var next = Advance(source);
         next.Orders.RemoveAll(entry => entry.Id == orderId);
-        next.Purchased.Add(new Purchase { OrderId = orderId, VisitId = visitId });
+        next.Purchased.Add(new Purchase { OrderId = orderId, VisitId = visitId, Kind = order.Kind, Tier = order.Tier, OrderDay = order.OrderDay });
         return Checked(next);
     }
 
@@ -237,7 +273,7 @@ internal static class ServerRoomOrderState
     {
         if (value == null || value.Version != Version || !Token(value.Run) || value.Slot < 0 || value.Revision < 0 ||
             value.LastVisitId == null || value.DispatchedVisits == null || value.Orders == null || value.Purchased == null ||
-            value.Orders.Count > Limit || value.LastVisitDay < -1)
+            value.Orders.Count > Limit || value.LastVisitDay < -1 || value.Catalog == null || value.CatalogDay < -1)
             throw new InvalidOperationException("预订封套字段无效。");
         var visits = new HashSet<string>(StringComparer.Ordinal);
         foreach (var visit in value.DispatchedVisits)
@@ -245,6 +281,13 @@ internal static class ServerRoomOrderState
         if (value.DispatchedVisits.Count == 0 ? value.LastVisitId != "" || value.LastVisitArrived || value.LastVisitDay != -1 : value.LastVisitId != value.DispatchedVisits[^1] || value.LastVisitDay < 1)
             throw new InvalidOperationException("最新订货来访与历史不一致。");
         var identities = new HashSet<string>(StringComparer.Ordinal);
+        var dailyModels = new HashSet<string>(StringComparer.Ordinal);
+        if (value.CatalogDay == -1 ? value.Catalog.Count != 0 : value.Catalog.Count != ServerRoomOrderCatalog.DailyCount)
+            throw new InvalidOperationException("每日配件目录数量无效。");
+        foreach (var model in value.Catalog)
+            if (model == null || !ServerRoomOrderCatalog.IsComponent(model.Kind) || model.Tier is < 1 or > 5 || !dailyModels.Add(model.Key))
+                throw new InvalidOperationException("每日配件目录型号无效或重复。");
+        var reservations = new HashSet<string>(StringComparer.Ordinal);
         foreach (var order in value.Orders)
         {
             if (order == null || !Id(order.Id) || !identities.Add(order.Id) || order.VisitId == null ||
@@ -252,6 +295,7 @@ internal static class ServerRoomOrderState
                 order.Placed && (order.VisitId == "" || !value.LastVisitArrived))
                 throw new InvalidOperationException("预订身份或冻结批次无效。");
             Model(order.Kind, order.Tier);
+            Reservation(order.Kind, order.Tier, order.OrderDay, order.DueDay, value, reservations);
         }
         var purchasedPerVisit = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var purchase in value.Purchased)
@@ -259,14 +303,21 @@ internal static class ServerRoomOrderState
             if (purchase == null || !Id(purchase.OrderId) || !identities.Add(purchase.OrderId) || !visits.Contains(purchase.VisitId))
                 throw new InvalidOperationException("预订成交凭据无效或与未购买订单重复。");
             purchasedPerVisit.TryGetValue(purchase.VisitId, out var count);
-            if (count >= Limit) throw new InvalidOperationException("同一来访的预订成交数量超出三台。");
+            if (count >= Limit) throw new InvalidOperationException("同一来访的预订成交数量超出五笔。");
+            if (purchase.Kind == "")
+            { if (purchase.Tier != 0 || purchase.OrderDay != -1) throw new InvalidOperationException("既有成交凭据含不完整型号。"); }
+            else
+            {
+                Model(purchase.Kind, purchase.Tier);
+                Reservation(purchase.Kind, purchase.Tier, purchase.OrderDay, int.MaxValue, value, reservations);
+            }
             purchasedPerVisit[purchase.VisitId] = count + 1;
         }
         purchasedPerVisit.TryGetValue(value.LastVisitId, out var latestPurchased);
         if (latestPurchased > 0 && !value.LastVisitArrived)
             throw new InvalidOperationException("最新来访成交缺少到店凭据。");
         if (latestPurchased + value.Orders.Count(order => order.VisitId != "") > Limit)
-            throw new InvalidOperationException("同一来访的冻结订单与成交数量超出三台。");
+            throw new InvalidOperationException("同一来访的冻结订单与成交数量超出五笔。");
     }
 
     private static Document Advance(Document source)
@@ -277,14 +328,22 @@ internal static class ServerRoomOrderState
     private static void Editable(Order order)
     { if (order.VisitId != "") throw new InvalidOperationException("洛夕已携带该订单来访，本访结束前不能修改或取消。"); }
     private static void Model(string kind, int tier)
-    { if (kind is not ("mining" or "server") || tier is < 1 or > 5) throw new InvalidOperationException("预订型号或档位无效。"); }
+    { _ = ServerRoomOrderCatalog.Identifier(kind, tier); }
+    private static void Reservation(string kind, int tier, int day, int dueDay, Document value, HashSet<string> reservations)
+    {
+        if (!ServerRoomOrderCatalog.IsComponent(kind))
+        { if (day != -1) throw new InvalidOperationException("机器订单不应占用每日配件库存。"); return; }
+        if (day < 0 || day > value.CatalogDay || dueDay <= day || !reservations.Add(day + ":" + kind + ":" + tier) ||
+            day == value.CatalogDay && !value.Catalog.Any(model => model.Kind == kind && model.Tier == tier))
+            throw new InvalidOperationException("每日配件预订凭据无效或重复。");
+    }
     private static void RequireVisit(string visit)
     { if (!Token(visit)) throw new InvalidOperationException("预订来访身份无效。"); }
     private static void RequireDay(int day)
     { if (day < 0) throw new InvalidOperationException("预订游戏日无效。"); }
     private static HashSet<string> Snapshot(IReadOnlyCollection<string> orderIds)
     {
-        if (orderIds == null || orderIds.Count > Limit) throw new InvalidOperationException("订货快照最多三台。");
+        if (orderIds == null || orderIds.Count > Limit) throw new InvalidOperationException("订货快照最多五笔。");
         var result = new HashSet<string>(StringComparer.Ordinal);
         foreach (var id in orderIds)
             if (!Id(id) || !result.Add(id)) throw new InvalidOperationException("订货快照身份无效或重复。");

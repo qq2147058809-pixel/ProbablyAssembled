@@ -23,7 +23,7 @@ internal static class WorkroomFeedbackDiagnostics
         factsMilliseconds += (Stopwatch.GetTimestamp() - start) * 1000.0 / Stopwatch.Frequency;
         var now = Environment.TickCount64;
         if (now < factsNoticeAt) return;
-        Core.Log?.Msg($"[PCFeedback-facts] hits={factsHits}; misses={factsMisses}; totalMs={factsMilliseconds:F1}; maxChars={factsCharacters}; frame={Time.frameCount}");
+        Core.Debug($"[PCFeedback-facts] hits={factsHits}; misses={factsMisses}; totalMs={factsMilliseconds:F1}; maxChars={factsCharacters}; frame={Time.frameCount}");
         factsNoticeAt = now + 2000;
         factsHits = factsMisses = factsCharacters = 0; factsMilliseconds = 0;
     }
@@ -44,7 +44,7 @@ internal static class WorkroomFeedbackDiagnostics
         public void Dispose()
         {
             var elapsed = (Stopwatch.GetTimestamp() - start) * 1000.0 / Stopwatch.Frequency;
-            if (elapsed >= 30) Core.Log?.Msg($"[PCFeedback-operation] {name}; totalMs={elapsed:F1};{stages}");
+            if (elapsed >= 30) Core.Debug($"[PCFeedback-operation] {name}; totalMs={elapsed:F1};{stages}");
         }
     }
 
@@ -57,7 +57,7 @@ internal static class WorkroomFeedbackDiagnostics
         var now = Environment.TickCount64;
         if (now < caseNoticeAt) return;
         if (caseMilliseconds >= 30)
-            Core.Log?.Msg($"[PCFeedback-case] item={item.identifier}; calls={caseCalls}; totalMs={caseMilliseconds:F1}; maxMs={caseMaximum:F1}; frame={Time.frameCount}");
+            Core.Debug($"[PCFeedback-case] item={item.identifier}; calls={caseCalls}; totalMs={caseMilliseconds:F1}; maxMs={caseMaximum:F1}; frame={Time.frameCount}");
         caseNoticeAt = now + 2000;
         caseCalls = 0; caseMilliseconds = caseMaximum = 0;
     }

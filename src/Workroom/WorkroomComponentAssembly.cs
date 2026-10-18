@@ -11,7 +11,7 @@ internal static class WorkroomComponentAssembly
 {
     internal const string Disassembly = "entry.disassembly", EntryBoard = "entry.body";
     internal static string Slot(WorkroomComponentTemplates.Template template, string kind, int index = 0) =>
-        template.Key + "." + kind + (template.MaxCount(kind) > 1 ? "." + index : "");
+        template.Key + "." + kind + (template.MaxCount(kind) > 1 && !(template.Key == "psu" && kind == "power" && index == 0) ? "." + index : "");
     internal static WorkroomStorageState.Record? At(string slot) => WorkroomStorage.State.FindSlot(slot);
     // Retain the existing caller API as a session-presence flag; a body has no tier.
     internal static int BoardTier(string family) => At(family + ".body") is { } body &&
@@ -82,7 +82,7 @@ internal static class WorkroomComponentAssembly
         // Free the incoming room footprint before arranging all old components.
         FillSlot(next, staged, incoming, target, orientation);
         if (!WorkroomStorageState.PlaceAll(next, returning.Select(record =>
-            new WorkroomStorageState.Record { Id = record.Id, Item = record.Item })))
+            WorkroomStorageState.Copy(record, "box", ""))))
         { failure = "full"; return false; }
         return true;
     }
@@ -110,7 +110,7 @@ internal static class WorkroomComponentAssembly
 
     // Read-only ranking; quantities do not multiply a unit's capacity or tier.
     internal static bool Intact(WorkroomItemCodec.Snapshot item) => !item.Broken && Components.Find(item.Identifier)?.Broken != true &&
-        item.Nodes.All(node => (node.Composition == null || node.Composition.All(Intact)) &&
+        item.Nodes.All(node => node.SlotItems.All(Intact) && (node.Composition == null || node.Composition.All(Intact)) &&
             (node.Machine == null || Intact(node.Machine.Body) && node.Machine.Parts.All(part => Intact(part.Item))));
     internal static int Configuration(WorkroomItemCodec.Snapshot item) => item.Nodes[0].Machine is { } machine ?
         WorkroomMachineAssembly.ConfigurationTier(machine) : item.Nodes[0].Composition is { } parts ?
@@ -127,58 +127,18 @@ internal static class WorkroomComponentAssembly
             capacity = family.Kinds.Sum((string kind) => (long)family.DefaultCount(kind, tier) * WorkroomComponentTemplates.DefaultPart(family, kind, tier).CapacityGB);
         return capacity;
     }
-    internal static WorkroomStorageState.Record? Best(IEnumerable<WorkroomStorageState.Record> records, Func<WorkroomStorageState.Record, bool> compatible) =>
-        records.Where(r => (r.Place == "room" || r.Place == "box") && Intact(r.Item) && compatible(r))
-            .OrderBy(r => r.Place == "room" ? 0 : 1).ThenByDescending(r => Configuration(r.Item))
-            .ThenByDescending(r => Capacity(r.Item)).FirstOrDefault();
     internal static void FillSlot(List<WorkroomStorageState.Record> next, Dictionary<string, WorkroomStorageState.Record> staged,
-        WorkroomStorageState.Record record, string slot, int? orientation = null)
+        WorkroomStorageState.Record record, string slot, int? orientation = null, WorkroomStorageState.Origin? returnTo = null)
     {
         if (record.Item.Count != 1) throw new InvalidOperationException("装配只支持独立单件。");
         var item = record.Item;
         if (orientation is { } turn) item = WorkroomItemCodec.Reorient(item, turn);
         var replacement = new WorkroomStorageState.Record
-            { Id = record.Id, Place = "slot", Slot = slot, Item = item };
+            { Id = record.Id, Place = "slot", Slot = slot, Item = item, ReturnTo = returnTo ?? WorkroomSelection.Remember(record) };
         var index = next.FindIndex(r => r.Id == record.Id);
         if (index < 0 || !ReferenceEquals(next[index], record)) throw new InvalidOperationException("拆件来源记录已变化。");
         next[index] = replacement;
         staged[slot] = replacement;
-    }
-    internal static void FillNotice(int filled, IEnumerable<string> missing)
-    {
-        var names = missing.ToArray();
-        Notice(names.Length == 0 ? "auto_fill_complete" : "auto_fill_result", filled, string.Join("、", names));
-    }
-    internal static void AutoFill(string familyKey, long epoch)
-    {
-        if (!Ready(epoch)) return;
-        var family = WorkroomComponentTemplates.All.FirstOrDefault(t => t.Key == familyKey); if (family == null) return;
-        var revision = WorkroomStorage.State.Revision;
-        WorkroomStorage.Run(() =>
-        {
-            var next = new List<WorkroomStorageState.Record>(WorkroomStorage.State.Items); var filled = 0;
-            var staged = next.Where(r => r.Place == "slot").ToDictionary(r => r.Slot, StringComparer.Ordinal);
-            var boardSlot = Slot(family, "body");
-            WorkroomStorageState.Record? Find(string name) => staged.TryGetValue(name, out var value) ? value : null;
-            if (Find(boardSlot) == null)
-            {
-                var board = Best(next, r => Accepts(boardSlot, r.Item, Find));
-                if (board != null) { FillSlot(next, staged, board, boardSlot); filled++; }
-            }
-            var missing = new List<string>();
-            foreach (var kind in family.Kinds)
-            for (var i = 0; i < (Find(boardSlot) == null ? kind == "body" ? 1 : 0 : family.MaxCount(kind)); i++)
-            {
-                var slot = Slot(family, kind, i); if (Find(slot) != null) continue;
-                var candidate = Best(next, r => Accepts(slot, r.Item, Find));
-                if (candidate != null) { FillSlot(next, staged, candidate, slot); filled++; }
-            }
-            foreach (var kind in family.Kinds)
-                if (Enumerable.Range(0, family.MaxCount(kind)).Count(i => Find(Slot(family, kind, i)) != null) < family.MinCount(kind))
-                    missing.Add(family.PartName(kind));
-            Current(epoch, revision); if (filled > 0) WorkroomStorage.State.Replace(next);
-            FillNotice(filled, missing);
-        });
     }
     internal static void ValidateSlots(List<WorkroomStorageState.Record> records)
     {
@@ -202,16 +162,11 @@ internal static class WorkroomComponentAssembly
     internal static bool Stage(string id, string slot, long epoch, int orientation)
     {
         if (WorkroomMachineAssembly.ValidSlot(slot)) return WorkroomMachineAssembly.Stage(id, slot, epoch, orientation);
-        var record = WorkroomStorage.State.Find(id); if (!Ready(epoch) || record?.Place != "room") return false;
+        var record = WorkroomStorage.State.Find(id); if (!Ready(epoch) || record == null || record.Place is not ("room" or "box")) return false;
         if (slot == EntryBoard)
         {
-            var routed = false; var routeRevision = WorkroomStorage.State.Revision;
-            WorkroomStorage.Run(() =>
-            {
-                if (!PrepareBodyRoute(record, orientation, out var next, out var failure)) { Notice(failure); return; }
-                Current(epoch, routeRevision); WorkroomStorage.State.Replace(next); routed = true; Notice("placed");
-            });
-            return routed;
+            return WorkroomSelection.Select(new WorkroomSelection.Candidate { Id = id, Item = record.Item,
+                Origin = record.Place == "room" ? WorkroomSelection.Source.Room : WorkroomSelection.Source.Box, Epoch = epoch }, slot, epoch, orientation: orientation);
         }
         if (!Accepts(slot, record.Item)) { Notice("wrong_slot"); return false; }
         var moved = false; var revision = WorkroomStorage.State.Revision;
@@ -226,39 +181,12 @@ internal static class WorkroomComponentAssembly
     }
     internal static bool ReturnModeSlots(bool assemblyMode, long epoch)
     {
-        if (!Ready(epoch)) return false;
         var requested = assemblyMode ? AssemblyModeSlots() : new HashSet<string>(StringComparer.Ordinal) { Disassembly };
-        var selected = WorkroomStorage.State.Items.Where(record => record.Place == "slot" && requested.Contains(record.Slot)).ToList();
-        var revision = WorkroomStorage.State.Revision;
-        if (selected.Count == 0) return Ready(epoch) && revision == WorkroomStorage.State.Revision;
-        var returned = false;
-        WorkroomStorage.Run(() =>
-        {
-            var ids = selected.Select(record => record.Id).ToHashSet(StringComparer.Ordinal);
-            var next = WorkroomStorage.State.Items.Where(record => !ids.Contains(record.Id)).ToList();
-            if (!WorkroomStorageState.PlaceAll(next, selected.Select(record =>
-                new WorkroomStorageState.Record { Id = record.Id, Item = record.Item }))) { Notice("full"); return; }
-            Current(epoch, revision); WorkroomStorage.State.Replace(next); returned = true; Notice("returned");
-        });
-        return returned;
+        return WorkroomSelection.ReturnSlots(requested, epoch);
     }
     internal static void ReturnSlots(IEnumerable<string> slots, long epoch)
     {
-        var requestedSlots = slots.ToArray();
-        if (requestedSlots.Any(WorkroomMachineAssembly.ValidSlot))
-        { WorkroomMachineAssembly.ReturnSlots(requestedSlots, epoch); return; }
-        if (!Ready(epoch)) return;
-        var requested = requestedSlots.ToHashSet();
-        foreach (var family in WorkroomComponentTemplates.All) if (requested.Contains(Slot(family, "body"))) requested.UnionWith(Slots(family));
-        var selected = requested.Select(At).Where(record => record != null).Select(record => record!).ToList();
-        if (selected.Count == 0) return;
-        WorkroomStorage.Run(() =>
-        {
-            var ids = selected.Select(record => record.Id).ToHashSet();
-            var next = WorkroomStorage.State.Items.Where(record => !ids.Contains(record.Id)).ToList();
-            if (!WorkroomStorageState.PlaceAll(next, selected.Select(record => new WorkroomStorageState.Record { Id = record.Id, Item = record.Item }))) { Notice("full"); return; }
-            WorkroomStorage.State.Replace(next); Notice("returned");
-        });
+        WorkroomSelection.ReturnSlots(slots, epoch);
     }
     internal sealed class PlannedPart
     {
@@ -284,7 +212,11 @@ internal static class WorkroomComponentAssembly
         if (source.Broken)
         {
             var standardResidual = Components.Find(WorkroomComponentTemplates.WholeId(family, tier, true))!.Value;
-            budget = checked((long)((decimal)WorkroomComponentTemplates.BaseValue(family, tier) * source.Value / standardResidual));
+            // The new PSU group mix changes its default parts sum, while the
+            // original whole-item price remains the intact recovery baseline.
+            var intactBaseline = family.Key == "psu" ? HardwareEconomyPrices.Component(family.Stem, tier) :
+                WorkroomComponentTemplates.BaseValue(family, tier);
+            budget = checked((long)((decimal)intactBaseline * source.Value / standardResidual));
         }
         var result = new List<PlannedPart>();
         foreach (var kind in family.Kinds) for (var i = 0; i < family.DefaultCount(kind, tier); i++)

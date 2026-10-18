@@ -51,7 +51,7 @@ internal static class ContactCard
             {
                 Il2CppSystem.Func<GameItem> factory = (Func<GameItem>)(() => Create());
                 __instance.Set(Id, factory);
-                Core.Log?.Msg("已注册 0504 名片文档物品。");
+                Core.Debug("已注册 0504 名片文档物品。");
             }
             catch (Exception ex)
             {

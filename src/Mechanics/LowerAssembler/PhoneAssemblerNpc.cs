@@ -13,10 +13,8 @@ internal static class PhoneAssemblerNpc
     internal const string ClientTag = "PCREPAIR_PHONE_ASSEMBLER";
     internal const string StockTag = "PCREPAIR_PHONE_ASSEMBLER_STOCK";
     internal const long PhoneNumber = 504;
-    // A full T5 miner can exceed the old 15000 budget during the GPU boom.
-    // Keep native bargaining while leaving enough budget for two legitimate
-    // dedicated devices in the same visit.
-    internal const int Budget = 100000;
+    // Shared native budget for the entire ordinary visit, including dedicated devices.
+    internal const int Budget = 18000;
 
     private const string DialogId = "pcrepair_phone_assembler";
     private static readonly Random random = new();
@@ -60,7 +58,7 @@ internal static class PhoneAssemblerNpc
 
         var contact = CreatePhoneContact();
         contacts.Add(PhoneNumber, contact);
-        Core.Log?.Msg("[深空装机] 已将装机佬注册到原版电话簿（0504，冷却 3 天）。");
+        Core.Debug("[深空装机] 已将装机佬注册到原版电话簿（0504，冷却 3 天）。");
         return contact;
     }
 
@@ -92,6 +90,7 @@ internal static class PhoneAssemblerNpc
         greeting.isMainDialog = true;
         greeting.SetNextDialogue(offerLine);
         client.mainDialogue = greeting;
+        LuoxiStory.ConfigureOrdinary(client);
         return client;
     }
 
@@ -156,6 +155,7 @@ internal static class PhoneAssemblerNpc
                     greeting.nextDialogue = null;
                     break;
             }
+            LuoxiStory.ConfigureOrdinary(client);
             if (displaying)
             {
                 displayedDeliveryClient = client.Pointer;
@@ -219,7 +219,7 @@ internal static class PhoneAssemblerNpc
             var store = PlayerStore.Instance;
             if (!HasContactAccess(store))
             {
-                StoreUIManager.Instance?.Notify(LanguageText.Get("text.34ccec0329de"), "#FFFFFF");
+                ModOperationNotice.Show(LanguageText.Get("text.34ccec0329de"));
                 return;
             }
 
@@ -228,7 +228,7 @@ internal static class PhoneAssemblerNpc
             if (IsAlreadyAtStore(store))
             {
                 contact.UseService();
-                Core.Log?.Msg("[深空装机] 装机佬已在访客队列中，本次电话仍按原版规则进入三天冷却。");
+                Core.Debug("[深空装机] 装机佬已在访客队列中，本次电话仍按原版规则进入三天冷却。");
                 return;
             }
 
@@ -258,7 +258,7 @@ internal static class PhoneAssemblerNpc
             try { ServerRoomDeliverySchedule.PrioritizeQueued(store); }
             catch (Exception ex) { Core.Log?.Warning("0504 后送货队首调整暂未完成，稍后重试：" + ex); }
             contact.UseService();
-            Core.Log?.Msg("[深空装机] 0504 电话已接通，装机佬已加入来客队列，原版三天冷却已启动。");
+            Core.Debug("[深空装机] 0504 电话已接通，装机佬已加入来客队列，原版三天冷却已启动。");
         }
         catch (Exception ex)
         {
@@ -274,8 +274,13 @@ internal static class PhoneAssemblerNpc
             var client = store?.currentClientInstance?.storeClient;
             if (store == null || !IsPhoneAssembler(client)) return;
 
+            // Custody visits carry no ordinary sale stock. Their task items are
+            // granted only by the explicit, all-or-nothing dialogue command.
+            if (LuoxiStory.IsStory(client)) { LuoxiStory.OnArrival(store, client!); return; }
+
             LowerAssemblerNpc.ConfigurePurchaseRules(client!);
             LowerAssemblerNpc.ConfigureTradeDialogue(client!);
+            LuoxiStory.ApplyDiscount(client!);
             if (ServerRoomOrderStock.IsDelivery(client))
             {
                 ApplyDeliveryBudget(client!);
@@ -283,7 +288,7 @@ internal static class PhoneAssemblerNpc
                 RefreshDisplayedDeliveryGreeting(client!);
                 return;
             }
-            LowerAssemblerNpc.ApplyAssemblerBudget(client!, Budget);
+            // Ordinary loaded visits retain the budget restored by the native save.
             NpcStockOffers.Stock(store, client!, StockTag, "PHONE", () => new List<string>
             {
                 "pcrepair.computer_case_t" + random.Next(1, 4) + "_broken",
@@ -346,6 +351,7 @@ internal static class PhoneAssemblerNpc
             try
             {
                 EnsurePhoneContact(__instance.PhoneClientDict);
+                LuoxiStory.AfterLoad(__instance);
                 if (__instance.isClientArrived && IsPhoneAssembler(__instance.currentClientInstance?.storeClient)) AddStock();
             }
             catch (Exception ex) { Core.Log?.Error("读档后恢复 0504 电话联系人失败：" + ex); }
@@ -382,7 +388,7 @@ internal static class PhoneAssemblerNpc
     {
         private static bool Prefix(string key, ref string __result)
         {
-            if (Core.Clean(key) != Id) return true;
+            if (Core.Clean(key) != Id && Core.Clean(key) != LuoxiStory.Id) return true;
             __result = LanguageText.Get("text.e419ca83983b");
             return false;
         }
@@ -425,7 +431,7 @@ internal static class PhoneAssemblerNpc
         private static bool Prefix(long currentNumber)
         {
             if (currentNumber != PhoneNumber || HasContactAccess(PlayerStore.Instance)) return true;
-            StoreUIManager.Instance?.Notify(LanguageText.Get("text.34ccec0329de"), "#FFFFFF");
+            ModOperationNotice.Show(LanguageText.Get("text.34ccec0329de"));
             return false;
         }
 
@@ -437,7 +443,7 @@ internal static class PhoneAssemblerNpc
     internal static class ArrivalStockPatch
     {
         [HarmonyPriority(Priority.Last)]
-        private static void Postfix() => AddStock();
+        private static void Postfix() { AddStock(); BusinessRuntime.Wake(); }
     }
 
     [HarmonyPatch(typeof(DialogUIManager), nameof(DialogUIManager.StartDialogue),

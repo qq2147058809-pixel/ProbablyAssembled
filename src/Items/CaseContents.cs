@@ -6,7 +6,8 @@ namespace PCExpansion;
 /// <summary>当前盲盒的固定抽取顺序；不包含窗口或机器装配槽位布局。</summary>
 internal static class CaseContents
 {
-    // 重复类别代表独立抽取次数，不能套用机器装配的槽位上限。
+    // 重复类别代表各自的出货位置上限，不能套用机器装配槽数；
+    // 新内容联合规划，各位置并非统计上独立抽取。
     internal static readonly string[] SlotTags =
     {
         Components.FanTag, Components.PsuTag, Components.MotherboardTag,

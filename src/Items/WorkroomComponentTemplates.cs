@@ -20,7 +20,7 @@ internal static class WorkroomComponentTemplates
             defaults = kinds.Select((kind, i) => (kind, quantities[i])).ToDictionary(p => p.kind, p => p.Item2);
         }
         internal int Count(string kind, int tier) => MaxCount(kind);
-        internal int MaxCount(string kind) => kind == "memory" ? 6 : kind == "flash" ? 4 : defaults.ContainsKey(kind) ? 1 : 0;
+        internal int MaxCount(string kind) => kind == "memory" || Key == "psu" && kind == "power" ? 6 : kind == "flash" ? 4 : defaults.ContainsKey(kind) ? 1 : 0;
         internal int MinCount(string kind) => defaults.ContainsKey(kind) ? 1 : 0;
         internal int DefaultCount(string kind, int tier) => tier is >= 1 and <= 5 && defaults.TryGetValue(kind, out var counts) ? counts[tier - 1] : 0;
         internal string PartName(string kind) => Text(Key + "." + kind);
@@ -34,7 +34,7 @@ internal static class WorkroomComponentTemplates
         new Template("gpu", "component_gpu", 2, 4, new[] { "body", "core", "memory" }, new[] { Ones(), Ones(), new[] {2,2,3,4,4} }),
         new Template("ram", "component_ram", 1, 3, new[] { "body", "memory" }, new[] { Ones(), new[] {2,2,2,3,4} }),
         new Template("ssd", "component_hdd", 3, 1, new[] { "body", "controller", "flash" }, new[] { Ones(), Ones(), new[] {1,2,2,4,4} }),
-        new Template("psu", "component_psu", 2, 2, new[] { "body", "power" }, new[] { Ones(), Ones() }),
+        new Template("psu", "component_psu", 2, 2, new[] { "body", "power" }, new[] { Ones(), new[] {1,2,2,3,5} }),
         new Template("fan", "component_fan", 2, 2, new[] { "body", "rotor" }, new[] { Ones(), Ones() }),
         new Template("cooler", "component_cooler", 2, 2, new[] { "body", "thermal", "fan" }, new[] { Ones(), Ones(), Ones() })
     };
@@ -60,35 +60,34 @@ internal static class WorkroomComponentTemplates
     private static IReadOnlyList<PartDefinition> BuildDefinitions()
     {
         var result = new List<PartDefinition>();
-        void Common(string key, string kind, string spec, int capacity, long value, int processing = 1)
+        void Common(string key, string kind, string spec, int capacity, int processing = 1)
         {
             var family = All.First(f => f.Key == key);
+            var identifier = "pcrepair." + key + "_" + kind + (spec == "" ? "" : "_" + spec);
             result.Add(new PartDefinition { Family = family, Kind = kind, Specification = spec, CapacityGB = capacity,
-                FixedValue = value, ProcessingTier = processing, Tier = 0,
-                Identifier = "pcrepair." + key + "_" + kind + (spec == "" ? "" : "_" + spec) });
+                FixedValue = HardwareEconomyPrices.Part(identifier), ProcessingTier = processing, Tier = 0,
+                Identifier = identifier });
         }
-        void Core(string key, string kind, long[] values)
+        void Core(string key, string kind)
         {
             var family = All.First(f => f.Key == key);
             for (var tier = 1; tier <= 5; tier++) result.Add(new PartDefinition { Family = family, Kind = kind, Tier = tier,
-                ProcessingTier = tier, FixedValue = values[tier - 1], Identifier = PartId(family, kind, tier) });
+                ProcessingTier = tier, FixedValue = HardwareEconomyPrices.Part(PartId(family, kind, tier)), Identifier = PartId(family, kind, tier) });
         }
-        foreach (var family in All) Common(family.Key, "body", "", 0, family.Key == "gpu" ? 10 : 5);
-        Core("gpu", "core", new long[] {96,168,266,423,635});
-        Core("ssd", "controller", new long[] {56,88,135,203,301});
-        Core("psu", "power", new long[] {70,111,175,273,423});
-        Core("fan", "rotor", new long[] {25,41,67,106,166});
-        Core("cooler", "thermal", new long[] {35,60,98,153,243});
-        Common("gpu", "memory", "4gb", 4, 12); Common("gpu", "memory", "8gb", 8, 24, 3);
-        Common("ram", "memory", "4gb", 4, 25); Common("ram", "memory", "8gb", 8, 40); Common("ram", "memory", "16gb", 16, 70, 3);
-        Common("ssd", "flash", "256gb", 256, 4); Common("ssd", "flash", "512gb", 512, 8); Common("ssd", "flash", "1024gb", 1024, 16, 3);
-        Common("cooler", "fan", "standard", 0, 5); Common("cooler", "fan", "enhanced", 0, 8, 3);
+        foreach (var family in All) Common(family.Key, "body", "", 0);
+        Core("gpu", "core"); Core("ssd", "controller"); Core("psu", "power");
+        Core("fan", "rotor"); Core("cooler", "thermal");
+        Common("gpu", "memory", "4gb", 4); Common("gpu", "memory", "8gb", 8, 3);
+        Common("ram", "memory", "4gb", 4); Common("ram", "memory", "8gb", 8); Common("ram", "memory", "16gb", 16, 3);
+        Common("ssd", "flash", "256gb", 256); Common("ssd", "flash", "512gb", 512); Common("ssd", "flash", "1024gb", 1024, 3);
+        Common("cooler", "fan", "standard", 0); Common("cooler", "fan", "enhanced", 0, 3);
         return result;
     }
     internal static PartDefinition Definition(string identifier) => byIdentifier.TryGetValue(identifier, out var value) ? value :
         throw new InvalidOperationException("未知部件规格。");
     internal static PartDefinition DefaultPart(Template family, string kind, int tier)
     {
+        if (family.Key == "psu" && kind == "power") return Definition(PartId(family, kind, tier <= 2 ? 1 : 2));
         string? spec = (family.Key, kind) switch
         {
             (_, "body") => "",
@@ -120,8 +119,31 @@ internal static class WorkroomComponentTemplates
         checked(DefaultPart(family, kind, tier).FixedValue!.Value * family.DefaultCount(kind, tier)));
     internal static long BaseValue(Template template, int tier) => StandardWholeValue(template, tier);
     internal static int RamTier(long capacity) => capacity < 16 ? 1 : capacity < 32 ? 2 : capacity < 48 ? 3 : capacity < 64 ? 4 : 5;
+    internal static int PsuWatts(int tier) => tier switch
+    { 1 => 100, 2 => 200, 3 => 400, 4 => 600, 5 => 1000, _ => throw new ArgumentOutOfRangeException(nameof(tier)) };
+    internal static int PsuTier(long watts) => watts < 200 ? 1 : watts < 400 ? 2 : watts < 600 ? 3 : watts < 1000 ? 4 : 5;
     internal static long MaximumWholeValue(Template family, int tier)
     {
+        if (family.Key == "psu")
+        {
+            // Enumerate multisets, including mixed tiers. A low-rated group does
+            // not cap the finished tier, and six equal-tier groups can exceed it.
+            long maximum = 0;
+            var body = Definition("pcrepair.psu_body").FixedValue!.Value;
+            void Visit(int groupTier, int count, long watts, long value)
+            {
+                if (groupTier > 5)
+                {
+                    if (count > 0 && PsuTier(watts) == tier) maximum = Math.Max(maximum, checked(body + value));
+                    return;
+                }
+                var price = Definition(PartId(family, "power", groupTier)).FixedValue!.Value;
+                for (var groups = 0; groups <= family.MaxCount("power") - count; groups++)
+                    Visit(groupTier + 1, count + groups, watts + (long)groups * PsuWatts(groupTier), checked(value + groups * price));
+            }
+            Visit(1, 0, 0, 0);
+            return maximum;
+        }
         if (family.Key == "ram")
         {
             long maximum = 0;

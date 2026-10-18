@@ -132,7 +132,7 @@ internal static class WorkroomStoreKey
         tooltip.interactable = interaction;
         WorkroomNativeTooltip.Register(tooltip, false);
         FollowAnchor();
-        Core.Log?.Msg("[工作间店内钥匙] 已创建桌面入口；位置=(756.5,310)/960×540，显示宽36像素；原版电脑激活=" + native.gameObject.activeInHierarchy + "。");
+        Core.Debug("[工作间店内钥匙] 已创建桌面入口；位置=(756.5,310)/960×540，显示宽36像素；原版电脑激活=" + native.gameObject.activeInHierarchy + "。");
     }
 
     private static void FollowAnchor()

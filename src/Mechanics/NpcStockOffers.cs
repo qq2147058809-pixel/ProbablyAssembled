@@ -239,9 +239,9 @@ internal static class NpcStockOffers
             for (var i = 0; i < plan.Count; i++)
                 if (!client.IsTag(prefix + "POSTED_" + batch + "_" + i)) throw new InvalidOperationException("NPC货单仍有未交付项。");
             client.AddTag(prefix + "DONE");
-            Core.Log?.Msg("[NPC供货] 本次货单已确认入柜：" + group + "；数量=" + plan.Count);
+            Core.Debug("[NPC供货] 本次货单已确认入柜：" + group + "；数量=" + plan.Count);
         }
-        finally { stocking = false; }
+        finally { stocking = false; BusinessRuntime.Wake(); }
     }
 
     private static void ObserveDestroy(GameItem item, bool starting, Exception? error = null)
@@ -254,7 +254,7 @@ internal static class NpcStockOffers
                 if (!candidate.SameOwner) continue;
                 if (starting) candidate.DestroyDepth++;
                 else if (candidate.DestroyDepth > 0 && --candidate.DestroyDepth == 0)
-                { candidate.Destroyed = error == null; candidate.Uncertain = error != null; }
+                { candidate.Destroyed = error == null; candidate.Uncertain = error != null; BusinessRuntime.Wake(); }
             }
             catch { candidate.Uncertain = true; }
         }

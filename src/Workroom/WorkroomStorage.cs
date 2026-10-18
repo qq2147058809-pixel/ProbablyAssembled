@@ -15,7 +15,7 @@ internal static class WorkroomStorage
     private static readonly Dictionary<string, WorkroomItemCodec.Candidate> delivery = new();
     private static bool busy, deferredSave;
     private static long lastSlowLog;
-    internal static bool Busy => busy || WorkroomCashRepair.Pending || ServerRoomRuntime.Pending;
+    internal static bool Busy => busy || WorkroomCashRepair.Pending || ServerRoomRuntime.Pending || WorkroomStoryTransfer.BlocksStorage;
     internal static string Text(string name, params object[] args) => LanguageText.Get("workroom.storage." + name, args);
     internal static string Message { get; private set; } = "";
     internal static long MessageUntil { get; private set; }
@@ -25,6 +25,30 @@ internal static class WorkroomStorage
 
     internal static void NotifyText(string text)
     { Message = text; MessageUntil = Environment.TickCount64 + 5000; }
+
+    private static bool HasMaintenance => cleanup.Count != 0 || delivery.Count != 0 || deferredSave ||
+        WorkroomItemCodec.CleanupPending || State.PendingRecords.Count != 0;
+
+    internal static void Wake(PlayerStore store)
+    {
+        // Binding is part of a load/event, never a hidden UI's frame refresh.
+        if (!State.SameOwner()) Update(store);
+        if (!HasMaintenance) return;
+        var pointer = store.Pointer; var run = store.runID; var slot = store.saveSlotId;
+        BusinessWork.Schedule("workroom-storage", () =>
+        {
+            if (!PlayerStore.IsInstanceExist() || PlayerStore.instance == null ||
+                PlayerStore.instance.Pointer != pointer || store.runID != run || store.saveSlotId != slot) return false;
+            Update(store);
+            return HasMaintenance;
+        }, intervalMs: 500);
+    }
+
+    private static void WakeMaintenance()
+    {
+        if (!HasMaintenance || !PlayerStore.IsInstanceExist() || PlayerStore.instance == null) return;
+        Wake(PlayerStore.instance);
+    }
 
     internal static void Update(PlayerStore store)
     {
@@ -36,7 +60,7 @@ internal static class WorkroomStorage
             Run(ReconcileLoadedRecords);
         }
         if (!State.Ready || busy) return;
-        WorkroomItemCodec.RetryCleanup();
+        WorkroomItemCodec.WakeCleanup();
         foreach (var pair in cleanup.ToArray())
             Run(() =>
             {
@@ -46,7 +70,8 @@ internal static class WorkroomStorage
         foreach (var pair in delivery.ToArray())
             Run(() =>
             {
-                if (PlayerTargets().Any(target => IsPlaced(pair.Value.Root, target, State.Find(pair.Key)?.Item.Count ?? 0)))
+                if (GeneralHelper.IsItemOwned(pair.Value.Root) &&
+                    WorkroomSelection.Inventories(includeLocked: true).Any(target => IsPlaced(pair.Value.Root, target.Grid, State.Find(pair.Key)?.Item.Count ?? 0)))
                 { State.Remove(pair.Key); delivery.Remove(pair.Key); }
                 else if (pair.Value.Cleaned || pair.Value.Root.parentInventory == null)
                 {
@@ -58,23 +83,20 @@ internal static class WorkroomStorage
             (item.Place == "delivery" && !delivery.ContainsKey(item.Id)))) Run(ReconcileLoadedRecords);
         if (deferredSave && cleanup.Count == 0 && delivery.Count == 0 && !WorkroomItemCodec.CleanupPending && !WorkroomCashRepair.Pending && !ServerRoomRuntime.Pending && ServerRoomDaily.AllowSave && !ComputerSupplierNpcs.StockPending && !NpcStockOffers.Pending && ServerRoomOrderStock.BeforeSave() &&
             State.PendingRecords.Count == 0)
-        { deferredSave = false; store.SaveGame(); }
+        { if (WorkroomStoryTransfer.BeforeSave() && LuoxiStory.BeforeSave() && JiangbaiStory.BeforeSave() && MysteriousContact.BeforeSave() && NpcStoryProgress.BeforeSave() && NpcSmallStories.BeforeSave()) { deferredSave = false; store.SaveGame(); } }
     }
 
     internal static IEnumerable<GameGridInventory> Sources()
     {
-        var entry = EmporiumEntry.Instance;
-        if (entry == null) yield break;
-        var seen = new HashSet<IntPtr>();
-        // invElement is the native main inventory, distinct from the four
-        // counter/back/showcase grids. Its items must also be transferable.
-        foreach (var grid in new[] { entry.invElement, entry.frontInvinvElement, entry.backInvinvElement,
-            entry.backInvinvElementCounter, entry.showcaseElement })
-            if (grid != null && seen.Add(grid.Pointer)) yield return grid;
+        if (!WorkroomGameAdapter.InventoryTransferAllowed()) yield break;
+        // Includes verified native storage containers; installed hardware and
+        // any locked ancestor remain outside the transfer source graph.
+        foreach (var pair in WorkroomSelection.Inventories()) yield return pair.Grid;
     }
 
     internal static IEnumerable<GameGridInventory> PlayerTargets()
     {
+        if (!WorkroomGameAdapter.InventoryTransferAllowed()) yield break;
         var entry = EmporiumEntry.Instance;
         if (entry == null) yield break;
         // Native TryAddToPlayerInv starts at back (player counter), then main.
@@ -83,6 +105,30 @@ internal static class WorkroomStorage
         if (entry.invElement != null && entry.invElement.Pointer != entry.backInvinvElement?.Pointer)
             yield return entry.invElement;
     }
+
+    // Story returns follow the native owned-item inventory list (including the
+    // hidden compartment), rather than the workroom drag source whitelist.
+    // Only scene inventories participate: a component installed in another
+    // item must first be removed normally. Never traverse/expel its parent item.
+    internal static IEnumerable<GameInventory> StorySources()
+    {
+        var owned = EmporiumEntry.Instance?.GetAllOwnedItems();
+        if (owned == null) yield break;
+        var seen = new HashSet<IntPtr>();
+        foreach (var item in owned)
+        {
+            if (item == null || !GeneralHelper.IsItemOwned(item)) continue;
+            var source = item.parentInventory;
+            if (source == null || source.IsRemoveLocked() || source.GetParentItem() != null ||
+                !Contains(source, item) || !seen.Add(source.Pointer)) continue;
+            yield return source;
+        }
+    }
+
+    private static bool IsStorySource(GameInventory? source, GameItem item, HashSet<IntPtr> sources) =>
+        source != null && !source.IsRemoveLocked() && source.GetParentItem() == null &&
+        Contains(source, item) && GeneralHelper.IsItemOwned(item) &&
+        sources.Contains(source.Pointer);
 
     internal static SlotMarker? PlayerDeliverySlot(GameItem item)
     {
@@ -114,7 +160,7 @@ internal static class WorkroomStorage
         return false;
     }
 
-    private static bool CheckStore(GameItem item)
+    private static bool CheckStore(GameItem item, HashSet<IntPtr>? storySources = null)
     {
         var stage = "state";
         var sourcePointer = IntPtr.Zero;
@@ -128,6 +174,7 @@ internal static class WorkroomStorage
         }
         try
         {
+            if (storySources == null && !WorkroomGameAdapter.InventoryTransferAllowed()) return Refuse("unavailable");
             if (!State.Ready) return Refuse(State.Error ?? "unavailable");
             if (Busy || WorkroomItemCodec.CleanupPending) return Refuse("recovery");
             stage = "item";
@@ -144,7 +191,9 @@ internal static class WorkroomStorage
             var source = item.parentInventory;
             sourcePointer = source?.Pointer ?? IntPtr.Zero;
             if (source == null || !Contains(source, item)) return Refuse("source_changed");
-            if (!Sources().Any(root => root.Pointer == sourcePointer)) return Refuse("source_unsupported");
+            if (source.IsRemoveLocked() ||
+                (storySources != null ? !IsStorySource(source, item, storySources) : !Sources().Any(root => root.Pointer == sourcePointer)))
+                return Refuse("source_unsupported");
             return true;
         }
         catch (Exception ex)
@@ -157,7 +206,64 @@ internal static class WorkroomStorage
 
     internal static bool Store(GameItem item)
     {
+        // Direct drops retain the same durable home used by quick transfers.
         if (!CheckStore(item)) return false;
+        try { return Store(item, null, origin: WorkroomSelection.Remember(item)); }
+        catch (Exception ex) { Core.Log?.Warning("工作间来源读取失败，保留原物：" + ex.Message); Notify("failed"); return false; }
+    }
+
+    // Retain each native item's durable cleanup receipt before expelling it.
+    // Only the safe cleanup -> box promotions are coalesced; failures retain
+    // the existing per-item recovery owners and save barrier.
+    internal static bool StoreStoryBatch(IReadOnlyList<GameItem> items)
+    {
+        // Resolve the native source list once for this synchronous batch. Each
+        // item still rechecks its live parent/ownership/lock before and after
+        // Capture; avoid a whole owned-item graph scan for every item twice.
+        var sources = StorySources().Select(source => source.Pointer).ToHashSet();
+        var completed = new HashSet<string>(StringComparer.Ordinal);
+        var stored = true;
+        try
+        {
+            foreach (var item in items)
+                if (!Store(item, completed, sources)) { stored = false; break; }
+        }
+        finally
+        {
+            if (completed.Count != 0) Run(() =>
+            {
+                if (!State.Ready || completed.Any(id => State.Find(id)?.Place != "cleanup" ||
+                    !cleanup.TryGetValue(id, out var candidate) || !candidate.Cleaned))
+                    throw new InvalidOperationException("剧情收纳保管凭据变化。");
+                State.Replace(State.Items.Select(record => completed.Contains(record.Id)
+                    ? WorkroomStorageState.Copy(record, "box", "")
+                    : record).ToList());
+                foreach (var id in completed) cleanup.Remove(id);
+            });
+        }
+        return stored && completed.All(id => State.Find(id)?.Place == "box" && !cleanup.ContainsKey(id));
+    }
+
+    internal static bool StoreSelection(GameItem item, out string id)
+    {
+        id = "";
+        try
+        {
+            if (!WorkroomSelection.CanTransfer(item)) return false;
+            var identity = item.uniqueId;
+            var origin = WorkroomSelection.Remember(item);
+            if (!Store(item, null, origin: origin)) return false;
+            id = State.Items.FirstOrDefault(record => record.Place == "box" && record.Item.Nodes[0].UniqueId == identity)?.Id ?? "";
+            return id.Length != 0;
+        }
+        catch (Exception ex)
+        { Core.Log?.Warning("工作间候选交接未完成，保留当前保管凭据：" + ex.Message); Notify("failed"); return false; }
+    }
+
+    private static bool Store(GameItem item, HashSet<string>? completed, HashSet<IntPtr>? storySources = null,
+        WorkroomStorageState.Origin? origin = null)
+    {
+        if (!CheckStore(item, storySources)) return false;
         var taken = false;
         Run(() =>
         {
@@ -173,9 +279,13 @@ internal static class WorkroomStorage
                 Notify("capture_failed"); return;
             }
             if (!State.Ready || State.Epoch != epoch || State.Revision != revision ||
-                !Contains(source, item) || !GeneralHelper.IsItemOwned(item) || !AcceptsIdentifier(item.identifier))
+                !Contains(source, item) || !GeneralHelper.IsItemOwned(item) || !AcceptsIdentifier(item.identifier) ||
+                source!.IsRemoveLocked() ||
+                storySources == null && !Sources().Any(root => root.Pointer == source.Pointer) ||
+                storySources != null && !IsStorySource(source, item, storySources) ||
+                storySources == null && !WorkroomGameAdapter.InventoryTransferAllowed())
                 throw new InvalidOperationException("捕获期间存档、记录或来源变化。");
-            var record = new WorkroomStorageState.Record { Item = snapshot, Place = "cleanup" };
+            var record = new WorkroomStorageState.Record { Item = snapshot, Place = "cleanup", ReturnTo = origin };
             var candidate = new WorkroomItemCodec.Candidate { Root = item, Nodes = nativeNodes };
             State.Add(record);
             Exception? failure = null;
@@ -187,7 +297,8 @@ internal static class WorkroomStorage
             taken = true;
             cleanup[record.Id] = candidate;
             WorkroomItemCodec.Destroy(candidate);
-            State.Move(record.Id, "box"); cleanup.Remove(record.Id);
+            if (completed != null) completed.Add(record.Id);
+            else { State.Move(record.Id, "box"); cleanup.Remove(record.Id); }
             Notify("stored");
         });
         return taken;
@@ -195,7 +306,7 @@ internal static class WorkroomStorage
 
     internal static void Take(string id, bool inRoom, long epoch)
     {
-        if (!State.Ready || State.Epoch != epoch || Busy || WorkroomItemCodec.CleanupPending) return;
+        if (!WorkroomGameAdapter.InventoryTransferAllowed() || !State.Ready || State.Epoch != epoch || Busy || WorkroomItemCodec.CleanupPending) return;
         var record = State.Find(id);
         if (record == null || record.Place != "box" || cleanup.ContainsKey(id) || delivery.ContainsKey(id)) return;
         if (record.Item.Count != 1) { Notify("single_only"); return; }
@@ -203,6 +314,7 @@ internal static class WorkroomStorage
         {
             if (NativeOwnedIds().Overlaps(WorkroomItemCodec.Identities(record.Item)))
             { Notify("recovery"); return; }
+            if (!WorkroomGameAdapter.InventoryTransferAllowed()) return;
             if (inRoom)
             {
                 if (!State.FindSpace(record, out var x, out var y)) { Notify("full"); return; }
@@ -219,6 +331,7 @@ internal static class WorkroomStorage
                 if (marker == null)
                 { Notify("full"); return; }
                 var target = marker.inventory;
+                if (!WorkroomGameAdapter.InventoryTransferAllowed()) return;
                 State.Move(id, "delivery");
                 delivery[id] = candidate;
                 try { marker.AcceptUnchecked(); }
@@ -295,7 +408,7 @@ internal static class WorkroomStorage
                 var selected = new HashSet<string>(ids, StringComparer.Ordinal);
                 failed = ids.Length;
                 var next = State.Items.Select(item => selected.Contains(item.Id) ? new WorkroomStorageState.Record
-                { Id = item.Id, Item = item.Item, Place = "box" } : item).ToList();
+                { Id = item.Id, Item = item.Item, Place = "box", ReturnTo = item.ReturnTo } : item).ToList();
                 if (ids.Length != 0) State.Replace(next);
                 moved = ids.Length; failed = 0;
             });
@@ -347,7 +460,7 @@ internal static class WorkroomStorage
         if (pending == 0 && WorkroomItemCodec.CleanupPending) pending = 1;
         NotifyText(Text("collect_result", moved, skipped, failed, pending));
         RoomAudio.Play(pending > 0 ? "warning" : moved > 0 ? "store" : "warning");
-        Core.Log?.Msg($"[工作间一键收纳] source={(inRoom ? "room" : "main")}; moved={moved}; skipped={skipped}; failed={failed}; pending={pending}; records={State.Items.Count}");
+        Core.Debug($"[工作间一键收纳] source={(inRoom ? "room" : "main")}; moved={moved}; skipped={skipped}; failed={failed}; pending={pending}; records={State.Items.Count}");
     }
 
     internal sealed class RoomDrop
@@ -408,7 +521,7 @@ internal static class WorkroomStorage
             }
             failed += valid.Count;
             var next = State.Items.Select(item => valid.Contains(item.Id) ? new WorkroomStorageState.Record
-                { Id = item.Id, Item = item.Item, Place = "box" } : item).ToList();
+                { Id = item.Id, Item = item.Item, Place = "box", ReturnTo = item.ReturnTo } : item).ToList();
             if (!State.Ready || State.Epoch != epoch) throw new InvalidOperationException("群拖存档已变化。");
             if (valid.Count != 0) State.Replace(next);
             moved = valid.Count; failed -= valid.Count;
@@ -453,16 +566,58 @@ internal static class WorkroomStorage
         if (pending == 0 && WorkroomItemCodec.CleanupPending) pending = 1;
         NotifyText(Text("selected_result", moved, skipped, failed, pending));
         RoomAudio.Play(pending > 0 ? "warning" : moved > 0 ? "store" : "warning");
-        Core.Log?.Msg($"[工作间群拖收纳] source={source}; moved={moved}; skipped={skipped}; failed={failed}; pending={pending}");
+        Core.Debug($"[工作间群拖收纳] source={source}; moved={moved}; skipped={skipped}; failed={failed}; pending={pending}");
     }
 
     private static bool IsPlaced(GameItem item, GameInventory? target, int count) =>
         count > 0 && item.unitCount == count && Contains(target, item);
 
+    // Called inside the storage command lock, with every requested return
+    // already planned. Retain the existing delivery owner before native accept.
+    internal static bool DeliverTo(WorkroomStorageState.Record record, WorkroomItemCodec.Candidate candidate, SlotMarker marker)
+    {
+        var root = candidate.Root; var target = marker.inventory;
+        if (!ReferenceEquals(State.Find(record.Id), record) || target == null || !Sources().Any(source => source.Pointer == target.Pointer) ||
+            target.IsInsertLocked() || !GeneralHelper.MayPlayerInsertInto(target) ||
+            !GeneralHelper.MayOwnershipAcceptItem(root, target) ||
+            !target.CheckInventorySlotStillValid(root, marker.itemGridShape, root.modifiedState) ||
+            NativeOwnedIds().Overlaps(WorkroomItemCodec.Identities(record.Item)) ||
+            !WorkroomGameAdapter.InventoryTransferAllowed()) return false;
+        State.Move(record.Id, "delivery"); delivery[record.Id] = candidate;
+        try { marker.AcceptUnchecked(); }
+        catch (Exception ex) { Core.Log?.Warning("工作间原来源归还回调异常，回读实际归属：" + ex.Message); }
+        if (IsPlaced(root, target, record.Item.Count) && GeneralHelper.IsItemOwned(root))
+        { State.Remove(record.Id); delivery.Remove(record.Id); return true; }
+        if (root.parentInventory == null)
+        {
+            WorkroomItemCodec.Destroy(candidate);
+            var current = State.Find(record.Id)!;
+            State.Replace(State.Items.Select(item => item.Id == current.Id ? record : item).ToList());
+            delivery.Remove(record.Id);
+        }
+        // Unknown live ownership remains a delivery record and blocks saving.
+        return false;
+    }
+
+    private static IEnumerable<GameItem> OwnedRoots()
+    {
+        var items = new Dictionary<IntPtr, GameItem>();
+        var native = EmporiumEntry.Instance?.GetAllOwnedItems();
+        if (native != null) foreach (var item in native)
+            if (item != null) items[item.Pointer] = item;
+        // The native owned list need not enumerate PlayerStore.gridInv. Include
+        // every supported scene root at this transaction/recovery boundary,
+        // including locked roots, so duplicate identities cannot be restored.
+        foreach (var pair in WorkroomSelection.Inventories(includeLocked: true))
+            foreach (var item in pair.Grid.childItems)
+                if (item != null && GeneralHelper.IsItemOwned(item)) items[item.Pointer] = item;
+        return items.Values;
+    }
+
     private static HashSet<int> NativeOwnedIds()
     {
-        var ids = new HashSet<int>(); var items = EmporiumEntry.Instance?.GetAllOwnedItems();
-        if (items != null) foreach (var item in items)
+        var ids = new HashSet<int>();
+        foreach (var item in OwnedRoots())
             if (item != null)
             {
                 ids.Add(item.uniqueId);
@@ -492,7 +647,7 @@ internal static class WorkroomStorage
                 if (hits == 0) State.Move(record.Id, "box");
                 else if (hits == identities.Length)
                 {
-                    var items = EmporiumEntry.Instance?.GetAllOwnedItems();
+                    var items = OwnedRoots();
                     GameItem? root = null;
                     if (items != null) foreach (var item in items)
                         if (item != null && item.uniqueId == record.Item.Nodes[0].UniqueId) { root = item; break; }
@@ -522,19 +677,20 @@ internal static class WorkroomStorage
         finally
         {
             busy = false;
+            WakeMaintenance();
             if (timer.ElapsedMilliseconds >= 12 && Environment.TickCount64 - lastSlowLog >= 5000)
             {
                 lastSlowLog = Environment.TickCount64;
-                Core.Log?.Msg($"[工作间储物耗时] action={action.Method.Name}; elapsedMs={timer.ElapsedMilliseconds}; records={State.Items.Count}; revision={State.Revision}");
+                Core.Debug($"[工作间储物耗时] action={action.Method.Name}; elapsedMs={timer.ElapsedMilliseconds}; records={State.Items.Count}; revision={State.Revision}");
             }
         }
     }
 
     internal static bool BeforeSave()
     {
-        if (busy || cleanup.Count != 0 || delivery.Count != 0 || WorkroomItemCodec.CleanupPending || WorkroomCashRepair.Pending || ServerRoomRuntime.Pending || !ServerRoomDaily.AllowSave || ComputerSupplierNpcs.StockPending || NpcStockOffers.Pending || !ServerRoomOrderStock.BeforeSave() ||
+        if (busy || !WorkroomStoryTransfer.BeforeSave() || !LuoxiStory.BeforeSave() || !JiangbaiStory.BeforeSave() || !MysteriousContact.BeforeSave() || !NpcStoryProgress.BeforeSave() || !NpcSmallStories.BeforeSave() || cleanup.Count != 0 || delivery.Count != 0 || WorkroomItemCodec.CleanupPending || WorkroomCashRepair.Pending || ServerRoomRuntime.Pending || !ServerRoomRuntime.ValidateCurrent() || !ServerRoomDaily.AllowSave || ComputerSupplierNpcs.StockPending || NpcStockOffers.Pending || !ServerRoomOrderStock.BeforeSave() ||
             State.PendingRecords.Count != 0)
-        { deferredSave = true; Notify("recovery"); return false; }
+        { deferredSave = true; WakeMaintenance(); BusinessRuntime.Wake(); Notify("recovery"); return false; }
         return true;
     }
 

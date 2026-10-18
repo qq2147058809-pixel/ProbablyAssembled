@@ -8,8 +8,8 @@ namespace PCExpansion;
 /// <summary>版本受控的可选页面入口。本体没有英文正文或补丁引用。</summary>
 public static class ComputerManualPages
 {
-    public const string ContractVersion = "pcexpansion-computer-manual-v14";
-    internal const int PageCount = 10;
+    public const string ContractVersion = "pcexpansion-computer-manual-v27";
+    internal const int PageCount = 20;
     private static Page[]? english;
     internal static int Revision { get; private set; }
     internal static event Action? PagesChanged;

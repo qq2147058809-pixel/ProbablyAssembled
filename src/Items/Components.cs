@@ -45,11 +45,10 @@ internal static class Components
 
         internal readonly string[] TierModels;
         internal readonly int Width, Height;
-        internal readonly long BaseValue;
         internal readonly bool IsCase;
 
         internal Type(string stem, string tag,
-            int width, int height, long baseValue, bool isCase, params string[] tierModels)
+            int width, int height, bool isCase, params string[] tierModels)
         {
             Stem = stem;
             Tag = tag;
@@ -58,31 +57,30 @@ internal static class Components
             TierModels = tierModels;
             Width = width;
             Height = height;
-            BaseValue = baseValue;
             IsCase = isCase;
         }
     }
 
     internal static readonly Type[] All =
     {
-        new("computer_case", CaseTag, 4, 4, 200, true,
+        new("computer_case", CaseTag, 4, 4, true,
             "MATREXX 30", "NZXT H5", "Corsair 4000D", "Lian Li O11 EVO", "Corsair 1000D"),
-        new("component_psu", PsuTag, 2, 2, 75, false,
+        new("component_psu", PsuTag, 2, 2, false,
             "MWE 450", "Corsair CX650", "Seasonic GX-750", "Corsair RM850x", "Dark Power 13"),
-        new("component_motherboard", MotherboardTag, 4, 4, 100, false,
+        new("component_motherboard", MotherboardTag, 4, 4, false,
             "MSI H610M-G", "ASUS TUF B760", "MSI Z790 Tomahawk", "A-SUS R0G Z790-E", "ASUS R0G Z890 Hero"),
-        new("component_hdd", HddTag, 3, 1, 65, false,
+        new("component_hdd", HddTag, 3, 1, false,
             "SSD-1 256GB", "SSD-2 512GB", "SSD-3 1TB", "SSD-4 2TB", "SSD-5 4TB"),
-        new("component_ram", RamTag, 1, 3, 55, false,
+        new("component_ram", RamTag, 1, 3, false,
             "Kingston Beast 8GB", "Corsair Vengeance 16GB", "Kingston Renegade 32GB",
             "G.SKILL Trident Z5 48GB", "Corsair Dominator 64GB"),
-        new("component_gpu", GpuTag, 2, 4, 130, false,
+        new("component_gpu", GpuTag, 2, 4, false,
             "rux 3050", "rux 4060", "rux 4070", "rux 4080 SUPER", "rux 5090"),
-        new("component_fan", FanTag, 2, 2, 30, false,
+        new("component_fan", FanTag, 2, 2, false,
             "ARCTIC P12", "CM Mobius 120", "be quiet! Silent Wings 4", "Noctua A12x25", "Corsair QX120"),
-        new("component_cpu", CpuTag, 2, 2, 150, false,
+        new("component_cpu", CpuTag, 2, 2, false,
             "Core i3-10100F", "Core i5-12400F", "Core i7-13700K", "Core i9-14900K", "Core Ultra 9 285K"),
-        new("component_cooler", CoolerTag, 2, 2, 45, false,
+        new("component_cooler", CoolerTag, 2, 2, false,
             "DeepCool AG400", "Thermalright PA120 SE", "Noctua NH-D15", "NZXT Kraken 360", "Corsair TITAN 360 LCD"),
     };
 
@@ -120,7 +118,7 @@ internal static class Components
 
         internal string FlavorText => ComponentFlavorText.Get(this);
 
-        // T1 基础价 × 分档系数 {1, 1.55, 2.4, 3.7, 5.7}；破损件按完好价 20% 回收。
+        // 完整件使用统一价格表；破损件按完好价 20% 回收。
         internal long Value
         {
             get => Components.ValueFor(Owner, Tier, Broken);
@@ -129,7 +127,6 @@ internal static class Components
 
     private static Dictionary<string, Item>? _itemsById;
     private static readonly IReadOnlyList<Item> Definitions = CreateDefinitions();
-    private static readonly long[] RamPrices = { 55, 85, 145, 215, 285 };
     private static bool descriptionWriteProbeLogged;
 
     internal static IEnumerable<Item> AllItems() => Definitions;
@@ -220,14 +217,14 @@ internal static class Components
         if (!descriptionWriteProbeLogged)
         {
             descriptionWriteProbeLogged = true;
-            Core.Log?.Msg("[文案检查] " + LanguageText.LocaleCode + " / " + spec.Id +
+            Core.Debug("[文案检查] " + LanguageText.LocaleCode + " / " + spec.Id +
                           " / shortDescription=" + item.shortDescription.Length +
                           " / longDescription=" + item.longDescription.Length +
                           " / flavorText=" + item.flavorText.Length);
         }
         item.unitCount = 1;
-        // 价值规则：配件与完好机箱使用统一的非线性 T 度系数，损坏配件回收价为完好价 20%；
-        // 损坏机箱是物资箱，锁定时按当前掉落期望估价，已生成且解锁后价值为 0。
+        // 配件与完好机箱使用统一价格表，损坏配件回收价为完好价 20%；
+        // 损坏机箱是物资箱，锁定时使用固定箱价，已生成且解锁后价值为 0。
         var value = spec.Value;
         if (type.IsCase && spec.Broken)
         {
@@ -303,16 +300,7 @@ internal static class Components
 
     internal static long ValueFor(Type type, int tier, bool broken)
     {
-        var tierMultiplier = Math.Clamp(tier, 1, TierCount) switch
-        {
-            1 => 1.0,
-            2 => 1.55,
-            3 => 2.4,
-            4 => 3.7,
-            _ => 5.7,
-        };
-        var intact = type.Tag == RamTag ? RamPrices[Math.Clamp(tier,1,5)-1] :
-            (long)Math.Round(type.BaseValue * tierMultiplier);
+        var intact = HardwareEconomyPrices.Component(type.Stem, tier);
         return broken ? Math.Max(1, (long)Math.Round(intact * 0.20)) : intact;
     }
 
@@ -399,6 +387,6 @@ internal static class ComponentDirectoryPatch
             catch (Exception ex) { Core.Log?.Error("注册机房专用机箱失败（" + definition.Identifier + "）：" + ex); }
         }
 
-        Core.Log?.Msg("物品工厂注册完成：分级物品 " + registered + " 个，机房专用机箱 " + dedicated + " 个。");
+        Core.Debug("物品工厂注册完成：分级物品 " + registered + " 个，机房专用机箱 " + dedicated + " 个。");
     }
 }

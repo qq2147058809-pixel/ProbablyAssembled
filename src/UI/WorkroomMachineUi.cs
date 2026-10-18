@@ -29,9 +29,10 @@ internal sealed class WorkroomMachineUi
     private readonly GameObject ghostRoot;
     private readonly Image ghost;
     private long epoch, revision = -1, generation = -1;
-    private string lastStatus = "";
     private IEnumerable<WorkroomAssemblyWindow> Windows => families.SelectMany(family => new[] { family.Window, family.RepairWindow });
     internal bool Open => Windows.Any(window => window.Open);
+    internal int TopIndex => Windows.Where(window => window.Open)
+        .Select(window => window.Root.transform.GetSiblingIndex()).DefaultIfEmpty(-1).Max();
     internal bool Dragging => Windows.Any(window => window.Dragging);
     internal bool Alive => AssemblyDebugUi.Alive(ghostRoot) && Windows.All(window => AssemblyDebugUi.Alive(window.Root));
     private WorkroomAssemblyWindow? TopAt(Vector2 point) => Windows.Where(window => window.Hit(point))
@@ -42,7 +43,7 @@ internal sealed class WorkroomMachineUi
     internal static string FontText => string.Join("", new[] { "motherboard_title", "case_title", "repair_title", "need_body",
         "assembly_hint", "assemble", "disassemble", "repair", "return_all", "repair_execute", "cpu", "cooler", "gpu", "ram", "ssd",
         "motherboard", "case", "psu", "hdd", "fan", "motherboard_body", "case_body", "quick_unavailable" }
-        .Select(key => WorkroomMachineAssembly.Text(key, "", 0))) + WorkroomComponentTemplates.Text("auto_fill") + "T12345×↑↓—";
+        .Select(key => WorkroomMachineAssembly.Text(key, "", 0))) + WorkroomComponentTemplates.Text("auto_fill") + "T12345×↑↓—" + WorkroomAutoFillUi.FontText + WorkroomPickerUi.FontText;
 
     internal WorkroomMachineUi(Canvas canvas, Transform reference, TMP_FontAsset font)
     {
@@ -59,7 +60,7 @@ internal sealed class WorkroomMachineUi
         var view = new FamilyView { Family = family };
         view.Window = new WorkroomAssemblyWindow(canvas, reference, font, "MachineAssembly_"+family,
             WorkroomMachineAssembly.Text(family+"_title"), 352+offset*16, 64, 720, 424, () => Hide(view.Window));
-        view.Hint = Label(view.Window.Root, font, "Hint", 18, 248, 134, 60);
+        view.Hint = Label(view.Window.Root, font, "Hint", 188, 40, 350, 28);
         AddSlot(canvas, view.Window.Root, font, WorkroomMachineAssembly.MainSlot(family),
             WorkroomMachineAssembly.Text(family+"_body"), 18, 50, 134, 196, true);
         var cell = 0;
@@ -74,18 +75,17 @@ internal sealed class WorkroomMachineUi
         }
         view.Summary = Label(view.Window.Root, font, "Summary", 18, 308, 134, 82);
         view.Summary.alignment = TextAlignmentOptions.TopLeft;
-        view.Status = Label(view.Window.Root, font, "Status", 188, 40, 280, 28);
-        view.AutoFill = ActionButton(canvas, view.Window.Root, font, "AutoFill", "", 176, 396, 102,
-            () => WorkroomMachineAssembly.AutoFill(family, epoch));
-        view.AutoFill.GetComponentInChildren<TextMeshProUGUI>().text = WorkroomComponentTemplates.Text("auto_fill");
-        view.Assemble = ActionButton(canvas, view.Window.Root, font, "Assemble", "assemble", 283, 396, 102,
+        view.Status = Label(view.Window.Root, font, "Status", 18, 282, 134, 26);
+        view.Window.Picker.EnableMissing(552, 40, 140);
+        view.AutoFill = new WorkroomAutoFillUi(canvas, view.Window, font, family, true).FillButton;
+        view.Assemble = ActionButton(canvas, view.Window.Root, font, "Assemble", "assemble", 366, 396, 80,
             () => WorkroomMachineAssembly.Assemble(family, epoch));
-        view.Disassemble = ActionButton(canvas, view.Window.Root, font, "Disassemble", "disassemble", 390, 396, 102,
+        view.Disassemble = ActionButton(canvas, view.Window.Root, font, "Disassemble", "disassemble", 451, 396, 80,
             () => WorkroomMachineAssembly.Disassemble(family, epoch));
-        ActionButton(canvas, view.Window.Root, font, "Repair", "repair", 497, 396, 102,
+        ActionButton(canvas, view.Window.Root, font, "Repair", "repair", 536, 396, 80,
             () => { view.RepairWindow.Show(); CancelPreview(); Update(false); });
-        view.Return = ActionButton(canvas, view.Window.Root, font, "ReturnAll", "return_all", 604, 396, 100,
-            () => WorkroomMachineAssembly.ReturnSlots(WorkroomMachineAssembly.Slots(family), epoch));
+        view.Return = ActionButton(canvas, view.Window.Root, font, "ReturnAll", "return_all", 621, 396, 83,
+            () => WorkroomSelection.ReturnSlots(WorkroomMachineAssembly.Slots(family), epoch));
 
         view.RepairWindow = new WorkroomAssemblyWindow(canvas, reference, font, "MachineRepair_"+family,
             WorkroomMachineAssembly.Text("repair_title", WorkroomMachineAssembly.Text(family)), 26+offset*24, 64, 720, 424,
@@ -106,7 +106,9 @@ internal sealed class WorkroomMachineUi
         down.GetComponentInChildren<TextMeshProUGUI>().text = "↓";
         view.ExecuteRepair = ActionButton(canvas, view.RepairWindow.Root, font, "ExecuteRepair", "repair_execute", 176, 396, 528,
             () => WorkroomMachineRepair.Execute(family, epoch));
-        view.RepairStatus = Label(view.RepairWindow.Root, font, "Status", 18, 260, 134, 124);
+        view.RepairWindow.Picker.EnableAutoReturn();
+        view.RepairWindow.Picker.EnableRepairSelection();
+        view.RepairStatus = Label(view.RepairWindow.Root, font, "Status", 18, 314, 134, 70);
         return view;
     }
 
@@ -162,6 +164,13 @@ internal sealed class WorkroomMachineUi
     {
         families.First(view => view.Family == family).Window.Show(); CancelPreview(); Update(false);
     }
+    internal void ShowStaged(string family, bool repair)
+    {
+        var view = families.First(candidate => candidate.Family == family);
+        (repair ? view.Window : view.RepairWindow).Hide();
+        (repair ? view.RepairWindow : view.Window).Show();
+        CancelPreview(); Update(false);
+    }
     internal void Close() { foreach (var window in Windows) window.Hide(); CancelPreview(); }
     internal void CloseTop()
     {
@@ -176,11 +185,12 @@ internal sealed class WorkroomMachineUi
     }
     private WorkroomAssemblySlotUi? Compatible(WorkroomAssemblyWindow window, WorkroomItemCodec.Snapshot item) =>
         slots.FirstOrDefault(slot => slot.Root.activeInHierarchy && slot.Root.transform.parent.Pointer == window.Root.transform.Pointer &&
+            slot.Enabled && WorkroomMachineAssembly.At(slot.Slot) == null &&
             Exposed(slot, window) && WorkroomMachineAssembly.Accepts(slot.Slot, item));
     internal string? ResolveBody(Vector2 point, WorkroomItemCodec.Snapshot item)
     {
         var top = TopAt(point);
-        return top != null && families.Any(f => ReferenceEquals(f.Window, top)) && top.HitBody(point) ? Compatible(top, item)?.Slot : null;
+        return top != null && top.HitBody(point) ? Compatible(top, item)?.Slot : null;
     }
     internal WorkroomStorageState.Record? HoveredItem(Vector2 point)
     {
@@ -208,11 +218,14 @@ internal sealed class WorkroomMachineUi
     internal bool QuickStage(string id, long generation)
     {
         var record = WorkroomStorage.State.Find(id);
-        if (record?.Place != "room") return false;
-        var target = families.Select(view => view.Window).Where(window => window.Open)
-            .OrderByDescending(window => window.Root.transform.GetSiblingIndex())
-            .Select(window => Compatible(window, record.Item)).FirstOrDefault(slot => slot != null);
-        return target != null && WorkroomMachineAssembly.Stage(id, target.Slot, generation, record.Item.Orientation);
+        if (record?.Place != "room" || generation != WorkroomStorage.State.Epoch) return false;
+        // Repair mirrors share a logical slot. Pick one UI on the top window,
+        // then submit exactly one existing atomic staging command.
+        var top = Windows.Where(window => window.Open)
+            .OrderByDescending(window => window.Root.transform.GetSiblingIndex()).FirstOrDefault();
+        var target = top == null ? null : Compatible(top, record.Item);
+        if (target == null) { WorkroomComponentAssembly.Notice("quick_unavailable"); return false; }
+        return WorkroomMachineAssembly.Stage(id, target.Slot, generation, record.Item.Orientation);
     }
     internal void Update(bool allowPress)
     {
@@ -226,10 +239,6 @@ internal sealed class WorkroomMachineUi
             AssemblyDebugFonts.Prepare(names, names); revision = WorkroomStorage.State.Revision; generation = epoch;
         }
         var ready = WorkroomMachineAssembly.Ready(epoch);
-        var status = WorkroomStorage.State.Error != null ? WorkroomStorage.Text(WorkroomStorage.State.Error) :
-            WorkroomItemCodec.CleanupPending ? WorkroomStorage.Text("recovery") :
-            Environment.TickCount64 < WorkroomStorage.MessageUntil ? WorkroomStorage.Message : "";
-        if (status != lastStatus) { AssemblyDebugFonts.Prepare(status, status); lastStatus = status; }
         foreach (var view in families)
         {
             if (view.Window.Open)
@@ -248,14 +257,14 @@ internal sealed class WorkroomMachineUi
                     if (view.Summary.text != summary) { AssemblyDebugFonts.Prepare(summary, summary); view.Summary.text = summary; }
                     view.SummaryEpoch = epoch; view.SummaryRevision = WorkroomStorage.State.Revision; view.SummaryChinese = LanguageText.IsChinese;
                 }
-                view.Status.text = view.RepairStatus.text = status;
+                view.Status.text = view.RepairStatus.text = "";
                 view.Assemble.GetComponent<Button>().interactable = ready && WorkroomMachineAssembly.CanAssemble(view.Family);
                 view.Disassemble.GetComponent<Button>().interactable = ready && WorkroomMachineAssembly.CanDisassemble(view.Family);
                 view.Return.GetComponent<Button>().interactable = ready && WorkroomMachineAssembly.Slots(view.Family).Any(slot => WorkroomMachineAssembly.At(slot) != null);
                 view.AutoFill.GetComponent<Button>().interactable = ready;
             }
             if (!view.RepairWindow.Open) continue;
-            view.RepairStatus.text = status;
+            view.RepairStatus.text = "";
             var preview = WorkroomMachineRepair.Preview(view.Family);
             if (preview != view.PreviewText)
             {

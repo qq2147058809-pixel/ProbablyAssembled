@@ -8,6 +8,13 @@ using UnityEngine;
 
 namespace PCExpansion;
 
+// Native UpdatePress can be inlined. Keep the complete native manager update.
+[HarmonyPatch(typeof(InputActionManager), "Update")]
+internal static class WorkroomQuickTransferInputPatch
+{
+    private static void Prefix() => WorkroomQuickTransfer.BeforeNativeInput();
+}
+
 // Only initiation is gated. Native release/reset/abort paths retain ownership
 // of their pointers and ghosts and always finish their normal cleanup.
 [HarmonyPatch]
@@ -22,7 +29,8 @@ internal static class WorkroomShopItemPressPatch
             yield return AccessTools.DeclaredMethod(type, "OnEventPress", arguments) ??
                 throw new MissingMethodException(type.FullName, "OnEventPress");
     }
-    private static bool Prefix(Il2CppSystem.Collections.Generic.ISet<KeyCode> __0) => WorkroomGameAdapter.AllowShopItemPress(__0);
+    private static bool Prefix(Il2CppSystem.Collections.Generic.ISet<KeyCode> __0) =>
+        WorkroomGameAdapter.AllowShopItemPress(__0) && WorkroomQuickTransfer.AllowPress(__0);
 }
 
 [HarmonyPatch(typeof(ItemMouseDoubleClickHandler))]

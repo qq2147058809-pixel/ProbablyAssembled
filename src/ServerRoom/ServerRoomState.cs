@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Numerics;
 using System.Text.Json;
 
 namespace PCExpansion;
@@ -9,9 +8,9 @@ namespace PCExpansion;
 /// <summary>机房模块的纯存档模型；物品树由工作间保管，这里只保存机架引用。</summary>
 internal static class ServerRoomState
 {
-    internal const string SaveKey = "pcexpansion.server-room.v1";
-    internal const int Version = 1, EnableCost = 120, VisitLimit = 2;
-    private static readonly int[] UpgradeCosts = { 250, 1200, 3100, 7000, 9000 };
+    internal const string SaveKey = "pcexpansion.server-room.v2";
+    internal const int Version = 2, EnableCost = 120, VisitLimit = 2;
+    private static readonly int[] UpgradeCosts = { 150, 450, 1100, 2300, 4000 };
     private static readonly int[] SlotCounts = { 1, 2, 4, 6, 8, 10 };
     private static readonly string[] coinIds = { "anchor", "matrix", "stellar", "pulse", "singularity" };
     internal static IReadOnlyList<string> CoinIds { get; } = System.Array.AsReadOnly(coinIds);
@@ -21,6 +20,7 @@ internal static class ServerRoomState
     {
         public Document() { }
         public int Version { get; set; } = ServerRoomState.Version;
+        public string EconomyRules { get; set; } = "hm-econ-v1";
         public string Run { get; set; } = "";
         public int Slot { get; set; }
         public long Revision { get; set; }
@@ -29,6 +29,10 @@ internal static class ServerRoomState
         public List<RackReference> Racks { get; set; } = new();
         public List<Coin> Coins { get; set; } = new();
         public MarketState Market { get; set; } = new();
+        public ServerRoomNetworkModel.State Network { get; set; } = new();
+        public List<Maintenance> Maintenance { get; set; } = new();
+        public AutoSalePolicy AutoSale { get; set; } = new();
+        public ServerRoomLedger.State Ledger { get; set; } = new();
         public List<Lease> Leases { get; set; } = new();
         public VisitState Visit { get; set; } = new();
         public int? LastSettledDay { get; set; }
@@ -53,23 +57,38 @@ internal static class ServerRoomState
         public bool PoweredOn { get; set; }
         public string CoinId { get; set; } = "anchor";
         public int Priority { get; set; }
+        public int Mode { get; set; } = 1;
+        public bool AutoDownshift { get; set; }
     }
 
     internal sealed class Coin
     {
         public Coin() { }
         public string Id { get; set; } = "";
-        public long Units10 { get; set; }
+        public long MicroUnits { get; set; }
+        public long BoughtMicro { get; set; }
+        public long MinedMicro { get; set; }
         public decimal Cost { get; set; }
-        public Fraction Progress { get; set; } = new();
+        public decimal ResidueCoin { get; set; }
+        public long DailyNetMicro { get; set; }
+        public int Pool { get; set; }
+        public int NextPool { get; set; }
     }
 
-    // Fraction of one whole coin. Exact carry avoids changing the first-coin night.
-    internal sealed class Fraction
+    // Physical box identity survives rack, storage and NPC inventory transfers.
+    internal sealed class Maintenance
     {
-        public Fraction() { }
-        public string Numerator { get; set; } = "0";
-        public string Denominator { get; set; } = "1";
+        public int UniqueId { get; set; }
+        public int Tier { get; set; }
+        public decimal Health { get; set; } = 100m;
+    }
+    internal sealed class AutoSalePolicy
+    {
+        // 0 off, 1 cover three nights, 2 percentage of the latest night's output.
+        public int Kind { get; set; }
+        public int Percent { get; set; } = 100;
+        public List<int> CoinOrder { get; set; } = new() { 0, 1, 2, 3, 4 };
+        public List<decimal> MinimumNetPrices { get; set; } = new() { 0m, 0m, 0m, 0m, 0m };
     }
 
     internal sealed class MarketState
@@ -101,6 +120,9 @@ internal static class ServerRoomState
         public int DurationDays { get; set; }
         public int DueDay { get; set; }
         public decimal EffectiveCompute { get; set; }
+        public decimal Watts { get; set; }
+        public decimal SigningElectricity { get; set; } = 1m;
+        public string Configuration { get; set; } = "";
         public int DailyFee { get; set; }
         public decimal GrossRent { get; set; }
         public int PrepaidFees { get; set; }
@@ -203,6 +225,7 @@ internal static class ServerRoomState
         Validate(source);
         if (source.Enabled) throw new InvalidOperationException("机房已经启用。");
         var next = Advance(source); next.Enabled = true;
+        ServerRoomLedger.Add(next, next.Market.QuoteDay ?? 0, a => a.InvestmentCash = EnableCost);
         Validate(next);
         return new Change(next, -EnableCost);
     }
@@ -216,6 +239,10 @@ internal static class ServerRoomState
         if (power ? old.Power : old.Cooling) throw new InvalidOperationException("该项升级已经购买。");
         var next = Advance(source);
         if (power) next.Upgrades[stage].Power = true; else next.Upgrades[stage].Cooling = true;
+        if (next.Network.Day.HasValue)
+            next.Network = ServerRoomNetworkModel.PrepareElectricity(next.Network, next.Run, next.Slot,
+                next.Upgrades[0].Power && next.Upgrades[0].Cooling);
+        ServerRoomLedger.Add(next, next.Market.QuoteDay ?? 0, a => a.InvestmentCash = UpgradeCosts[stage]);
         Validate(next);
         return new Change(next, -UpgradeCosts[stage]);
     }
@@ -229,7 +256,7 @@ internal static class ServerRoomState
 
     internal static void Validate(Document value)
     {
-        if (value == null || value.Version != Version || !Token(value.Run) || value.Slot < 0 || value.Revision < 0 ||
+        if (value == null || value.Version != Version || value.EconomyRules != "hm-econ-v1" || !Token(value.Run) || value.Slot < 0 || value.Revision < 0 ||
             value.Upgrades == null || value.Upgrades.Count != 5 || value.Racks == null || value.Coins == null ||
             value.Market == null || value.Leases == null || value.Visit == null)
             throw new InvalidOperationException("机房封套字段无效。");
@@ -248,18 +275,40 @@ internal static class ServerRoomState
                 !Token(rack.RecordId) || !records.Add(rack.RecordId) || rack.UniqueId < 0 || !identities.Add(rack.UniqueId) ||
                 rack.Kind != "mining" && rack.Kind != "server" || rack.Kind == "server" && rack.PoweredOn ||
                 !coinIds.Contains(rack.CoinId, StringComparer.Ordinal) ||
-                rack.Priority < 0 || rack.Priority >= 10)
+                rack.Priority < 0 || rack.Priority >= 10 || rack.Mode is < 0 or > 2)
                 throw new InvalidOperationException("机架引用或运行状态无效。");
         if (value.Coins.Count != 5) throw new InvalidOperationException("五币记录不完整。");
         for (var i = 0; i < 5; i++)
         {
             var coin = value.Coins[i];
-            if (coin == null || coin.Id != coinIds[i] || coin.Units10 < 0 || coin.Cost < 0 || coin.Units10 == 0 && coin.Cost != 0)
-                throw new InvalidOperationException("钱包数量或持仓成本无效。");
-            ValidateFraction(coin.Progress);
+            if (coin == null || coin.Id != coinIds[i] || coin.MicroUnits < 0 || coin.BoughtMicro < 0 || coin.MinedMicro < 0 ||
+                coin.BoughtMicro > coin.MicroUnits || coin.MinedMicro != coin.MicroUnits - coin.BoughtMicro ||
+                coin.Cost < 0 || coin.BoughtMicro == 0 && coin.Cost != 0 || coin.DailyNetMicro == long.MinValue ||
+                coin.Pool is < 0 or > 1 || coin.NextPool is < 0 or > 1)
+                throw new InvalidOperationException("钱包数量、来源或持仓成本无效。");
+            ServerRoomMiningModel.ValidateResidue(coin.ResidueCoin);
         }
-        // The existing empty market/lease shape remains valid for current M2 saves.
+        if (value.Maintenance == null || value.AutoSale == null || value.AutoSale.Kind is < 0 or > 2 ||
+            value.AutoSale.Percent is < 0 or > 100 || value.AutoSale.Percent % 10 != 0 ||
+            value.AutoSale.CoinOrder == null || !value.AutoSale.CoinOrder.OrderBy(i => i).SequenceEqual(new[] { 0, 1, 2, 3, 4 }) ||
+            value.AutoSale.MinimumNetPrices == null || value.AutoSale.MinimumNetPrices.Count != 5 ||
+            value.AutoSale.MinimumNetPrices.Any(price => price < 0 || price > 15000000m))
+            throw new InvalidOperationException("维护记录或自动出售策略无效。");
+        var maintained = new HashSet<int>();
+        foreach (var item in value.Maintenance)
+            if (item == null || item.UniqueId < 0 || !maintained.Add(item.UniqueId) || item.Tier is < 1 or > 5 || item.Health < 0 || item.Health > 100)
+                throw new InvalidOperationException("箱体维护身份无效。");
+        if (value.Racks.Any(rack => rack.Kind == "mining" && !maintained.Contains(rack.UniqueId)))
+            throw new InvalidOperationException("已上架矿机缺少维护记录。");
         ServerRoomMarket.Validate(value.Market);
+        ServerRoomNetworkModel.Validate(value.Network);
+        ServerRoomLedger.Validate(value.Ledger);
+        if (value.Network.Day != value.Market.QuoteDay || value.Market.Initialized != value.Network.Day.HasValue ||
+            value.Ledger.Days.Any(day => value.Market.QuoteDay.HasValue && day.Date > value.Market.QuoteDay.Value))
+            throw new InvalidOperationException("网络、账本与行情日期不一致。");
+        if (value.Market.Initialized)
+            for (var i = 0; i < 5; i++)
+                ServerRoomTradeProtocol.ValidatePosition(value.Market.Prices[i], ServerRoomTradeMath.Depth(i), value.Coins[i].DailyNetMicro);
         if (value.LastSettledDay < 0 || value.LastSettledDay != null &&
             (!value.Market.Initialized || value.Market.QuoteDay != value.LastSettledDay))
             throw new InvalidOperationException("行情与最后日结日期不一致。");
@@ -268,12 +317,13 @@ internal static class ServerRoomState
         foreach (var lease in value.Leases)
         {
             if (lease == null || !Token(lease.RecordId) || !Token(lease.ContractId) ||
+                !value.Market.Initialized || lease.StartedDay > value.Market.QuoteDay ||
                 !leasedRecords.Add(lease.RecordId) || !contracts.Add(lease.ContractId))
                 throw new InvalidOperationException("租约身份重复或无效。");
             var machine = value.Racks.SingleOrDefault(rack => rack.RecordId == lease.RecordId);
             if (machine == null || machine.Kind != "server" || machine.UniqueId != lease.UniqueId)
                 throw new InvalidOperationException("租约没有匹配的服务器。");
-            ServerRoomEconomy.ValidateLease(lease, value.LastSettledDay);
+            ServerRoomLeaseContract.Validate(lease, value.LastSettledDay);
         }
         if (value.Visit.VisitId == null || value.Visit.VisitId != "" && !Token(value.Visit.VisitId) ||
             value.Visit.Purchased < 0 || value.Visit.Purchased > VisitLimit || value.Visit.VisitId == "" && value.Visit.Purchased != 0)
@@ -283,52 +333,33 @@ internal static class ServerRoomState
     private static bool Token(string? value) => !string.IsNullOrWhiteSpace(value) && value.Length <= 256 &&
         !value.Any(char.IsControl) && value == value.Trim();
 
-    private static void ValidateFraction(Fraction value)
-    {
-        if (value == null || !Unsigned(value.Numerator) || !Unsigned(value.Denominator))
-            throw new InvalidOperationException("挖矿进度分数格式无效。");
-        var numerator = BigInteger.Parse(value.Numerator, System.Globalization.CultureInfo.InvariantCulture);
-        var denominator = BigInteger.Parse(value.Denominator, System.Globalization.CultureInfo.InvariantCulture);
-        if (denominator <= 0 || numerator >= denominator || BigInteger.GreatestCommonDivisor(numerator, denominator) != BigInteger.One)
-            throw new InvalidOperationException("挖矿进度须为约分后的非负余量。");
-    }
+    private static void CheckRaw(JsonElement root) => CheckShape(root, typeof(Document));
 
-    private static bool Unsigned(string? value) => value != null && value.Length is > 0 and <= 128 &&
-        (value.Length == 1 || value[0] != '0') && value.All(c => c is >= '0' and <= '9');
-
-    private static void CheckRaw(JsonElement root)
+    // Every persisted property is mandatory, including nested fields. Defaults are for new games only.
+    private static void CheckShape(JsonElement value, Type type)
     {
-        CheckObject(root, "Version", "Run", "Slot", "Revision", "Enabled", "Upgrades", "Racks", "Coins", "Market", "Leases", "Visit", "LastSettledDay");
-        foreach (var upgrade in Array(root, "Upgrades")) CheckObject(upgrade, "Power", "Cooling");
-        foreach (var rack in Array(root, "Racks"))
-            CheckObject(rack, "RackIndex", "RecordId", "UniqueId", "Kind", "PoweredOn", "CoinId", "Priority");
-        foreach (var coin in Array(root, "Coins"))
-        { CheckObject(coin, "Id", "Units10", "Cost", "Progress"); CheckObject(coin.GetProperty("Progress"), "Numerator", "Denominator"); }
-        var market = root.GetProperty("Market");
-        CheckObject(market, "Initialized", "QuoteDay", "Prices", "History", "RandomState", "BoomMarker");
-        Array(market, "Prices");
-        foreach (var quote in Array(market, "History")) { CheckObject(quote, "Day", "Prices"); Array(quote, "Prices"); }
-        foreach (var lease in Array(root, "Leases"))
-            CheckObject(lease, "RecordId", "UniqueId", "ContractId", "RemainingDays", "StartedDay", "DurationDays", "DueDay",
-                "EffectiveCompute", "DailyFee", "GrossRent", "PrepaidFees", "NetIncome");
-        CheckObject(root.GetProperty("Visit"), "VisitId", "Purchased");
-    }
-
-    private static JsonElement.ArrayEnumerator Array(JsonElement owner, string name)
-    {
-        var value = owner.GetProperty(name);
-        if (value.ValueKind != JsonValueKind.Array) throw new InvalidOperationException("机房列表字段无效：" + name);
-        return value.EnumerateArray();
-    }
-
-    private static void CheckObject(JsonElement value, params string[] required)
-    {
+        var nullable = Nullable.GetUnderlyingType(type);
+        if (nullable != null)
+        {
+            if (value.ValueKind == JsonValueKind.Null) return;
+            CheckShape(value, nullable); return;
+        }
+        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))
+        {
+            if (value.ValueKind != JsonValueKind.Array) throw new InvalidOperationException("机房列表字段无效。");
+            foreach (var item in value.EnumerateArray()) CheckShape(item, type.GetGenericArguments()[0]);
+            return;
+        }
+        if (type.IsPrimitive || type == typeof(decimal) || type == typeof(string)) return;
         if (value.ValueKind != JsonValueKind.Object) throw new InvalidOperationException("机房记录缺少对象。");
+        var required = type.GetProperties().ToDictionary(property => property.Name, StringComparer.Ordinal);
         var fields = new HashSet<string>(StringComparer.Ordinal);
         foreach (var field in value.EnumerateObject())
-            if (!fields.Add(field.Name) || !required.Contains(field.Name, StringComparer.Ordinal))
+        {
+            if (!fields.Add(field.Name) || !required.TryGetValue(field.Name, out var property))
                 throw new InvalidOperationException("机房字段重复或不支持：" + field.Name);
-        if (fields.Count != required.Length || required.Any(name => !fields.Contains(name)))
-            throw new InvalidOperationException("机房记录缺少必需字段。");
+            CheckShape(field.Value, property.PropertyType);
+        }
+        if (fields.Count != required.Count) throw new InvalidOperationException("机房记录缺少必需字段。");
     }
 }

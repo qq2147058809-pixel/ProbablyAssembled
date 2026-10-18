@@ -27,7 +27,22 @@ internal static class WorkroomItemCodec
         public int Version { get; set; }
         [JsonConverter(typeof(WorkroomPayloadConverter))]
         public string Payload { get; set; } = "";
-        public string Name { get; set; } = "";
+        private string name = "", nameIdentifier = "", displayName = "";
+        private bool nameCached;
+        public string Name
+        {
+            get
+            {
+                if (!LanguageText.IsChinese) return name;
+                if (!nameCached || nameIdentifier != Identifier)
+                {
+                    displayName = ItemNameOrder.Normalize(Identifier, name);
+                    nameIdentifier = Identifier; nameCached = true;
+                }
+                return displayName;
+            }
+            set { name = value; nameCached = false; }
+        }
         public string Identifier { get; set; } = "";
         public int Count { get; set; }
         public long Value { get; set; }
@@ -99,8 +114,18 @@ internal static class WorkroomItemCodec
     internal static bool CleanupPending => failedCleanup.Count != 0;
     internal static void RetryCleanup()
     {
+        if (failedCleanup.Count == 0) return;
         foreach (var candidate in failedCleanup.ToArray())
             try { Destroy(candidate); } catch (Exception ex) { Core.Debug("重试物品清理：" + ex.Message); }
+    }
+    internal static void WakeCleanup()
+    {
+        if (failedCleanup.Count == 0) return;
+        BusinessWork.Schedule("item-cleanup", () =>
+        {
+            RetryCleanup();
+            return CleanupPending;
+        }, intervalMs: 500);
     }
     internal static void EndSessionCleanup()
     {
@@ -520,6 +545,7 @@ internal static class WorkroomItemCodec
         if (candidate.Root != null && candidate.Root.parentInventory != null)
         {
             if (!failedCleanup.Contains(candidate)) failedCleanup.Add(candidate);
+            WakeCleanup();
             throw new InvalidOperationException("候选仍有库存归属，保留实体等待确认，禁止销毁。");
         }
         Exception? error = null;
@@ -534,6 +560,7 @@ internal static class WorkroomItemCodec
         if (error != null)
         {
             if (!failedCleanup.Contains(candidate)) failedCleanup.Add(candidate);
+            WakeCleanup();
             throw new InvalidOperationException("物品实体清理未完成。", error);
         }
         candidate.Cleaned = true;

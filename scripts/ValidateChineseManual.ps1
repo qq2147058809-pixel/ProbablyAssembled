@@ -35,15 +35,15 @@ function Assert-PCExpansionChineseManual {
         }
         $root = $document.RootElement
         Assert-Fields $root @('contract','title','pages')
-        $contract = 'pcexpansion-computer-manual-v14'
-        if ((Read-ManualText $root.GetProperty('contract') 80) -cne $contract) { throw '中文手册契约不是v14。' }
+        $contract = 'pcexpansion-computer-manual-v27'
+        if ((Read-ManualText $root.GetProperty('contract') 80) -cne $contract) { throw '中文手册契约不是v27。' }
         if ((Read-ManualText $root.GetProperty('title') 80) -cne '电脑装机与交易手册') { throw '中文手册标题不匹配。' }
         $source = [IO.File]::ReadAllText((Join-Path $ProjectDir 'src\Infrastructure\ComputerManualPages.cs'))
         if (-not $source.Contains('public const string ContractVersion = "' + $contract + '";')) { throw '中文手册契约与源码不一致。' }
-        if (-not $source.Contains('internal const int PageCount = 10;')) { throw '中文手册页数与源码不一致。' }
+        if (-not $source.Contains('internal const int PageCount = 20;')) { throw '中文手册页数与源码不一致。' }
         $pages = $root.GetProperty('pages')
-        if ($pages.ValueKind -ne [System.Text.Json.JsonValueKind]::Array -or $pages.GetArrayLength() -ne 10) { throw '中文手册必须完整十页。' }
-        $headings = @('简介','简介（续）','拆开机箱','可以修理的物品','维修与单次回收','维修与单次回收（续）','开机检测','三种机型','机型示例','高端配件')
+        if ($pages.ValueKind -ne [System.Text.Json.JsonValueKind]::Array -or $pages.GetArrayLength() -ne 20) { throw '中文手册必须完整二十页。' }
+        $headings = @('简介','简介（续）','快捷操作','拆开机箱','可以修理的物品','维修与单次回收','维修与单次回收（续）','开机检测','三种机型','机型示例','高端配件','机房快速上手','矿机与算法','网络竞争与矿池','容量与运行模式','电价与停机保养','服务器与预收租金','币市与深度交易','自动出售','经营账本')
         $nativeIcons = @('vanilla:electronic1','vanilla:wire','vanilla:nuts_metal_pile','vanilla:printer_plastic','vanilla:scrap_metal','vanilla:metal_ingot','vanilla:energy_credit')
         $count = 0
         for ($pageIndex = 0; $pageIndex -lt $headings.Count; $pageIndex++) {
@@ -82,6 +82,6 @@ function Assert-PCExpansionChineseManual {
             }
         }
         if (-not [IO.File]::Exists((Join-Path $ProjectDir 'assets\icons\computer_manual_icon.png'))) { throw '缺少电脑手册封面。' }
-        Write-Host "中文原生电脑手册校验通过：v14、十页、$count 个独立图文元素与封面。"
+        Write-Host "中文原生电脑手册校验通过：v27、二十页、$count 个独立图文元素与封面。"
     } finally { $document.Dispose() }
 }

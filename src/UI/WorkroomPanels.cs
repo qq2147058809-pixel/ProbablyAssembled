@@ -18,33 +18,36 @@ internal sealed class WorkroomPanels : IDisposable
     private WorkroomStorageUi storage;
     private WorkroomComponentUi components;
     private WorkroomMachineUi machines;
+    private WorkroomRecyclingUi recycling;
     private Kind kind;
     private bool titleDragging, pointerOwned, placed;
     private int pointerFrame = -1, neutralFrames, escapeFrame = -1;
     private Vector2 pressed, panelStart, storagePosition;
 
     internal bool BlocksInput => state.BlocksInput;
-    internal bool Alive => ReferenceEquals(canvas, null) || (AssemblyDebugUi.Alive(canvas) && (machines?.Alive ?? true));
+    internal bool Alive => ReferenceEquals(canvas, null) || (AssemblyDebugUi.Alive(canvas) && (machines?.Alive ?? true) && (recycling?.Alive ?? true));
     internal bool StorageOpen => state.IsOpen && kind == Kind.Storage;
     internal bool ComponentsOpen => components?.Open ?? false;
     internal bool MachinesOpen => machines?.Open ?? false;
-    internal bool PreviewOpen => StorageOpen || ComponentsOpen || MachinesOpen;
-    internal bool IsDragging => titleDragging || (components?.Dragging ?? false) || (machines?.Dragging ?? false);
-    internal bool OwnsTextInput => (storage?.OwnsTextInput ?? false) || (components?.OwnsTextInput ?? false);
+    internal bool PreviewOpen => StorageOpen || ComponentsOpen || MachinesOpen || (recycling?.Open ?? false);
+    internal bool IsDragging => titleDragging || (components?.Dragging ?? false) || (machines?.Dragging ?? false) || (recycling?.Dragging ?? false);
+    internal bool OwnsTextInput => (WorkroomAutoFillUi.OwnsInput || WorkroomPickerUi.OwnsInput) || (storage?.OwnsTextInput ?? false) || (recycling?.OwnsTextInput ?? false);
     private bool HitFace(Vector2 point) => state.IsOpen && AssemblyDebugUi.Alive(face) &&
         RectTransformUtility.RectangleContainsScreenPoint(AssemblyDebugUi.Rect(face), point, null);
-    internal bool HitWindow(Vector2 point) => HitFace(point) || (components?.Hit(point) ?? false) || (machines?.Hit(point) ?? false);
+    internal bool HitWindow(Vector2 point) => HitFace(point) || (components?.Hit(point) ?? false) || (machines?.Hit(point) ?? false) || (recycling?.Hit(point) ?? false);
     private int FrontGroup(Vector2 point)
     {
         var storageIndex = HitFace(point) ? face.transform.GetSiblingIndex() : -1;
         var componentIndex = components?.SiblingIndex(point) ?? -1;
         var machineIndex = machines?.SiblingIndex(point) ?? -1;
+        var recyclingIndex = recycling?.SiblingIndex(point) ?? -1;
+        if (recyclingIndex >= 0 && recyclingIndex > storageIndex && recyclingIndex >= componentIndex && recyclingIndex > machineIndex) return 3;
         if (machineIndex > storageIndex && machineIndex > componentIndex) return 2;
         if (componentIndex > storageIndex) return 1;
         return storageIndex >= 0 ? 0 : -1;
     }
-    private bool ComponentInFront(Vector2 point) => FrontGroup(point) == 1;
-    internal string HitAssembly(Vector2 point) => FrontGroup(point) switch
+    private bool ComponentInFront(Vector2 point) => FrontGroup(point) is 1 or 3;
+    internal string HitAssembly(Vector2 point) => (WorkroomAutoFillUi.OwnsInput || WorkroomPickerUi.OwnsInput) ? null : FrontGroup(point) switch
     {
         1 => components.HitSlot(point),
         2 => machines.HitSlot(point),
@@ -52,6 +55,7 @@ internal sealed class WorkroomPanels : IDisposable
     };
     internal string ResolveAssembly(Vector2 point, WorkroomItemCodec.Snapshot item)
     {
+        if ((WorkroomAutoFillUi.OwnsInput || WorkroomPickerUi.OwnsInput)) { WorkroomAssemblyWindow.PreviewSlot = null; return null; }
         var direct = HitAssembly(point);
         var target = direct ?? (FrontGroup(point) switch
         {
@@ -62,7 +66,7 @@ internal sealed class WorkroomPanels : IDisposable
         WorkroomAssemblyWindow.PreviewSlot = target != null && WorkroomComponentAssembly.Accepts(target, item) ? target : null;
         return target;
     }
-    internal WorkroomStorageState.Record HoveredAssembly(Vector2 point) => FrontGroup(point) switch
+    internal WorkroomStorageState.Record HoveredAssembly(Vector2 point) => (WorkroomAutoFillUi.OwnsInput || WorkroomPickerUi.OwnsInput) ? null : FrontGroup(point) switch
     {
         1 => components.HoveredItem(point),
         2 => machines.HoveredItem(point),
@@ -70,28 +74,66 @@ internal sealed class WorkroomPanels : IDisposable
     };
     internal bool QuickStage(string id, long epoch)
     {
-        if (MachinesOpen && machines.QuickStage(id, epoch)) return true;
-        if (ComponentsOpen) return components.QuickStage(id, epoch);
-        if (MachinesOpen) WorkroomStorage.NotifyText(WorkroomMachineAssembly.Text("quick_unavailable"));
+        if (WorkroomAutoFillUi.OwnsInput || WorkroomPickerUi.OwnsInput || IsDragging || OwnsTextInput) return false;
+        var storageIndex = StorageOpen ? face.transform.GetSiblingIndex() : -1;
+        var componentIndex = components?.TopIndex ?? -1;
+        var machineIndex = machines?.TopIndex ?? -1;
+        if (storageIndex >= componentIndex && storageIndex >= machineIndex) return false;
+        if (machineIndex > componentIndex) return machines.QuickStage(id, epoch);
+        if (componentIndex >= 0) return components.QuickStage(id, epoch);
         return false;
+    }
+    // Inventory click pairs belong to one visible work surface. Layer changes,
+    // opening/closing and dragging invalidate a pair even if it later returns.
+    internal long QuickStageToken => WorkroomAssemblyWindow.InteractionVersion;
+    internal bool StageFromMat(string id, long epoch, int orientation, Kind target)
+    {
+        if (BlocksInput || IsDragging || OwnsTextInput) return false;
+        // Prepare the UI before changing custody; a missing font or failed
+        // window construction must leave the dragged item in the room.
+        if (!AssemblyDebugUi.Alive(canvas)) Build();
+        WorkroomView.Fit(reference, new Rect(0, 0, Screen.width, Screen.height));
+        if (!WorkroomMatTransfer.TryStage(id, epoch, orientation, target, out var plan, out var failure))
+        {
+            WorkroomStorage.NotifyText(LanguageText.Get(failure));
+            RoomAudio.Play("warning");
+            return false;
+        }
+        storage.Blur(); storage.CloseFilters();
+        canvas.gameObject.SetActive(true);
+        if (plan.Target == WorkroomMatTransfer.Destination.Processing ||
+            plan.Target == WorkroomMatTransfer.Destination.ComponentAssembly)
+            components.ShowStaged(plan);
+        else machines.ShowStaged(plan.Family, plan.RepairMachine);
+        WorkroomComponentAssembly.Notice("placed");
+        RoomAudio.Play("open");
+        return true;
     }
     internal bool OwnsMousePress
     {
         get { SamplePointer(); return pointerOwned || OwnsTextInput || HitWindow(Input.mousePosition); }
     }
     internal bool OwnsScroll => OwnsTextInput || HitWindow(Input.mousePosition) || IsDragging;
-    internal bool OwnsEscape => escapeFrame == Time.frameCount ||
+    internal bool OwnsEscape => WorkroomPickerUi.OwnsInput || WorkroomAutoFillUi.OwnsInput || escapeFrame == Time.frameCount ||
         (PreviewOpen && !(Il2Cpp.ItemMouseDragHandler.current?.isDragging ?? false));
-    internal bool HitStorage(Vector2 point) => StorageOpen && FrontGroup(point) == 0 && storage.Hit(point);
+    internal bool HitStorage(Vector2 point) => !(WorkroomAutoFillUi.OwnsInput || WorkroomPickerUi.OwnsInput) && StorageOpen && FrontGroup(point) == 0 && storage.Hit(point);
+    internal bool HitRecycling(Vector2 point) => !(WorkroomAutoFillUi.OwnsInput || WorkroomPickerUi.OwnsInput) && FrontGroup(point) == 3 && recycling.HitDrop(point);
+    internal bool AddRecycling(System.Collections.Generic.IReadOnlyList<string> ids, long epoch) => recycling?.Add(ids, epoch) ?? false;
     internal void RoomPreview(Sprite sprite, Vector2 position, Vector2 size, Color color,
         int orientation, bool flipped, bool visible)
     {
-        if (!visible)
+        if (!visible || (WorkroomAutoFillUi.OwnsInput || WorkroomPickerUi.OwnsInput))
         {
             WorkroomAssemblyWindow.PreviewSlot = null;
-            storage?.Cancel(); components?.CancelPreview(); machines?.CancelPreview(); return;
+            storage?.Cancel(); components?.CancelPreview(); machines?.CancelPreview(); recycling?.CancelPreview(); return;
         }
         var front = FrontGroup(Input.mousePosition);
+        if (front == 3)
+        {
+            storage.Cancel(); components.CancelPreview(); machines.CancelPreview();
+            recycling.RoomPreview(sprite, position, size, color, orientation, flipped, visible); return;
+        }
+        recycling?.CancelPreview();
         if (MachinesOpen && (front == 2 || (!ComponentsOpen && front != 0)))
         {
             storage.Cancel(); components.CancelPreview();
@@ -114,6 +156,9 @@ internal sealed class WorkroomPanels : IDisposable
     internal void Open(Kind kind, bool inRoom)
     {
         if (BlocksInput) return;
+        WorkroomAssemblyWindow.InteractionVersion++;
+        WorkroomAutoFillUi.CloseActive();
+        WorkroomPickerUi.CloseActive();
         if (!AssemblyDebugUi.Alive(canvas)) Build();
         if (kind == Kind.Components)
         {
@@ -165,7 +210,9 @@ internal sealed class WorkroomPanels : IDisposable
                 key == "summary" || key == "row" ? WorkroomStorage.Text(key, "", 0, 0) : WorkroomStorage.Text(key);
         text += WorkroomStorage.Text("selection_hint", 0) +
             WorkroomStorage.Text("selection_empty") + WorkroomStorage.Text("selected_result", 0, 0, 0, 0);
-        text += "↑↓0123456789" + WorkroomComponentUi.FontText + WorkroomMachineUi.FontText + WorkroomStorageUi.FontText;
+        foreach (var key in new[] { "unavailable", "source", "single", "invalid", "server_room", "unsupported",
+            "no_slot", "ambiguous", "full", "changed" }) text += LanguageText.Get("workroom.mat." + key);
+        text += "↑↓0123456789" + WorkroomComponentUi.FontText + WorkroomMachineUi.FontText + WorkroomStorageUi.FontText + WorkroomRecyclingUi.FontText;
         var font = AssemblyDebugFonts.Prepare(text, text);
         canvas = AssemblyDebugUi.NewCanvas("PCExpansion.WorkroomSubpanel", 32650);
         reference = AssemblyDebugUi.New("PanelReference", canvas.transform);
@@ -178,6 +225,7 @@ internal sealed class WorkroomPanels : IDisposable
         WorkroomPanelSkin.Scene(face, "storage", false);
         AssemblyDebugUi.Place(face.transform.Find("OperationSurface").gameObject, 6, 38, 528, WorkroomStorageUi.Height-58);
         var bar = AssemblyDebugUi.Image(face.transform, "Header", new Color(.17f, .24f, .24f, 1), true);
+        UiRoundedGeometry.Fill(bar, UiRoundedGeometry.WindowRadius, UiRoundedGeometry.Corners.Top);
         header = bar.gameObject;
         AssemblyDebugUi.Place(bar.gameObject, 0, 0, 540, 40);
         title = AssemblyDebugUi.Text(face.transform, "Title", "", font, 18, true);
@@ -193,6 +241,8 @@ internal sealed class WorkroomPanels : IDisposable
         storage = new WorkroomStorageUi(canvas, face, font);
         components = new WorkroomComponentUi(canvas, reference.transform, font);
         machines = new WorkroomMachineUi(canvas, reference.transform, font);
+        recycling = components.Recycling;
+        face.transform.Find("RoundedFrame").SetAsLastSibling();
         face.SetActive(false);
         canvas.gameObject.SetActive(false);
     }
@@ -208,6 +258,7 @@ internal sealed class WorkroomPanels : IDisposable
 
     private void HideFace()
     {
+        WorkroomAssemblyWindow.InteractionVersion++;
         titleDragging = false;
         if (WorkroomUiCleanup.IsAlive(face)) storage?.Close();
         else storage?.Cancel();
@@ -230,32 +281,36 @@ internal sealed class WorkroomPanels : IDisposable
     internal void Render(bool inRoom, bool stable, Rect viewport, bool roomDragging)
     {
         if (!AssemblyDebugUi.Alive(canvas)) return;
+        WorkroomAssemblySlotUi.SamplePointer();
         SamplePointer();
-        storage.UpdateInput(!roomDragging && (!Input.GetMouseButtonDown(0) || FrontGroup(Input.mousePosition) == 0));
+        storage.UpdateInput(!roomDragging && !(WorkroomAutoFillUi.OwnsInput || WorkroomPickerUi.OwnsInput) && (!Input.GetMouseButtonDown(0) || FrontGroup(Input.mousePosition) == 0));
         var wasOpen = state.IsOpen;
-        var escape = OwnsEscape && !roomDragging && !storage.Composing && Input.GetKeyDown(KeyCode.Escape);
+        var escape = OwnsEscape && !roomDragging && !storage.Composing && !WorkroomPickerUi.Composing && Input.GetKeyDown(KeyCode.Escape);
         if (escape) escapeFrame = Time.frameCount;
-        if (escape && storage.CloseFilters()) escape = false;
-        if (!inRoom || !stable) { components.Close(); machines.Close(); }
+        if (escape && (WorkroomPickerUi.CloseTop() || WorkroomAutoFillUi.CloseActive() || storage.CloseFilters())) escape = false;
+        if (!inRoom || !stable) { components.Close(); machines.Close(); recycling.Close(); }
         else if (escape) CloseTop();
         state.Tick(inRoom, stable, escape && !inRoom, WorkroomGameAdapter.InputNeutral());
         if (wasOpen && !state.IsOpen) HideFace();
         WorkroomView.Fit(reference, viewport);
-        canvas.gameObject.SetActive(state.IsOpen || ComponentsOpen || MachinesOpen || BlocksInput);
+        canvas.gameObject.SetActive(state.IsOpen || ComponentsOpen || MachinesOpen || recycling.Open || recycling.OwnsTextInput || BlocksInput);
         var front = FrontGroup(Input.mousePosition);
         var scrolling = Input.mouseScrollDelta.y != 0;
         var allowPress = !roomDragging && !(Il2Cpp.ItemMouseDragHandler.current?.isDragging ?? false);
-        components.UpdateInput(allowPress && !storage.OwnsTextInput, front == 1);
+        recycling.UpdateInput(allowPress && !(WorkroomAutoFillUi.OwnsInput || WorkroomPickerUi.OwnsInput) && !storage.OwnsTextInput, front == 3);
         if (StorageOpen)
         {
             MoveWindow(roomDragging);
             if (!scrolling || front == 0 || front == -1) storage.Update();
         }
-        if (ComponentsOpen && (!scrolling || front == 1 || front == -1))
+        if (ComponentsOpen && (!scrolling || front is 1 or 3 or -1))
             components.Update(allowPress && !storage.OwnsTextInput && ComponentInFront(Input.mousePosition));
         if (MachinesOpen) machines.Update(allowPress && !OwnsTextInput && FrontGroup(Input.mousePosition) == 2);
+        recycling.Update();
+        WorkroomPickerUi.UpdateAll(allowPress && !IsDragging);
         WorkroomPanelSkin.Update(canvas, allowPress && !IsDragging);
-        storage.UpdateInformation(StorageOpen && FrontGroup(Input.mousePosition) == 0 && allowPress && !IsDragging);
+        storage.UpdateInformation(!(WorkroomAutoFillUi.OwnsInput || WorkroomPickerUi.OwnsInput) && StorageOpen && FrontGroup(Input.mousePosition) == 0 && allowPress && !IsDragging);
+        WorkroomCandidateHighlight.UpdateNative();
     }
 
     private void SamplePointer()
@@ -280,10 +335,10 @@ internal sealed class WorkroomPanels : IDisposable
         var rect = AssemblyDebugUi.Rect(face);
         var parent = AssemblyDebugUi.Rect(reference);
         if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, Input.mousePosition, null, out var point)) return;
-        if (Input.GetMouseButtonDown(0) && !roomDragging && !storage.FiltersOpen && FrontGroup(Input.mousePosition) == 0 && !(Il2Cpp.ItemMouseDragHandler.current?.isDragging ?? false) &&
+        if (Input.GetMouseButtonDown(0) && !roomDragging && !(WorkroomAutoFillUi.OwnsInput || WorkroomPickerUi.OwnsInput) && !storage.FiltersOpen && FrontGroup(Input.mousePosition) == 0 && !(Il2Cpp.ItemMouseDragHandler.current?.isDragging ?? false) &&
             RectTransformUtility.RectangleContainsScreenPoint(AssemblyDebugUi.Rect(header), Input.mousePosition, null) &&
             !RectTransformUtility.RectangleContainsScreenPoint(AssemblyDebugUi.Rect(closeButton), Input.mousePosition, null))
-        { titleDragging = true; pressed = point; panelStart = rect.anchoredPosition; face.transform.SetAsLastSibling(); }
+        { titleDragging = true; pressed = point; panelStart = rect.anchoredPosition; face.transform.SetAsLastSibling(); WorkroomAssemblyWindow.InteractionVersion++; WorkroomAssemblyWindow.Focus(face); }
         if (titleDragging && Input.GetMouseButton(0)) rect.anchoredPosition = panelStart + point-pressed;
         if (!Input.GetMouseButton(0)) titleDragging = false;
         var position = rect.anchoredPosition;
@@ -298,6 +353,9 @@ internal sealed class WorkroomPanels : IDisposable
 
     public void Dispose()
     {
+        WorkroomAutoFillUi.Release();
+        WorkroomPickerUi.Release();
+        WorkroomCandidateHighlight.ClearNative();
         WorkroomAssemblyWindow.PreviewSlot = null;
         titleDragging = pointerOwned = false;
         pointerFrame = escapeFrame = -1;
@@ -307,6 +365,7 @@ internal sealed class WorkroomPanels : IDisposable
         cleanup.Run("panels.storage", () => { storage?.Release(); storage = null; });
         cleanup.Run("panels.components", () => { components?.Release(); components = null; });
         cleanup.Run("panels.machines", () => { machines?.Close(); machines = null; });
+        cleanup.Run("panels.recycling", () => { recycling?.Release(); recycling = null; });
         // A failed child release may still need its parent objects on the retry.
         cleanup.ThrowIfFailed();
         cleanup.Run("panels.canvas", () =>

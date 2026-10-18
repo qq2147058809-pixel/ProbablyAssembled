@@ -130,7 +130,7 @@ internal static class ScavengingIntegration
                 throw new InvalidOperationException("电脑物品权重与垃圾表腾出权重不一致（预期=" + computerGroupWeight + "，实际=" + computerWeight + "）。");
             if (totalWeight <= 0) throw new InvalidOperationException("原版拾荒组权重无效。");
             lootPoolRegistered = true;
-            Core.Log?.Msg("[深空装机] 已接入原版拾荒池：" + registeredCount +
+            Core.Debug("[深空装机] 已接入原版拾荒池：" + registeredCount +
                           " 种破损电脑物品（T1/T2 配件、仅 T1 机箱），有效电脑池抽中概率=" +
                           (computerWeight / totalWeight * 100).ToString("F1") + "%；垃圾表权重已降低 10%，腾出权重全部转入电脑物品表。");
         }
@@ -161,7 +161,7 @@ internal static class ScavengingIntegration
             {
                 scavengingActions++;
                 RegisterBrokenComputerLoot();
-                Core.Log?.Msg("[拾荒入口] 原版街区拾荒已触发，第 " + scavengingActions + " 次；电脑掉落表已注册=" + lootPoolRegistered + "。");
+                Core.Debug("[拾荒入口] 原版街区拾荒已触发，第 " + scavengingActions + " 次；电脑掉落表已注册=" + lootPoolRegistered + "。");
             }
             catch (Exception ex)
             {
@@ -180,7 +180,7 @@ internal static class ScavengingIntegration
             var spec = Components.Find(Core.Clean(__result));
             if (spec != null) computerRolls++;
             if (scavengingRolls <= 12 || spec != null)
-                Core.Log?.Msg("[拾荒抽取] " + Core.Clean(__result) + "，累计抽取=" + scavengingRolls +
+                Core.Debug("[拾荒抽取] " + Core.Clean(__result) + "，累计抽取=" + scavengingRolls +
                               "，电脑物品=" + computerRolls);
         }
     }

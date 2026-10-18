@@ -38,6 +38,7 @@ internal static class WorkroomMachineRepair
         if (!ValidFamily(family) || !WorkroomMachineAssembly.Ready(epoch)) return;
         var plan = GetPlan(family);
         if (plan == null || !plan.Allowed) { Notice(plan?.Refusal ?? "repair_unavailable"); return; }
+        var repairedSuccessfully = false;
         WorkroomStorage.Run(() =>
         {
             RequireCurrent(plan);
@@ -53,8 +54,11 @@ internal static class WorkroomMachineRepair
             next[next.FindIndex(record => record.Id == source.Id)] = Copy(source, repaired);
             RequireCurrent(plan);
             WorkroomStorage.State.Replace(next);
+            repairedSuccessfully = true;
             Notice("repair_complete");
         });
+        if (repairedSuccessfully && WorkroomSelection.AutoReturn)
+            WorkroomSelection.ReturnSlots(new[] { WorkroomMachineAssembly.MainSlot(family) }, epoch);
     }
 
     private static bool ValidFamily(string family) => family == WorkroomMachineAssembly.Motherboard || family == WorkroomMachineAssembly.Case;
@@ -243,7 +247,7 @@ internal static class WorkroomMachineRepair
         a.Width == b.Width && a.Height == b.Height && a.Cells.SequenceEqual(b.Cells);
     private static bool UsableMaterial(WorkroomStorageState.Record record, string id) => WorkroomComponentParts.UsableMaterial(record, id);
     private static WorkroomStorageState.Record Copy(WorkroomStorageState.Record record, WorkroomItemCodec.Snapshot item) =>
-        new() { Id = record.Id, Place = record.Place, Slot = record.Slot, X = record.X, Y = record.Y, Item = item };
+        WorkroomStorageState.Copy(record, item: item);
     private static void RequireCurrent(Plan plan)
     {
         var state = WorkroomStorage.State;

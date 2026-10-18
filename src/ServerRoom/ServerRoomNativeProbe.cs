@@ -76,7 +76,7 @@ internal static class ServerRoomNativeProbe
             }
             if (WorkroomItemCodec.CleanupPending) throw new InvalidOperationException("临时机房物品清理未完成。");
             passed = true;
-            Core.Log?.Msg("[机房原生门禁] 十档空箱、两类T1/T5配置及逐件拆装 GameItem→快照→恢复→再捕获验证通过。");
+            Core.Debug("[机房原生门禁] 十档空箱、两类T1/T5配置及逐件拆装 GameItem→快照→恢复→再捕获验证通过。");
         }
         catch (Exception ex)
         {

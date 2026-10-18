@@ -22,7 +22,6 @@ internal static class RoomAudio
     {
         internal AudioSource Source = null!;
         internal int Priority;
-        internal long Until;
         internal float Gain;
     }
     private static GameObject? root;
@@ -262,16 +261,11 @@ internal static class RoomAudio
         observedRevision = doc.Revision; observedStorage = WorkroomStorage.State.Revision;
         observedCash = cash;
         var facts = ServerRoomOperations.MachineFacts(doc);
-        running = facts.Count(f => f.CanRun && (doc.Racks.Any(r => r.RecordId == f.RecordId && r.PoweredOn) || doc.Leases.Any(l => l.RecordId == f.RecordId)));
+        if (doc.Network.Day == null) { running = 0; fanTarget = 0; return; }
+        var plan = cash >= 0 ? ServerRoomEconomy.Plan(doc, facts, cash) : null;
+        running = (plan?.Machines.Count(machine => machine.Runs) ?? 0) + doc.Leases.Count;
         fanTarget = running == 0 ? 0 : running <= 2 ? .42f : running <= 5 ? .70f : 1;
-        var remaining = cash; var unpaid = false;
-        var byId = facts.ToDictionary(f => f.RecordId, StringComparer.Ordinal);
-        foreach (var rack in doc.Racks.Where(r => r.Kind == "mining" && r.PoweredOn).OrderBy(r => r.Priority).ThenBy(r => r.RackIndex))
-        {
-            var fact = byId[rack.RecordId];
-            if (!fact.CanRun) continue;
-            if (remaining < fact.DailyFee) unpaid = true; else remaining -= fact.DailyFee;
-        }
+        var unpaid = cash < 0 ? doc.Racks.Any(r => r.PoweredOn) : plan!.Machines.Any(machine => machine.Reason == "cash");
         if (forecastKnown && !forecastUnpaid && unpaid) Play("warning");
         forecastUnpaid = unpaid; forecastKnown = true;
     }
@@ -308,7 +302,7 @@ internal static class RoomAudio
             voice.Gain = original ? NativeGain(clip) : 1;
             if (cue is "ui" or "door") voice.Gain *= .65f;
             voice.Source.volume = Mathf.Clamp01(EffectsPercent / 100f * voice.Gain);
-            voice.Priority = priority; voice.Until = now + (long)(clip!.length * 1000); voice.Source.Play();
+            voice.Priority = priority; voice.Source.Play();
             cooldown[throttle] = now + (cue == "warning" ? 1800 : cue == "ui" ? 100 : 170);
             if (cue == "warning") warningLatched = true;
             else if (cue != "ui") warningLatched = false;

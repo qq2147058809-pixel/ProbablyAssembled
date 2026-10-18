@@ -30,13 +30,25 @@ internal sealed class WorkroomView : IDisposable
     private TMP_FontAsset font;
     private long hintUntil;
     private long lastRoomMessageUntil;
+    private string lastRoomMessage, lastStorageFault;
+
+    internal static Rect WorkbenchRect(WorkroomPanels.Kind kind) => kind switch
+    {
+        WorkroomPanels.Kind.Components => new Rect(492, 342, 293, 67),
+        WorkroomPanels.Kind.Motherboard => new Rect(905, 290, 158, 110),
+        WorkroomPanels.Kind.Case => new Rect(1064, 188, 185, 214),
+        _ => default
+    };
     private WorkroomInventoryUi inventory;
+    private Action exitRoom, enterServerRoom;
+    private bool roomBuilt;
     private bool storagePointerOwned;
     private int storagePointerFrame = -1, storageNeutralFrames;
 
     internal bool Alive => AssemblyDebugUi.Alive(noticeCanvas) && AssemblyDebugUi.Alive(roomCanvas) &&
         AssemblyDebugUi.Alive(blackCanvas) && AssemblyDebugUi.Alive(shopCanvas) &&
-        AssemblyDebugUi.Alive(backdrop) && AssemblyDebugUi.Alive(audioSpeaker) && panels.Alive && (entryHover?.Alive ?? false);
+        panels.Alive && (entryHover?.Alive ?? false) &&
+        (!roomBuilt || AssemblyDebugUi.Alive(backdrop) && AssemblyDebugUi.Alive(audioSpeaker));
     internal bool BlocksPanelInput => panels.BlocksInput;
     internal bool HasOpenPanels => panels.PreviewOpen;
     internal bool OwnsTextInput => panels.OwnsTextInput;
@@ -62,7 +74,7 @@ internal sealed class WorkroomView : IDisposable
         storageNeutralFrames = neutral ? storageNeutralFrames + 1 : 0;
         if (storageNeutralFrames < 2) return;
         storagePointerOwned = false;
-        Core.Log?.Msg("[工作间箱入口] pointer=released; frame=" + Time.frameCount);
+        Core.Debug("[工作间箱入口] pointer=released; frame=" + Time.frameCount);
     }
     internal bool OwnsScroll => panels.OwnsScroll;
     internal bool OwnsEscape => (inventory?.OwnsEscape ?? false) || panels.OwnsEscape;
@@ -123,6 +135,8 @@ internal sealed class WorkroomView : IDisposable
 
     internal void Build(Action exit, Action enterServerRoom)
     {
+        exitRoom = exit;
+        this.enterServerRoom = enterServerRoom;
         var labels = new[] { "title", "exit", "bench", "transit", "placeholder", "busy", "unavailable" };
         var texts = new List<string>();
         foreach (var label in labels) texts.Add(Text(label));
@@ -133,18 +147,16 @@ internal sealed class WorkroomView : IDisposable
         noticeCanvas = AssemblyDebugUi.NewCanvas("PCExpansion.WorkroomNotice", 31010);
         noticeSpace = Space(noticeCanvas.transform, "NoticeReference");
         hint = Box(noticeSpace.transform, "KeyHint", 420, 640,
-            440, 44, new Color(.04f, .07f, .09f, .98f));
+            440, 44, ModOperationNotice.Background);
         hintText = AssemblyDebugUi.Text(hint.transform, "Hint", Text("busy"), font, 15);
         AssemblyDebugUi.Stretch(hintText.gameObject);
+        ModOperationNotice.Style(hint, hintText);
         hint.SetActive(false);
 
         roomCanvas = AssemblyDebugUi.NewCanvas("PCExpansion.WorkroomRegion", RoomOrder);
-        // Full-screen cover sits outside the fitted room art, including its margins.
-        // The native shop remains rendered underneath and owns its display flags.
-        backdrop = AssemblyDebugUi.Image(roomCanvas.transform, "Backdrop", BackdropColor, true);
-        AssemblyDebugUi.Stretch(backdrop.gameObject);
+        // The empty room root also receives the shop crate's shared outline layer.
+        // Room art, workbenches and inventory are built only on the first entry.
         roomSpace = Space(roomCanvas.transform, "RoomReference");
-        DrawRoom(exit, enterServerRoom);
         roomCanvas.gameObject.SetActive(false);
 
         // Lowest native UI order; follow its actual Overlay/Camera mode below.
@@ -165,11 +177,27 @@ internal sealed class WorkroomView : IDisposable
         AssemblyDebugUi.Stretch(black.gameObject);
         blackCanvas.gameObject.SetActive(false);
         entryHover = new WorkroomEntryHover();
+        entryHover.AddShop(shopCrate, WorkroomArt.Get("workroom_storage_chest"), new Rect(921, 594, 142, 109),
+            roomCanvas, roomSpace.transform, shopCanvas, shopSpace.transform);
+    }
+
+    internal void EnsureRoom()
+    {
+        if (roomBuilt) return;
+        // Keep the source view owned by WorkroomTrial until construction succeeds;
+        // its existing failure cleanup disposes any partially built native objects.
+        backdrop = AssemblyDebugUi.Image(roomCanvas.transform, "Backdrop", BackdropColor, true);
+        AssemblyDebugUi.Stretch(backdrop.gameObject);
+        DrawRoom(exitRoom, enterServerRoom);
         // Silhouettes use the existing 1280x720 layout and sample the original art unchanged.
         AttachRoomHover(exitEntry, new[] { new Vector2(60, 105), new Vector2(297, 105),
             new Vector2(297, 573), new Vector2(60, 573) });
-        AttachRoomHover(roomEntries[WorkroomPanels.Kind.Components], new[] { new Vector2(515, 342),
-            new Vector2(762, 342), new Vector2(786, 404), new Vector2(488, 404) });
+        // Trace the mat's metal rim, excluding its cast shadow. Source art is 1672x941.
+        AttachRoomHover(roomEntries[WorkroomPanels.Kind.Components], new[] {
+            new Vector2(515.2f, 344.3f), new Vector2(756.4f, 344.3f), new Vector2(758.3f, 345.8f),
+            new Vector2(786.2f, 398.6f), new Vector2(786.2f, 402.5f), new Vector2(783.9f, 403.2f),
+            new Vector2(489.2f, 403.2f), new Vector2(486.9f, 401.7f), new Vector2(486.9f, 398.6f),
+            new Vector2(514.5f, 345.8f) });
         // Trace the metal/PCB edges, including the stand's recesses; exclude the table and cast shadow.
         AttachRoomHover(roomEntries[WorkroomPanels.Kind.Motherboard], new[] {
             new Vector2(914.3f, 299.8f), new Vector2(918.7f, 299.0f), new Vector2(921.0f, 300.3f), new Vector2(923.1f, 294.5f),
@@ -193,8 +221,8 @@ internal sealed class WorkroomView : IDisposable
             roomCanvas, roomSpace.transform, shopCanvas, shopSpace.transform);
         entryHover.AddRoomSprite(audioSpeaker, WorkroomArt.Get("workroom_audio_speaker"), AudioSpeakerRect,
             roomCanvas, roomSpace.transform, shopCanvas, shopSpace.transform, () => RoomAudio.Text("speaker_hint"));
-        entryHover.AddShop(shopCrate, WorkroomArt.Get("workroom_storage_chest"), new Rect(921, 594, 142, 109),
-            roomCanvas, roomSpace.transform, shopCanvas, shopSpace.transform);
+        roomBuilt = true;
+        EnsureOverlay();
     }
 
     private void AttachRoomHover(GameObject button, Vector2[] contour) => entryHover.AddRoom(button, contour,
@@ -234,6 +262,8 @@ internal sealed class WorkroomView : IDisposable
         var art = AssemblyDebugUi.Image(parent, "WorkshopBackground", Color.white, false);
         art.sprite = WorkroomArt.Get("workroom_background");
         AssemblyDebugUi.Place(art.gameObject, 0, 0, Width, Height);
+        // The shared shop outline already exists when the room is created lazily.
+        art.transform.SetAsFirstSibling();
         var door = AssemblyDebugUi.Button(roomCanvas, parent, "Exit", Color.clear, exit);
         exitEntry = door;
         AssemblyDebugUi.Place(door, 65, 145, 218, 425);
@@ -241,10 +271,11 @@ internal sealed class WorkroomView : IDisposable
         AssemblyDebugUi.Place(serverEntry, ServerKeyRect.x, ServerKeyRect.y,
             ServerKeyRect.width, ServerKeyRect.height);
         DrawWallKeyArt(serverEntry.transform);
-        Entry(WorkroomPanels.Kind.Components, 492, 342, 293, 67);
-        Entry(WorkroomPanels.Kind.Motherboard, 905, 290, 158, 110);
-        // Cover the full case art down to its feet.
-        Entry(WorkroomPanels.Kind.Case, 1064, 188, 185, 214);
+        foreach (var kind in new[] { WorkroomPanels.Kind.Components, WorkroomPanels.Kind.Motherboard, WorkroomPanels.Kind.Case })
+        {
+            var area = WorkbenchRect(kind);
+            Entry(kind, area.x, area.y, area.width, area.height);
+        }
         Entry(WorkroomPanels.Kind.Storage, 1065, 542, 202, 143);
         audioSpeaker = AssemblyDebugUi.Button(roomCanvas, parent, "AudioSpeaker", Color.clear, () =>
         {
@@ -279,21 +310,28 @@ internal sealed class WorkroomView : IDisposable
         Fit(noticeSpace, home ? storeViewport : new Rect(0, 0, Screen.width, Screen.height));
         Fit(roomSpace, new Rect(0, 0, Screen.width, Screen.height));
         noticeCanvas.gameObject.SetActive(hint.activeSelf && Environment.TickCount64 < hintUntil && flow.IsStable);
-        roomCanvas.gameObject.SetActive(flow.RoomVisible);
+        roomCanvas.gameObject.SetActive(roomBuilt && flow.RoomVisible);
         blackCanvas.gameObject.SetActive(flow.BlocksInput && !flow.IsStable);
         black.color = new Color(0,0,0,flow.Opacity);
-        if (inside)
+        if (inside || home && WorkroomGameAdapter.AtStore())
         {
-            if (lastRoomMessageUntil != WorkroomStorage.MessageUntil)
+            if (lastRoomMessageUntil != WorkroomStorage.MessageUntil || lastRoomMessage != WorkroomStorage.Message)
             {
                 lastRoomMessageUntil = WorkroomStorage.MessageUntil;
+                lastRoomMessage = WorkroomStorage.Message;
                 if (Environment.TickCount64 < lastRoomMessageUntil && !string.IsNullOrWhiteSpace(WorkroomStorage.Message))
                     NotifyStorage();
             }
+            var fault = WorkroomStorage.State.Error ?? (WorkroomItemCodec.CleanupPending ? "recovery" : null);
+            if (fault != lastStorageFault)
+            {
+                lastStorageFault = fault;
+                if (fault != null) ShowNotice(WorkroomStorage.Text(fault), 8000);
+            }
         }
-        else lastRoomMessageUntil = WorkroomStorage.MessageUntil;
+        else { lastRoomMessageUntil = WorkroomStorage.MessageUntil; lastRoomMessage = WorkroomStorage.Message; lastStorageFault = null; }
         panels.Render(inside, inside || home, inside ? new Rect(0, 0, Screen.width, Screen.height) : storeViewport, RoomAudioSettingsUi.BlocksInput || (inventory?.IsDragging ?? false) || (!panels.OwnsTextInput && Input.GetKeyDown(KeyCode.Escape) && (inventory?.HasSelection ?? false)));
-        inventory.Update(inside && !RoomAudioSettingsUi.BlocksInput && (!panels.BlocksInput || panels.StorageOpen), panels);
+        inventory?.Update(inside && !RoomAudioSettingsUi.BlocksInput && (!panels.BlocksInput || panels.StorageOpen), panels);
         if (shopCanvas.renderMode == RenderMode.ScreenSpaceOverlay)
             Fit(shopSpace, storeViewport);
         else if (AssemblyDebugUi.Alive(shopCanvas.worldCamera))
@@ -318,10 +356,13 @@ internal sealed class WorkroomView : IDisposable
             var hit = serverEntry.GetComponent<Image>();
             if (AssemblyDebugUi.Alive(hit)) hit.raycastTarget = inside && entryReady && !panels.PreviewOpen;
         }
-        entryHover.Update(inside && entryReady, home && shopReady && entryReady);
+        entryHover.Update(roomBuilt && inside && entryReady, home && shopReady && entryReady);
         var speakerReady = inside && entryReady && RoomAudioSettingsUi.CanOpen;
-        audioSpeaker.GetComponent<Button>().interactable = speakerReady;
-        audioSpeaker.GetComponent<Image>().raycastTarget = speakerReady;
+        if (AssemblyDebugUi.Alive(audioSpeaker))
+        {
+            audioSpeaker.GetComponent<Button>().interactable = speakerReady;
+            audioSpeaker.GetComponent<Image>().raycastTarget = speakerReady;
+        }
         // Concrete press callbacks do not run during idle frames. Advance the
         // release tail every frame even when no handler queries mouse ownership.
         SampleStoragePointer();
@@ -337,12 +378,15 @@ internal sealed class WorkroomView : IDisposable
         blackCanvas.sortingOrder = BlackOrder;
         // Keep our cover opaque and first in its own Canvas after UI conversion.
         // Missing coverage is a failed view and must release through normal cleanup.
-        if (!AssemblyDebugUi.Alive(backdrop)) throw new InvalidOperationException("工作间覆盖底图已失效。");
-        if (!backdrop.enabled) backdrop.enabled = true;
-        if (!backdrop.gameObject.activeSelf) backdrop.gameObject.SetActive(true);
-        if (backdrop.color != BackdropColor) backdrop.color = BackdropColor;
-        if (!backdrop.raycastTarget) backdrop.raycastTarget = true;
-        if (backdrop.transform.GetSiblingIndex() != 0) backdrop.transform.SetAsFirstSibling();
+        if (roomBuilt)
+        {
+            if (!AssemblyDebugUi.Alive(backdrop)) throw new InvalidOperationException("工作间覆盖底图已失效。");
+            if (!backdrop.enabled) backdrop.enabled = true;
+            if (!backdrop.gameObject.activeSelf) backdrop.gameObject.SetActive(true);
+            if (backdrop.color != BackdropColor) backdrop.color = BackdropColor;
+            if (!backdrop.raycastTarget) backdrop.raycastTarget = true;
+            if (backdrop.transform.GetSiblingIndex() != 0) backdrop.transform.SetAsFirstSibling();
+        }
         ConfigureShopCanvas();
         panels.EnsureOverlay();
         inventory?.EnsureOverlay();
@@ -391,20 +435,35 @@ internal sealed class WorkroomView : IDisposable
 
     internal void Notify(string keyName)
     {
-        PlaceNotice();
-        hintText.text = Text(keyName);
-        hint.SetActive(true);
-        hintUntil = Environment.TickCount64 + 3000;
+        ShowNotice(Text(keyName), 3000);
     }
+
+    internal void NotifyOperation(string message) => ShowNotice(message, 5000);
 
     internal void NotifyStorage()
     {
-        var text = WorkroomStorage.Message;
+        ShowNotice(WorkroomStorage.Message, 5000);
+    }
+
+    private void ShowNotice(string text, int duration)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return;
         AssemblyDebugFonts.Prepare(text, text);
-        PlaceNotice();
         hintText.text = text;
+        hintText.richText = false;
+        hintText.enableWordWrapping = true;
+        hintText.enableAutoSizing = false;
+        hintText.fontSize = 15;
+        var height = Mathf.Clamp(hintText.GetPreferredValues(text, 868, float.PositiveInfinity).y + 20, 48, 300);
+        // Explicitly above the subpanel canvas (32650), below audio and transitions.
+        noticeCanvas.sortingOrder = 32660;
+        AssemblyDebugUi.Place(hint, 190, 18, 900, height);
+        AssemblyDebugUi.Place(hintText.gameObject, 16, 10, 868, height - 20);
+        hintText.fontSizeMin = 12;
+        hintText.fontSizeMax = 15;
+        hintText.enableAutoSizing = true;
         hint.SetActive(true);
-        hintUntil = Environment.TickCount64 + 5000;
+        hintUntil = Environment.TickCount64 + Math.Max(duration, Math.Min(15000, 3000 + text.Length * 65));
     }
 
     private static void DrawWallKeyArt(Transform parent)
@@ -412,14 +471,6 @@ internal sealed class WorkroomView : IDisposable
         var art = AssemblyDebugUi.Image(parent, "WallServerRoomKeyArt", Color.white, false);
         art.sprite = WorkroomArt.Get("workroom_wall_server_key");
         AssemblyDebugUi.Place(art.gameObject, 0, 0, ServerKeyRect.width, ServerKeyRect.height);
-    }
-
-    private void PlaceNotice()
-    {
-        var inRoom = WorkroomTrial.CustomRegionVisible;
-        noticeCanvas.sortingOrder = inRoom ? RoomOrder + 50 : 31010;
-        AssemblyDebugUi.Place(hint, inRoom ? 190 : 420, inRoom ? 18 : 640,
-            inRoom ? 900 : 440, inRoom ? 50 : 44);
     }
 
     public void Dispose()
@@ -457,6 +508,7 @@ internal sealed class WorkroomView : IDisposable
         cleanup.ThrowIfFailed();
         hint = noticeSpace = roomSpace = shopSpace = null;
         shopCrate = exitEntry = serverEntry = null; roomEntries.Clear(); hintText = null; backdrop = black = null; font = null;
+        exitRoom = enterServerRoom = null; roomBuilt = false;
         storagePointerOwned = false; storagePointerFrame = -1; storageNeutralFrames = 0;
     }
 }

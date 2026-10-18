@@ -24,6 +24,7 @@ internal sealed class WorkroomStorageUi
         internal Button Take = null!;
         internal string Id = "";
         internal long Epoch;
+        internal GameObject Compatible = null!;
     }
     private readonly Row[] rows = new Row[5];
     private readonly GameObject body, face, ghostRoot, filterLayer;
@@ -57,6 +58,7 @@ internal sealed class WorkroomStorageUi
     private int totalCount, matchingCount;
     private long revision = -1, epoch = -1;
     private int renderedOffset = -1;
+    private long highlightedRevision = -1;
     private string? locale;
     private string displayedStatus = "";
     private readonly Dictionary<string, string> textCache = new(StringComparer.Ordinal);
@@ -97,7 +99,7 @@ internal sealed class WorkroomStorageUi
         dismiss.targetGraphic = blocker; dismiss.transition = Selectable.Transition.None;
         dismiss.navigation = new Navigation { mode = Navigation.Mode.None };
         dismiss.onClick.AddListener(DelegateSupport.ConvertDelegate<UnityAction>((Action)(() => CloseFilters())));
-        var popup = WorkroomPanelSkin.Panel(filterLayer, "FilterPopup", 16, 120, 508, 142, new Color(.12f,.18f,.15f,1));
+        var popup = WorkroomPanelSkin.Panel(filterLayer, "FilterPopup", 16, 120, 508, 142, new Color(.12f,.18f,.15f,1), UiRoundedGeometry.WindowRadius);
         popup.GetComponent<Image>().raycastTarget = true;
         var clear = WorkroomPanelSkin.Button(canvas, popup.transform, "ClearFilters", WorkroomStorage.Text("clear_filters"), font, 12, ClearFilters);
         AssemblyDebugUi.Place(clear, 370, 108, 126, 26);
@@ -140,6 +142,8 @@ internal sealed class WorkroomStorageUi
                 () => { WorkroomStorage.Take(row.Id, inRoom, row.Epoch); Update(); });
             AssemblyDebugUi.Place(row.Button, 428, 6, 70, 30);
             row.Take = row.Button.GetComponent<Button>();
+            row.Compatible = WorkroomCandidateHighlight.Frame(row.Face.transform, "Compatible");
+            row.Compatible.SetActive(false);
         }
         summary = AssemblyDebugUi.Text(body.transform, "Summary", "", font, 13);
         summary.fontSize = 15;
@@ -243,6 +247,7 @@ internal sealed class WorkroomStorageUi
     private TMP_InputField MakeSearch(TMP_FontAsset font, out TextMeshProUGUI placeholder)
     {
         var background = AssemblyDebugUi.Image(body.transform, "Search", new Color(.10f,.15f,.13f,1), true);
+        UiRoundedGeometry.Fill(background);
         background.gameObject.SetActive(false);
         AssemblyDebugUi.Place(background.gameObject, 16, 90, 370, 28);
         var viewport = AssemblyDebugUi.New("TextViewport", background.transform);
@@ -400,8 +405,9 @@ internal sealed class WorkroomStorageUi
         if (Hit(Input.mousePosition) && Input.mouseScrollDelta.y != 0)
             offset -= Math.Sign(Input.mouseScrollDelta.y);
         offset = Math.Clamp(offset, 0, Math.Max(0, items.Count-rows.Length));
-        if (redraw || renderedOffset != offset)
+        if (redraw || renderedOffset != offset || highlightedRevision != WorkroomCandidateHighlight.Revision)
         {
+            highlightedRevision = WorkroomCandidateHighlight.Revision;
             renderedOffset = offset;
             var dynamicText = "";
             for (var i = offset; i < Math.Min(items.Count, offset + rows.Length); i++) dynamicText += items[i].Representative.Item.Name;
@@ -416,6 +422,7 @@ internal sealed class WorkroomStorageUi
                 row.State.text = item.Place != "box" ? WorkroomStorage.Text("pending") :
                     item.Item.Broken ? WorkroomStorage.Text("broken") : WorkroomComponentTemplates.Text("intact_short");
                 row.Background.color = new Color(.14f,.19f,.16f,.94f);
+                row.Compatible.SetActive(item.Place == "box" && WorkroomCandidateHighlight.Matches(item.Item));
                 row.State.color = item.Item.Broken ? new Color(1,.72f,.56f,1) : new Color(.76f,.85f,.71f,1);
                 row.Button.GetComponentInChildren<TextMeshProUGUI>().text = WorkroomStorage.Text("take");
             }
@@ -427,10 +434,8 @@ internal sealed class WorkroomStorageUi
         collect.interactable = !popupOwned && state.Ready && !WorkroomStorage.Busy && !WorkroomItemCodec.CleanupPending && WorkroomTrial.CanCollectCurrent(inRoom);
         previous.interactable = !popupOwned && offset > 0;
         next.interactable = !popupOwned && offset + rows.Length < items.Count;
-        var message = state.Error != null ? CachedText(state.Error) :
-            WorkroomItemCodec.CleanupPending ? CachedText("recovery") :
-            Environment.TickCount64 < WorkroomStorage.MessageUntil ? WorkroomStorage.Message : "";
-        if (displayedStatus != message) { displayedStatus = message; status.text = message; }
+        // All operation feedback is owned by the shared top notice.
+        if (displayedStatus != "") { displayedStatus = ""; status.text = ""; }
     }
 
     internal void Cancel()

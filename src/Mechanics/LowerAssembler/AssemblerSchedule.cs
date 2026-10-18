@@ -49,7 +49,7 @@ internal static class AssemblerSchedule
             if (store.modData == null)
                 store.modData = new Il2CppSystem.Collections.Generic.Dictionary<string, string>();
             store.modData[LastScheduledDayKey] = dayValue;
-            Core.Log?.Msg("[深空装机] 已安排周五装机佬，第 " + dayValue + " 天；同日随机来访已合并。");
+            Core.Debug("[深空装机] 已安排周五装机佬，第 " + dayValue + " 天；同日随机来访已合并。");
         }
         catch (Exception ex) { Core.Log?.Error("安排周五装机佬失败：" + ex); }
     }

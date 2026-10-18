@@ -6,10 +6,10 @@ namespace PCExpansion;
 /// <summary>浏览器仅保存导航位置；历史项不保存或重放资产命令。</summary>
 internal sealed class ServerRoomBrowserNavigation
 {
-    internal enum Page { Overview, Mining, Trading, Operation, Catalog, Rack }
+    internal enum Page { Overview, Mining, Trading, Operation, Catalog, Rack, Forecast, Machine, Network, AutoSale, Ledger, Guide, TradeDetails, HardwarePerformance }
     internal readonly record struct Route(Page Kind, int Parameter = 0)
     {
-        internal int Site => Kind == Page.Trading ? 1 : Kind == Page.Catalog ? 2 : 0;
+        internal int Site => Kind is Page.Trading or Page.TradeDetails ? 1 : Kind is Page.Catalog or Page.HardwarePerformance ? 2 : 0;
     }
 
     private const int Limit = 32;
@@ -41,8 +41,9 @@ internal sealed class ServerRoomBrowserNavigation
     internal Route Navigate(Route route)
     {
         if (!Enum.IsDefined(typeof(Page), route.Kind) ||
-            route.Kind == Page.Rack && (route.Parameter < 0 || route.Parameter >= 10) ||
-            route.Kind == Page.Trading && (route.Parameter < 0 || route.Parameter >= 5) ||
+            route.Kind is Page.Rack or Page.Machine && (route.Parameter < 0 || route.Parameter >= 10) ||
+            route.Kind is Page.Trading or Page.TradeDetails or Page.Network && (route.Parameter < 0 || route.Parameter >= 5) ||
+            route.Kind == Page.Guide && (route.Parameter < 0 || route.Parameter >= 3) ||
             route.Kind == Page.Catalog && (route.Parameter < 0 || route.Parameter >= 2))
             throw new ArgumentOutOfRangeException(nameof(route));
         Site = route.Site;

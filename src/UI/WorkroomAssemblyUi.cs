@@ -12,11 +12,19 @@ namespace PCExpansion;
 internal sealed class WorkroomAssemblyWindow
 {
     internal readonly GameObject Root;
+    internal readonly WorkroomPickerUi Picker;
     private readonly GameObject header, close;
     private Vector2 pressed, start;
     internal bool Dragging { get; private set; }
     internal bool Open => WorkroomUiCleanup.IsAlive(Root) && Root.activeSelf;
     internal static string? PreviewSlot;
+    internal static long InteractionVersion;
+    private static GameObject? focusedRoot;
+    internal static void Focus(GameObject root)
+    {
+        if (WorkroomUiCleanup.IsAlive(focusedRoot) && focusedRoot!.Pointer == root.Pointer) return;
+        focusedRoot = root; InteractionVersion++;
+    }
 
     internal WorkroomAssemblyWindow(Canvas canvas, Transform parent, TMP_FontAsset font, string name,
         string title, float x, float y, float width, float height, Action onClose)
@@ -26,15 +34,19 @@ internal sealed class WorkroomAssemblyWindow
         var theme = name.Contains("motherboard") ? "motherboard" : name.Contains("case") ? "case" : "component";
         WorkroomPanelSkin.Scene(Root, theme);
         header = AssemblyDebugUi.Image(Root.transform, "Header", new Color(.23f,.28f,.24f,1), true).gameObject;
+        UiRoundedGeometry.Fill(header.GetComponent<Image>(), UiRoundedGeometry.WindowRadius, UiRoundedGeometry.Corners.Top);
         AssemblyDebugUi.Place(header, 0, 0, width, 36);
         var label = AssemblyDebugUi.Text(header.transform, "Title", title, font, 18, true);
         AssemblyDebugUi.Place(label.gameObject, 12, 0, width-64, 36);
         close = WorkroomPanelSkin.Button(canvas, header.transform, "Close", "Esc", font, 14, onClose);
         AssemblyDebugUi.Place(close, width-46, 4, 38, 28);
+        Root.transform.Find("RoundedFrame").SetAsLastSibling();
         var footer = AssemblyDebugUi.Text(Root.transform, "WindowHint", WorkroomComponentTemplates.Text("window_hint"), font, 10);
-        AssemblyDebugUi.Place(footer.gameObject, 12, height-30, 150, 26);
+        AssemblyDebugUi.Place(footer.gameObject, 12, height-30, 150, 28);
         footer.enableWordWrapping = true;
         footer.fontSize = 9;
+        footer.overflowMode = TextOverflowModes.Truncate;
+        Picker = new WorkroomPickerUi(canvas, this, font);
         Root.SetActive(false);
     }
 
@@ -42,10 +54,14 @@ internal sealed class WorkroomAssemblyWindow
     internal void Show()
     {
         if (!WorkroomUiCleanup.IsAlive(Root)) return;
+        InteractionVersion++; Focus(Root);
         Root.SetActive(true); Root.transform.SetAsLastSibling();
     }
     internal void Hide()
     {
+        if (Open) InteractionVersion++;
+        WorkroomAutoFillUi.CloseFor(this);
+        WorkroomPickerUi.CloseFor(this);
         Dragging = false; PreviewSlot = null;
         WorkroomUiCleanup.Deactivate(Root);
     }
@@ -66,12 +82,13 @@ internal sealed class WorkroomAssemblyWindow
         var parent = Root.transform.parent.TryCast<RectTransform>();
         if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, Input.mousePosition, null, out var point)) return;
         var rect = AssemblyDebugUi.Rect(Root);
-        if (allowPress && Input.GetMouseButtonDown(0) && Hit(Input.mousePosition))
+        if (allowPress && !WorkroomAutoFillUi.OwnsInput && !WorkroomPickerUi.OwnsInput && Input.GetMouseButtonDown(0) && Hit(Input.mousePosition))
         {
+            Focus(Root);
             Root.transform.SetAsLastSibling();
             if (RectTransformUtility.RectangleContainsScreenPoint(AssemblyDebugUi.Rect(header), Input.mousePosition, null) &&
                 !RectTransformUtility.RectangleContainsScreenPoint(AssemblyDebugUi.Rect(close), Input.mousePosition, null))
-            { Dragging = true; pressed = point; start = rect.anchoredPosition; }
+            { Dragging = true; pressed = point; start = rect.anchoredPosition; InteractionVersion++; }
         }
         if (Dragging && Input.GetMouseButton(0)) rect.anchoredPosition = start + point-pressed;
         if (!Input.GetMouseButton(0)) Dragging = false;
@@ -87,6 +104,8 @@ internal sealed class WorkroomAssemblySlotUi
     internal readonly string Slot;
     internal bool RouteBody, Enabled = true;
     internal string Target => RouteBody ? WorkroomComponentAssembly.EntryBoard : Slot;
+    internal string EmptyName => empty;
+    internal bool IsBody => bodyPreview || Slot == WorkroomComponentAssembly.EntryBoard || Slot.EndsWith(".body", StringComparison.Ordinal) || Slot.Contains(".body.");
     internal readonly GameObject Root;
     private readonly Image icon;
     private readonly TextMeshProUGUI label, condition;
@@ -96,16 +115,79 @@ internal sealed class WorkroomAssemblySlotUi
     private readonly string empty;
     private WorkroomItemCodec.Snapshot? displayed;
     private bool displayedChinese;
+    private static WorkroomAssemblySlotUi? clickedSlot;
+    private static string? clickedId;
+    private static long clickEpoch, clickRevision, clickInteraction;
+    private static float clickedAt;
+    private static Vector2 clickedPosition;
+    private static bool pressTracked, pressMoved;
+    private static int pressFrame = -1;
+    private static Vector2 pressPosition;
+    private static void ResetClicks() { clickedSlot = null; clickedId = null; }
+    private static void SamplePress()
+    {
+        // Track the current gesture independently of an earlier click. Unity's
+        // Button may still click after an out-and-back move without a drag handler.
+        // Keep release evidence through this frame for either callback/render order.
+        var down = Input.GetMouseButtonDown(0);
+        if (down && pressFrame != Time.frameCount)
+        {
+            pressFrame = Time.frameCount; pressTracked = true; pressMoved = false;
+            pressPosition = Input.mousePosition;
+        }
+        if (!pressTracked) return;
+        if (!down && !Input.GetMouseButton(0) && !Input.GetMouseButtonUp(0))
+        { pressTracked = pressMoved = false; return; }
+        if (((Vector2)Input.mousePosition-pressPosition).sqrMagnitude > 16) pressMoved = true;
+    }
+    internal static void SamplePointer()
+    {
+        SamplePress();
+        if (clickedSlot == null) return;
+        if (!WorkroomUiCleanup.IsAlive(clickedSlot.Root) || !clickedSlot.Root.activeInHierarchy ||
+            WorkroomAutoFillUi.OwnsInput || WorkroomPickerUi.OwnsInput ||
+            clickEpoch != WorkroomStorage.State.Epoch || clickRevision != WorkroomStorage.State.Revision ||
+            clickInteraction != WorkroomAssemblyWindow.InteractionVersion ||
+            (Il2Cpp.ItemMouseDragHandler.current?.isDragging ?? false) ||
+            Input.GetMouseButtonDown(0) && !clickedSlot.Hit(Input.mousePosition) ||
+            Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape) ||
+            (Input.GetMouseButton(0) && ((Vector2)Input.mousePosition-clickedPosition).sqrMagnitude > 16)) ResetClicks();
+    }
+    private void Click()
+    {
+        SamplePress();
+        if (pressTracked && pressMoved) { ResetClicks(); return; }
+        if (!Enabled || Epoch != WorkroomStorage.State.Epoch || !WorkroomComponentAssembly.Ready(Epoch) ||
+            WorkroomAutoFillUi.OwnsInput || WorkroomPickerUi.OwnsInput ||
+            (Il2Cpp.ItemMouseDragHandler.current?.isDragging ?? false)) { ResetClicks(); return; }
+        var record = WorkroomComponentAssembly.At(Slot);
+        if (record == null)
+        {
+            ResetClicks();
+            WorkroomPickerUi.For(Root.transform.parent.gameObject)?.ShowSlot(this);
+            return;
+        }
+        var threshold = Il2Cpp.ItemMouseDoubleClickHandler.current?.doubleclickTimeThresholdSeconds ?? .3f;
+        if (!float.IsFinite(threshold) || threshold <= 0) threshold = .3f;
+        var now = Time.unscaledTime;
+        if (ReferenceEquals(clickedSlot, this) && clickedId == record.Id && clickEpoch == Epoch &&
+            clickRevision == WorkroomStorage.State.Revision && clickInteraction == WorkroomAssemblyWindow.InteractionVersion &&
+            now >= clickedAt && now-clickedAt <= threshold && ((Vector2)Input.mousePosition-clickedPosition).sqrMagnitude <= 16)
+        {
+            ResetClicks();
+            WorkroomSelection.ReturnSlots(new[] { Slot }, Epoch);
+            return;
+        }
+        clickedSlot = this; clickedId = record.Id; clickEpoch = Epoch;
+        clickRevision = WorkroomStorage.State.Revision; clickInteraction = WorkroomAssemblyWindow.InteractionVersion;
+        clickedAt = now; clickedPosition = Input.mousePosition;
+    }
     internal long Epoch;
     internal WorkroomAssemblySlotUi(Canvas canvas, Transform parent, TMP_FontAsset font, string slot,
         string empty, float x, float y, float width, float height, bool bodyPreview = false)
     {
         Slot = slot; this.empty = empty; this.bodyPreview = bodyPreview;
-        Root = WorkroomPanelSkin.Button(canvas, parent, slot, "", font, 10,
-            () =>
-            {
-                if (WorkroomComponentAssembly.At(Slot) != null) WorkroomComponentAssembly.ReturnSlots(new[] { Slot }, Epoch);
-            }, true);
+        Root = WorkroomPanelSkin.Button(canvas, parent, slot, "", font, 10, Click, true);
         AssemblyDebugUi.Place(Root, x, y, width, height);
         picture = AssemblyDebugUi.New("Picture", Root.transform);
         icon = AssemblyDebugUi.Image(picture.transform, "Icon", Color.white, false); icon.preserveAspect = true;
@@ -116,6 +198,7 @@ internal sealed class WorkroomAssemblySlotUi
         condition = AssemblyDebugUi.Text(Root.transform, "Condition", "", font, 10);
         emptyMark = AssemblyDebugUi.Text(Root.transform, "EmptyMark", "+", font, 24);
         Layout(x, y, width, height);
+        WorkroomPickerUi.For(parent.gameObject)?.Register(this);
     }
     internal void Layout(float x, float y, float width, float height)
     {
@@ -146,6 +229,9 @@ internal sealed class WorkroomAssemblySlotUi
             var tier = record == null ? 0 : Components.Find(record.Item.Identifier)?.Tier ?? 0;
             condition.text = record == null ? "" : (bodyPreview && tier > 0 ? "T"+tier+" · " : "") +
                 WorkroomComponentTemplates.Text(record.Item.Broken ? "broken_short" : "intact_short");
+            if (record != null && WorkroomComponentTemplates.TryPart(record.Item.Identifier, out var partFamily, out var partKind, out var partTier) &&
+                partFamily.Key == "psu" && partKind == "power")
+                condition.text = WorkroomComponentTemplates.PsuWatts(partTier) + "W · " + condition.text;
             condition.color = record?.Item.Broken == true ? new Color(1,.55f,.45f,1) : new Color(.65f,1,.75f,1);
         }
         emptyMark.gameObject.SetActive(record == null);
@@ -157,6 +243,7 @@ internal sealed class WorkroomAssemblySlotUi
 /// <summary>一个可见工作台复用处理和六类装配布局；物品切换先由保管模型提交。</summary>
 internal sealed class WorkroomComponentUi
 {
+    internal readonly WorkroomRecyclingUi Recycling;
     private sealed class FamilyView
     {
         internal WorkroomComponentTemplates.Template Template = null!;
@@ -171,46 +258,26 @@ internal sealed class WorkroomComponentUi
     private readonly List<FamilyView> families = new();
     private readonly List<WorkroomAssemblySlotUi> slots = new();
     private readonly TextMeshProUGUI entryStatus, disassemblyStatus, processingPreview;
-    private readonly GameObject execute, take, previewViewport;
+    private readonly GameObject execute, take, previewViewport, previewUp, previewDown;
     private readonly Dictionary<WorkroomAssemblyWindow, (GameObject Processing, GameObject Assembly)> workbenchModes = new();
     private WorkroomAssemblyWindow? activeWindow;
     private FamilyView? selectedFamily;
     private bool assemblyMode;
     private long workbenchEpoch = -1;
     private const float ProcessingWidth = 478, ProcessingHeight = 218;
-    private readonly GameObject quantityMinus, quantityNumber, quantityPlus;
-    private readonly TextMeshProUGUI quantityLabel;
-    private int recycleQuantity = 1;
-    private string quantityText = "1";
-    private bool editingQuantity, replaceQuantity;
-    private bool quantityKeyboardOwned;
-    private int quantityInputFrame = -1, quantityReadFrame = -1, quantityNeutralFrames;
-    private string? quantityTarget;
-    private long quantityEpoch = -1;
     private readonly Dictionary<WorkroomPartProcessing.Mode, GameObject> modeButtons = new();
     private WorkroomPartProcessing.Mode mode;
     private WorkroomPartProcessing.DiscardConfirmation? discardConfirmation;
-    private string previewText = "", lastStatus = "";
+    private string previewText = "";
     private float previewOffset, previewHeight;
     private readonly GameObject ghostRoot;
     private readonly Image ghost;
     private long epoch, revision = -1, generation = -1;
     private IEnumerable<WorkroomAssemblyWindow> Windows => new[] { entry, disassemblyWindow }.Concat(families.Select(family => family.Window));
     internal bool Open => Windows.Any(window => window.Open);
+    internal int TopIndex => Windows.Where(window => window.Open)
+        .Select(window => window.Root.transform.GetSiblingIndex()).DefaultIfEmpty(-1).Max();
     internal bool Dragging => Windows.Any(window => window.Dragging);
-    internal bool OwnsTextInput
-    {
-        get { SampleQuantityInput(); return quantityKeyboardOwned; }
-    }
-    private void SampleQuantityInput()
-    {
-        if (editingQuantity) { quantityKeyboardOwned = true; quantityNeutralFrames = 0; }
-        if (quantityInputFrame == Time.frameCount) return;
-        quantityInputFrame = Time.frameCount;
-        if (!quantityKeyboardOwned || editingQuantity) return;
-        quantityNeutralFrames = Input.anyKey || Input.compositionString.Length > 0 ? 0 : quantityNeutralFrames + 1;
-        if (quantityNeutralFrames >= 2) quantityKeyboardOwned = false;
-    }
     private WorkroomAssemblyWindow? TopAt(Vector2 point) => Windows.Where(window => window.Hit(point))
         .OrderByDescending(window => window.Root.transform.GetSiblingIndex()).FirstOrDefault();
     internal int SiblingIndex(Vector2 point) => TopAt(point)?.Root.transform.GetSiblingIndex() ?? -1;
@@ -224,9 +291,10 @@ internal sealed class WorkroomComponentUi
         "processing_missing_cash", "processing_cash_header", "processing_cash_ready", "processing_recycle_batch_header",
         "processing_recycle_quantity_needed", "processing_recycle_quantity_estimate",
         "processing_recycle_quantity_zero", "processing_recycle_quantity_limit",
-        "capacity_health_summary", "rotor_integrated", "power_integrated" }
+        "capacity_health_summary", "rotor_integrated", "power_integrated", "power_part_name", "power_part_description",
+        "power_health_summary", "assembly_power_hint", "assembly_power_summary" }
         .Select(key => WorkroomComponentTemplates.Text(key, "", 0, 0, 0, 0, 0))) +
-        string.Join("", WorkroomComponentTemplates.All.Select(template => template.Name + string.Join("", template.Kinds.Select(template.PartName)))) + "T0123456789×↑↓—−+_【】GBTB";
+        string.Join("", WorkroomComponentTemplates.All.Select(template => template.Name + string.Join("", template.Kinds.Select(template.PartName)))) + "T0123456789×↑↓—−+_【】GBTB" + WorkroomAutoFillUi.FontText + WorkroomPickerUi.FontText;
 
     internal WorkroomComponentUi(Canvas canvas, Transform reference, TMP_FontAsset font)
     {
@@ -238,7 +306,7 @@ internal sealed class WorkroomComponentUi
         hint.enableWordWrapping = true;
         AssemblyDebugUi.Place(hint.gameObject, 188, 96, 504, 96);
         AddSlot(canvas, entry.Root, font, WorkroomComponentAssembly.EntryBoard, WorkroomComponentTemplates.Text("need_body"), 18, 50, 134, 196, true).RouteBody = true;
-        entryStatus = Result(entry.Root, font, 18, 264, 134, 118);
+        entryStatus = Result(entry.Root, font, 18, 284, 134, 98);
         for (var i = 0; i < WorkroomComponentTemplates.All.Count; i++)
         {
             var template = WorkroomComponentTemplates.All[i];
@@ -246,32 +314,22 @@ internal sealed class WorkroomComponentUi
             families.Add(family);
         }
         foreach (var window in Windows) BuildWorkbenchModes(canvas, font, window);
+        Recycling = new WorkroomRecyclingUi(canvas, disassemblyWindow, font);
         foreach (var candidate in Enum.GetValues(typeof(WorkroomPartProcessing.Mode)).Cast<WorkroomPartProcessing.Mode>())
         {
             var current = candidate;
             var button = ActionButton(canvas, disassemblyWindow.Root, font, "Mode_"+current, ModeKey(current),
-                188+modeButtons.Count*128, 82, 122, () => { FinishQuantity(); CancelDiscard(); mode = current; previewText = ""; previewOffset = 0; Update(false); });
+                188+modeButtons.Count*128, 82, 122, () =>
+                {
+                    CancelDiscard();
+                    if (mode != current) Recycling.Close();
+                    mode = current; previewText = ""; previewOffset = 0; Update(false);
+                });
             modeButtons.Add(current, button);
         }
         AddSlot(canvas, disassemblyWindow.Root, font, WorkroomComponentAssembly.Disassembly,
             WorkroomComponentTemplates.Text("processing_target"), 18, 50, 134, 196, true);
-        quantityLabel = AssemblyDebugUi.Text(disassemblyWindow.Root.transform, "RecycleQuantityLabel", "", font, 10);
-        quantityLabel.enableWordWrapping = true;
-        AssemblyDebugUi.Place(quantityLabel.gameObject, 18, 256, 134, 28);
-        quantityMinus = ActionButton(canvas, disassemblyWindow.Root, font, "RecycleQuantityMinus", "", 18, 286, 28,
-            () => ChangeQuantity(-1));
-        quantityMinus.GetComponentInChildren<TextMeshProUGUI>().text = "−";
-        quantityNumber = ActionButton(canvas, disassemblyWindow.Root, font, "RecycleQuantityNumber", "recycle_quantity_edit", 50, 286, 70,
-            () => { editingQuantity = replaceQuantity = true; });
-        quantityPlus = ActionButton(canvas, disassemblyWindow.Root, font, "RecycleQuantityPlus", "", 124, 286, 28,
-            () => ChangeQuantity(1));
-        quantityPlus.GetComponentInChildren<TextMeshProUGUI>().text = "+";
-        // Keep the quantity row above the action row, with no overlap of hit targets.
-        foreach (var control in new[] { quantityMinus, quantityNumber, quantityPlus })
-        {
-            var rect = AssemblyDebugUi.Rect(control);
-            rect.sizeDelta = new Vector2(rect.sizeDelta.x, 24);
-        }
+        disassemblyWindow.Picker.EnableAutoReturn();
         previewViewport = WorkroomPanelSkin.Panel(disassemblyWindow.Root, "PreviewViewport", 188, 120, 504, 230, new Color(.12f,.17f,.14f,.97f));
         var maskType = Il2CppSystem.Type.internal_from_handle(IL2CPP.il2cpp_class_get_type(Il2CppClassPointerStore<RectMask2D>.NativeClassPtr));
         if (previewViewport.AddComponent(maskType)?.TryCast<RectMask2D>() == null)
@@ -280,14 +338,14 @@ internal sealed class WorkroomComponentUi
         processingPreview.enableWordWrapping = true;
         processingPreview.alignment = TextAlignmentOptions.TopLeft;
         AssemblyDebugUi.Place(processingPreview.gameObject, 13, 6, ProcessingWidth, ProcessingHeight);
-        var up = ActionButton(canvas, disassemblyWindow.Root, font, "Previous", "", 188, 356, 250, () => ScrollPreview(-90));
-        var down = ActionButton(canvas, disassemblyWindow.Root, font, "Next", "", 444, 356, 248, () => ScrollPreview(90));
-        up.GetComponentInChildren<TextMeshProUGUI>().text = "↑";
-        down.GetComponentInChildren<TextMeshProUGUI>().text = "↓";
+        previewUp = ActionButton(canvas, disassemblyWindow.Root, font, "Previous", "", 188, 356, 250, () => ScrollPreview(-90));
+        previewDown = ActionButton(canvas, disassemblyWindow.Root, font, "Next", "", 444, 356, 248, () => ScrollPreview(90));
+        previewUp.GetComponentInChildren<TextMeshProUGUI>().text = "↑";
+        previewDown.GetComponentInChildren<TextMeshProUGUI>().text = "↓";
         execute = ActionButton(canvas, disassemblyWindow.Root, font, "Execute", ModeKey(mode), 188, 396, 250,
             ExecuteProcessing);
         take = ActionButton(canvas, disassemblyWindow.Root, font, "Take", "take", 444, 396, 248,
-            () => { CancelDiscard(); WorkroomComponentAssembly.ReturnSlots(new[] { WorkroomComponentAssembly.Disassembly }, epoch); });
+            () => { CancelDiscard(); WorkroomSelection.ReturnSlots(new[] { WorkroomComponentAssembly.Disassembly }, epoch); });
         disassemblyStatus = Result(disassemblyWindow.Root, font, 18, 318, 134, 66);
         ghostRoot = AssemblyDebugUi.New("AssemblyDragPreview", canvas.transform); ghostRoot.SetActive(false);
         ghost = AssemblyDebugUi.Image(ghostRoot.transform, "Icon", Color.white, false); ghost.preserveAspect = true;
@@ -302,7 +360,8 @@ internal sealed class WorkroomComponentUi
         AssemblyDebugUi.Place(familyName.gameObject, 414, 46, 280, 26);
         family.Hint = AssemblyDebugUi.Text(family.Window.Root.transform, "Hint", "", font, 11, true);
         family.Hint.enableWordWrapping = true;
-        AssemblyDebugUi.Place(family.Hint.gameObject, 188, 354, 504, 32);
+        AssemblyDebugUi.Place(family.Hint.gameObject, 380, 354, 312, 32);
+        family.Window.Picker.EnableMissing(188, 354, 184);
         AddSlot(canvas, family.Window.Root, font, WorkroomComponentAssembly.Slot(template, "body"), template.PartName("body"), 18, 50, 134, 196, true).RouteBody = true;
         var cell = 0;
         foreach (var kind in template.Kinds.Where(kind => kind != "body"))
@@ -317,14 +376,20 @@ internal sealed class WorkroomComponentUi
         family.Summary = AssemblyDebugUi.Text(family.Window.Root.transform, "Summary", "", font, 11, true);
         family.Summary.enableWordWrapping = true;
         family.Summary.alignment = TextAlignmentOptions.TopLeft;
-        AssemblyDebugUi.Place(family.Summary.gameObject, 18, 258, 134, 100);
+        AssemblyDebugUi.Place(family.Summary.gameObject, 18, 282, 134, 76);
+        if (template.Key == "psu")
+        {
+            // The compact summary (including capacitor count/rated/intact watts)
+            // stay below source toggles and above status, beside all six slots.
+            family.Summary.fontSize = 10;
+            AssemblyDebugUi.Place(family.Summary.gameObject, 18, 282, 150, 76);
+        }
         family.Status = Result(family.Window.Root, font, 18, 360, 134, 30);
-        family.AutoFill = ActionButton(canvas, family.Window.Root, font, "AutoFill", "auto_fill", 176, 396, 172,
-            () => WorkroomComponentAssembly.AutoFill(template.Key, epoch));
-        family.Assemble = ActionButton(canvas, family.Window.Root, font, "Assemble", "assemble", 354, 396, 172,
+        family.AutoFill = new WorkroomAutoFillUi(canvas, family.Window, font, template.Key, false).FillButton;
+        family.Assemble = ActionButton(canvas, family.Window.Root, font, "Assemble", "assemble", 388, 396, 150,
             () => WorkroomComponentAssembly.Assemble(template.Key, epoch));
-        family.Return = ActionButton(canvas, family.Window.Root, font, "ReturnAll", "return_all", 532, 396, 172,
-            () => WorkroomComponentAssembly.ReturnSlots(WorkroomComponentAssembly.Slots(template), epoch));
+        family.Return = ActionButton(canvas, family.Window.Root, font, "ReturnAll", "return_all", 544, 396, 160,
+            () => WorkroomSelection.ReturnSlots(WorkroomComponentAssembly.Slots(template), epoch));
         return family;
     }
 
@@ -340,7 +405,7 @@ internal sealed class WorkroomComponentUi
         if (ReferenceEquals(activeWindow, window) && window.Open) return;
         var position = activeWindow != null && WorkroomUiCleanup.IsAlive(activeWindow.Root)
             ? AssemblyDebugUi.Rect(activeWindow.Root).anchoredPosition : AssemblyDebugUi.Rect(window.Root).anchoredPosition;
-        FinishQuantity(); CancelDiscard();
+        Recycling.Close(); CancelDiscard();
         foreach (var other in Windows) other.Hide();
         activeWindow = window;
         AssemblyDebugUi.Rect(window.Root).anchoredPosition = position;
@@ -350,10 +415,26 @@ internal sealed class WorkroomComponentUi
     private void SwitchMode(bool nextAssembly)
     {
         if (nextAssembly == assemblyMode || !WorkroomComponentAssembly.ReturnModeSlots(assemblyMode, epoch)) return;
-        FinishQuantity(); CancelDiscard();
+        Recycling.Close(); CancelDiscard();
         assemblyMode = nextAssembly;
         previewText = ""; previewOffset = 0;
         Activate(assemblyMode ? selectedFamily?.Window ?? entry : disassemblyWindow);
+        Update(false);
+    }
+    // The mat transfer has already returned old slots and staged the new item
+    // in one custody transaction. Revealing it must never stage or return again.
+    internal void ShowStaged(WorkroomMatTransfer.Plan plan)
+    {
+        epoch = workbenchEpoch = WorkroomStorage.State.Epoch;
+        Recycling.Close(); CancelDiscard();
+        assemblyMode = plan.Target == WorkroomMatTransfer.Destination.ComponentAssembly;
+        if (assemblyMode)
+            selectedFamily = families.First(family => family.Template.Key == plan.Family);
+        else mode = plan.ProcessingMode;
+        previewText = ""; previewOffset = 0;
+        var target = assemblyMode ? selectedFamily!.Window : disassemblyWindow;
+        Activate(target);
+        target.Root.transform.SetAsLastSibling();
         Update(false);
     }
 
@@ -364,7 +445,7 @@ internal sealed class WorkroomComponentUi
             if (kind == "core") ui.Layout(216, 163, 102, 108);
             else ui.Layout(398+(index%3)*94, 93+(index/3)*130, 82, 90);
         }
-        else if (family == "ram") ui.Layout(214+(index%3)*154, 92+(index/3)*134, 132, 104);
+        else if (family is "ram" or "psu") ui.Layout(214+(index%3)*154, 92+(index/3)*134, 132, 104);
         else if (family == "ssd")
         {
             if (kind == "controller") ui.Layout(216, 163, 108, 108);
@@ -402,9 +483,9 @@ internal sealed class WorkroomComponentUi
     private void CancelDiscard() => discardConfirmation = null;
     private void ExecuteProcessing()
     {
-        FinishQuantity();
+        if (mode == WorkroomPartProcessing.Mode.Recycle) { Recycling.Commit(); return; }
         if (mode != WorkroomPartProcessing.Mode.Discard)
-        { CancelDiscard(); WorkroomPartProcessing.Execute(mode, epoch, recycleQuantity); return; }
+        { CancelDiscard(); WorkroomPartProcessing.Execute(mode, epoch); return; }
         if (discardConfirmation == null)
         { discardConfirmation = WorkroomPartProcessing.PrepareDiscard(epoch); Update(false); return; }
         var confirmation = discardConfirmation;
@@ -417,50 +498,11 @@ internal sealed class WorkroomComponentUi
         previewOffset = Mathf.Clamp(previewOffset+delta, 0, Math.Max(0, previewHeight-ProcessingHeight));
         AssemblyDebugUi.Place(processingPreview.gameObject, 13, 6-previewOffset, ProcessingWidth, previewHeight);
     }
-    private void FinishQuantity()
+    private void Hide(WorkroomAssemblyWindow? window)
     {
-        recycleQuantity = int.TryParse(quantityText, out var value) && value > 0 ? value : 1;
-        quantityText = recycleQuantity.ToString(); editingQuantity = replaceQuantity = false;
+        if (ReferenceEquals(window, disassemblyWindow)) { Recycling.Close(); CancelDiscard(); }
+        window?.Hide(); CancelPreview();
     }
-    private void ChangeQuantity(int delta)
-    {
-        FinishQuantity();
-        recycleQuantity = (int)Math.Clamp((long)recycleQuantity + delta, 1, int.MaxValue);
-        quantityText = recycleQuantity.ToString(); previewText = ""; previewOffset = 0;
-    }
-    internal void UpdateInput(bool allowInput, bool pointerInFront)
-    {
-        SampleQuantityInput();
-        if (!editingQuantity) return;
-        if (!allowInput || !disassemblyWindow.Open || mode != WorkroomPartProcessing.Mode.Recycle || Dragging ||
-            (Input.GetMouseButtonDown(0) && (!pointerInFront ||
-                !ReferenceEquals(TopAt(Input.mousePosition), disassemblyWindow) ||
-                !RectTransformUtility.RectangleContainsScreenPoint(
-                    AssemblyDebugUi.Rect(quantityNumber), Input.mousePosition, null))))
-        { FinishQuantity(); return; }
-        if (quantityReadFrame == Time.frameCount) return;
-        quantityReadFrame = Time.frameCount;
-        foreach (var key in Input.inputString)
-        {
-            if (key == '\n' || key == '\r') { FinishQuantity(); break; }
-            if (key == '\b')
-            {
-                quantityText = replaceQuantity ? "" : quantityText.Length == 0 ? "" : quantityText[..^1];
-                replaceQuantity = false;
-            }
-            else if (key >= '0' && key <= '9')
-            {
-                var next = (replaceQuantity ? "" : quantityText) + key;
-                if (!int.TryParse(next, out _)) continue;
-                quantityText = next; replaceQuantity = false;
-            }
-            else continue;
-            recycleQuantity = int.TryParse(quantityText, out var parsed) ? parsed : 0;
-            previewText = ""; previewOffset = 0;
-        }
-        if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)) FinishQuantity();
-    }
-    private void Hide(WorkroomAssemblyWindow? window) { FinishQuantity(); if (ReferenceEquals(window, disassemblyWindow)) CancelDiscard(); window?.Hide(); CancelPreview(); }
     internal void Show()
     {
         epoch = WorkroomStorage.State.Epoch;
@@ -474,11 +516,11 @@ internal sealed class WorkroomComponentUi
         Activate(assemblyMode ? selectedFamily?.Window ?? entry : disassemblyWindow);
         Update(false);
     }
-    internal void Close() { FinishQuantity(); CancelDiscard(); foreach (var window in Windows) window.Hide(); CancelPreview(); }
+    internal void Close() { Recycling.Close(); CancelDiscard(); foreach (var window in Windows) window.Hide(); CancelPreview(); }
     internal void Release()
     {
         var cleanup = new WorkroomUiCleanup();
-        FinishQuantity();
+        cleanup.Run("components.recycling", Recycling.Release);
         CancelDiscard();
         var index = 0;
         foreach (var window in Windows) cleanup.Run("components.window." + index++, window.Hide);
@@ -500,11 +542,12 @@ internal sealed class WorkroomComponentUi
     }
     private WorkroomAssemblySlotUi? Compatible(WorkroomAssemblyWindow window, WorkroomItemCodec.Snapshot item) =>
         slots.FirstOrDefault(slot => slot.Root.activeInHierarchy && slot.Root.transform.parent.Pointer == window.Root.transform.Pointer &&
+            slot.Enabled && WorkroomComponentAssembly.At(slot.Slot) == null &&
             Exposed(slot, window) && WorkroomComponentAssembly.Accepts(slot.Target, item));
     internal string? ResolveBody(Vector2 point, WorkroomItemCodec.Snapshot item)
     {
         var top = TopAt(point);
-        return top != null && (ReferenceEquals(top, entry) || families.Any(f => ReferenceEquals(f.Window, top))) && top.HitBody(point)
+        return top != null && !Recycling.Open && top.HitBody(point)
             ? Compatible(top, item)?.Target : null;
     }
     internal WorkroomStorageState.Record? HoveredItem(Vector2 point)
@@ -538,13 +581,14 @@ internal sealed class WorkroomComponentUi
     {
         var record = WorkroomStorage.State.Find(id);
         if (record?.Place != "room" || generation != WorkroomStorage.State.Epoch) return false;
-        // Only visible assembly windows participate; processing never accepts double-clicks.
-        var target = families.Select(family => family.Window).Append(entry).Where(window => window.Open)
-            .OrderByDescending(window => window.Root.transform.GetSiblingIndex())
-            .Select(window => Compatible(window, record.Item)).FirstOrDefault(slot => slot != null);
+        var top = Windows.Where(window => window.Open)
+            .OrderByDescending(window => window.Root.transform.GetSiblingIndex()).FirstOrDefault();
+        if (top == null) return false;
+        if (ReferenceEquals(top, disassemblyWindow) && Recycling.Open) return Recycling.Add(new[] { id }, generation);
+        var target = Compatible(top, record.Item);
         if (target == null)
         {
-            if (entry.Open || families.Any(family => family.Window.Open)) WorkroomComponentAssembly.Notice("quick_unavailable");
+            WorkroomComponentAssembly.Notice("quick_unavailable");
             return false;
         }
         return WorkroomComponentAssembly.Stage(id, target.Target, generation, record.Item.Orientation);
@@ -578,10 +622,6 @@ internal sealed class WorkroomComponentUi
             WorkroomPanelSkin.Selected(pair.Value.Processing, !assemblyMode);
             WorkroomPanelSkin.Selected(pair.Value.Assembly, assemblyMode);
         }
-        var status = WorkroomStorage.State.Error != null ? WorkroomStorage.Text(WorkroomStorage.State.Error) :
-            WorkroomItemCodec.CleanupPending ? WorkroomStorage.Text("recovery") :
-            Environment.TickCount64 < WorkroomStorage.MessageUntil ? WorkroomStorage.Message : "";
-        if (lastStatus != status) { AssemblyDebugFonts.Prepare(status, status); lastStatus = status; }
         foreach (var family in families)
         {
             var template = family.Template;
@@ -602,8 +642,9 @@ internal sealed class WorkroomComponentUi
                 var hasCore = records.Any(record => WorkroomComponentTemplates.TryPart(record.Item.Identifier, out _, out var kind, out _) &&
                     (template.Key == "ram" ? kind == "memory" : template.PerformanceKind(kind)));
                 var configTier = hasCore ? WorkroomComponentParts.EffectiveTier(records.Select(record => record.Item).ToList()) : 0;
-                family.Hint.text = tier == 0 ? WorkroomComponentTemplates.Text("need_body") : WorkroomComponentTemplates.Text("assembly_body_hint");
-                var summary = WorkroomComponentTemplates.Text("assembly_actual_summary", records.Count, required,
+                family.Hint.text = tier == 0 ? WorkroomComponentTemplates.Text("need_body") :
+                    WorkroomComponentTemplates.Text(template.Key == "psu" ? "assembly_power_hint" : "assembly_body_hint");
+                var summary = WorkroomComponentTemplates.Text(template.Key == "psu" ? "assembly_power_summary" : "assembly_actual_summary", records.Count, required,
                     records.Sum(record => record.Item.Value), configTier == 0 ? "—" : configTier.ToString());
                 var capacity = WorkroomComponentParts.CapacityText(records.Select(record => record.Item));
                 if (capacity.Length > 0) summary += "\n" + capacity;
@@ -614,40 +655,34 @@ internal sealed class WorkroomComponentUi
                 }
                 family.SummaryEpoch = epoch; family.SummaryRevision = WorkroomStorage.State.Revision; family.SummaryChinese = LanguageText.IsChinese;
             }
-            family.Status.text = status;
+            family.Status.text = "";
             family.Assemble.GetComponent<Button>().interactable = enabled && WorkroomComponentAssembly.CanAssemble(template);
             family.AutoFill.GetComponent<Button>().interactable = enabled && tier > 0;
             family.Return.GetComponent<Button>().interactable = enabled && WorkroomComponentAssembly.Slots(template).Any(slot => WorkroomComponentAssembly.At(slot) != null);
         }
         foreach (var slot in slots) if (slot.Root.activeInHierarchy) slot.Refresh();
-        entryStatus.text = disassemblyStatus.text = status;
+        entryStatus.text = disassemblyStatus.text = "";
         if (disassemblyWindow.Open)
         {
-            var target = WorkroomComponentAssembly.At(WorkroomComponentAssembly.Disassembly)?.Id;
-            if (quantityTarget != target || quantityEpoch != epoch)
-            {
-                quantityTarget = target; quantityEpoch = epoch; recycleQuantity = 1; quantityText = "1";
-                CancelDiscard();
-                editingQuantity = replaceQuantity = false; previewText = "";
-            }
             var recycling = mode == WorkroomPartProcessing.Mode.Recycle;
-            quantityLabel.gameObject.SetActive(recycling);
-            foreach (var control in new[] { quantityMinus, quantityNumber, quantityPlus })
-            { control.SetActive(recycling); control.GetComponent<Button>().interactable = enabled; }
-            quantityLabel.text = WorkroomComponentTemplates.Text("recycle_quantity", recycleQuantity);
-            quantityNumber.GetComponentInChildren<TextMeshProUGUI>().text = quantityText + (editingQuantity ? "_" : "");
-            var preview = WorkroomPartProcessing.Preview(mode, recycleQuantity);
-            if (discardConfirmation != null) preview += "\n" + WorkroomComponentTemplates.Text("processing_discard_confirm_required");
-            if (editingQuantity) preview = WorkroomComponentTemplates.Text("recycle_quantity_hint") + "\n" + preview;
-            if (previewText != preview)
+            if (recycling && !Recycling.Open) Recycling.Show();
+            if (!recycling) Recycling.Close();
+            previewViewport.SetActive(!recycling); previewUp.SetActive(!recycling); previewDown.SetActive(!recycling);
+            disassemblyStatus.gameObject.SetActive(!recycling);
+            if (!recycling)
             {
-                previewText = preview; previewOffset = 0;
-                AssemblyDebugFonts.Prepare(preview, preview);
-                processingPreview.text = preview;
-                previewHeight = Math.Max(ProcessingHeight, processingPreview.GetPreferredValues(preview, ProcessingWidth, float.PositiveInfinity).y);
-                ScrollPreview(0);
+                var preview = WorkroomPartProcessing.Preview(mode);
+                if (discardConfirmation != null) preview += "\n" + WorkroomComponentTemplates.Text("processing_discard_confirm_required");
+                if (previewText != preview)
+                {
+                    previewText = preview; previewOffset = 0;
+                    AssemblyDebugFonts.Prepare(preview, preview);
+                    processingPreview.text = preview;
+                    previewHeight = Math.Max(ProcessingHeight, processingPreview.GetPreferredValues(preview, ProcessingWidth, float.PositiveInfinity).y);
+                    ScrollPreview(0);
+                }
             }
-            if (allowPress && ReferenceEquals(top, disassemblyWindow) && !Dragging &&
+            if (!recycling && allowPress && ReferenceEquals(top, disassemblyWindow) && !Dragging &&
                 RectTransformUtility.RectangleContainsScreenPoint(AssemblyDebugUi.Rect(previewViewport), Input.mousePosition, null) && Input.mouseScrollDelta.y != 0)
                 ScrollPreview(-Input.mouseScrollDelta.y*30);
             foreach (var pair in modeButtons)
@@ -658,7 +693,7 @@ internal sealed class WorkroomComponentUi
             }
             execute.GetComponentInChildren<TextMeshProUGUI>().text = WorkroomComponentTemplates.Text(
                 discardConfirmation != null ? "discard_confirm" : ModeKey(mode));
-            execute.GetComponent<Button>().interactable = enabled && recycleQuantity > 0 && WorkroomPartProcessing.CanExecute(mode, recycleQuantity);
+            execute.GetComponent<Button>().interactable = enabled && (recycling ? Recycling.CanCommit : WorkroomPartProcessing.CanExecute(mode));
             take.GetComponent<Button>().interactable = enabled && WorkroomComponentAssembly.At(WorkroomComponentAssembly.Disassembly) != null;
         }
     }

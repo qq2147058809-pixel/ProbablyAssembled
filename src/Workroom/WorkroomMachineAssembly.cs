@@ -98,40 +98,6 @@ internal static class WorkroomMachineAssembly
         if (find(MainSlot(family))?.Item is not { } body || !Bare(body)) return false;
         return Kinds(family).Any(kind => Matches(kind, item) && Enumerable.Range(0, Count(family, kind, Components.Find(body.Identifier)!.Tier)).Any(i => slot == Slot(family, kind, i)));
     }
-    internal static void AutoFill(string family, long epoch)
-    {
-        if (!Ready(epoch) || Kinds(family).Length == 0) return;
-        var revision = WorkroomStorage.State.Revision;
-        WorkroomStorage.Run(() =>
-        {
-            var next = new List<WorkroomStorageState.Record>(WorkroomStorage.State.Items); var filled = 0;
-            var staged = next.Where(r => r.Place == "slot").ToDictionary(r => r.Slot, StringComparer.Ordinal);
-            WorkroomStorageState.Record? Find(string name) => staged.TryGetValue(name, out var value) ? value : null;
-            var main = MainSlot(family);
-            if (Find(main) == null)
-            {
-                var body = WorkroomComponentAssembly.Best(next, r => Bare(r.Item) && Accepts(main, r.Item, Find));
-                if (body != null) { WorkroomComponentAssembly.FillSlot(next, staged, body, main); filled++; }
-            }
-            var missing = new List<string>();
-            if (Find(main)?.Item is not { } selected) missing.Add(Text(family + "_body"));
-            else if (Bare(selected))
-            {
-                foreach (var kind in Kinds(family)) for (var i = 0; i < Count(family, kind, Components.Find(selected.Identifier)!.Tier); i++)
-                {
-                    var slot = Slot(family, kind, i); if (Find(slot) != null) continue;
-                    var candidate = WorkroomComponentAssembly.Best(next, r => Accepts(slot, r.Item, Find));
-                    if (candidate != null) { WorkroomComponentAssembly.FillSlot(next, staged, candidate, slot); filled++; }
-                }
-                foreach (var kind in family == Motherboard ? new[] { "cpu", "cooler", "gpu", "ram" } : Kinds(family))
-                    if (!Enumerable.Range(0, Count(family, kind, Components.Find(selected.Identifier)!.Tier)).Any(i => Find(Slot(family, kind, i)) != null))
-                        missing.Add(Text(kind));
-            }
-            else { WorkroomComponentAssembly.Notice("auto_fill_none"); return; }
-            Current(epoch, revision); if (filled > 0) WorkroomStorage.State.Replace(next);
-            WorkroomComponentAssembly.FillNotice(filled, missing);
-        });
-    }
     internal static void ValidateSlots(List<WorkroomStorageState.Record> records)
     {
         var staged = records.Where(r => r.Place == "slot" && r.Slot.StartsWith("machine.", StringComparison.Ordinal)).ToList();
@@ -149,7 +115,7 @@ internal static class WorkroomMachineAssembly
     }
     internal static bool Stage(string id, string slot, long epoch, int orientation)
     {
-        var record = WorkroomStorage.State.Find(id); if (!Ready(epoch) || record?.Place != "room") return false;
+        var record = WorkroomStorage.State.Find(id); if (!Ready(epoch) || record == null || record.Place is not ("room" or "box")) return false;
         if (!Accepts(slot, record.Item)) { Notice("wrong_slot"); return false; }
         var moved = false; var revision = WorkroomStorage.State.Revision;
         WorkroomStorage.Run(() =>
@@ -163,17 +129,7 @@ internal static class WorkroomMachineAssembly
     }
     internal static void ReturnSlots(IEnumerable<string> slots, long epoch)
     {
-        if (!Ready(epoch)) return;
-        var requested = slots.ToHashSet();
-        foreach (var family in new[] { Motherboard, Case }) if (requested.Contains(MainSlot(family))) requested.UnionWith(Slots(family));
-        var selected = requested.Select(At).Where(r => r != null).Select(r => r!).ToList();
-        WorkroomStorage.Run(() =>
-        {
-            var ids = selected.Select(r => r.Id).ToHashSet();
-            var next = WorkroomStorage.State.Items.Where(r => !ids.Contains(r.Id)).ToList();
-            if (!WorkroomStorageState.PlaceAll(next, selected.Select(r => new WorkroomStorageState.Record { Id = r.Id, Item = r.Item }))) { Notice("full"); return; }
-            WorkroomStorage.State.Replace(next);
-        });
+        WorkroomSelection.ReturnSlots(slots, epoch);
     }
     internal static bool CanAssemble(string family) => Body(family) is { } body && Bare(body) && Slots(family).Any(s => s != MainSlot(family) && At(s) != null);
     internal static bool CanDisassemble(string family) => Body(family) is { } body &&
@@ -374,7 +330,7 @@ internal static class WorkroomMachineAssembly
             }
             finally { WorkroomItemCodec.Destroy(candidate); }
             Current(epoch, revision);
-            if (!WorkroomStorageState.PlaceAll(next, new[] { new WorkroomStorageState.Record { Id = body.Id, Item = snapshot } })) { Notice("full"); return; }
+            if (!WorkroomStorageState.PlaceAll(next, new[] { WorkroomStorageState.Copy(body, "room", "", snapshot) })) { Notice("full"); return; }
             WorkroomStorage.State.Replace(next); Notice("assembled");
         });
     }
@@ -405,7 +361,7 @@ internal static class WorkroomMachineAssembly
             if (body.Item.Nodes[0].Machine is { } info)
             {
                 ValidateInfo(info, body.Item.Identifier, body.Item.Nodes[0].UniqueId);
-                next.Add(new WorkroomStorageState.Record { Id = body.Id, Place = "slot", Slot = MainSlot(family), Item = info.Body });
+                next.Add(new WorkroomStorageState.Record { Id = body.Id, Place = "slot", Slot = MainSlot(family), Item = info.Body, ReturnTo = body.ReturnTo });
                 next.AddRange(info.Parts.Select(p => new WorkroomStorageState.Record { Place = "slot", Slot = Slot(family, p.Kind, p.Index), Item = p.Item }));
             }
             else
@@ -414,7 +370,7 @@ internal static class WorkroomMachineAssembly
                 // refusal does not construct or reroll any output.
                 if (!WorkroomStorageState.PlaceAll(next, body.Item.Nodes[0].SlotItems.Select(p => new WorkroomStorageState.Record { Item = p }))) { Notice("full"); return; }
                 var empty = EmptyCrate(body.Item);
-                next.Add(new WorkroomStorageState.Record { Id = body.Id, Place = "slot", Slot = MainSlot(family), Item = empty });
+                next.Add(new WorkroomStorageState.Record { Id = body.Id, Place = "slot", Slot = MainSlot(family), Item = empty, ReturnTo = body.ReturnTo });
             }
             Current(epoch, revision); WorkroomStorage.State.Replace(next); Notice("disassembled");
         });

@@ -14,6 +14,7 @@ internal static class ServerRoomDaily
         internal string Run = "";
         internal int Slot, FromDay;
         internal long Revision, StorageEpoch;
+        internal ServerRoomState.Document Source = null!;
         internal IReadOnlyList<ServerRoomEconomy.MachineFact> Machines = Array.Empty<ServerRoomEconomy.MachineFact>();
         internal bool EndNightReturned, BeginDayEntered;
         internal ServerRoomEconomy.DayResult? Plan;
@@ -27,6 +28,8 @@ internal static class ServerRoomDaily
     internal static bool AllowSave => !sleepRequested && ticket == null && fault == null;
     internal static bool AllowCommands => !sleepRequested && ticket == null && fault == null;
     internal static bool AllowSessionChange => fault != null || (!sleepRequested && ticket == null);
+    internal static bool NeedsWork => fault == null && (ticket?.Plan != null ||
+        ticket == null && !sleepRequested && ServerRoomRuntime.Current?.Market.Initialized != true);
 
     internal static void ResetSession()
     {
@@ -47,6 +50,8 @@ internal static class ServerRoomDaily
             var next = ServerRoomState.Advance(current);
             var boom = Boom(out var identity);
             next.Market = ServerRoomMarket.Initialize(current.Market, current.Run, current.Slot, day, boom, identity);
+            next.Network = ServerRoomNetworkModel.Initialize(day, current.Run, current.Slot,
+                ServerRoomState.CompletedStages(current) >= 1);
             ServerRoomRuntime.Commit(new ServerRoomState.Change(next, 0), null);
         }
         catch (Exception ex)
@@ -86,13 +91,14 @@ internal static class ServerRoomDaily
 
     private static bool AssetsPending() => WorkroomStorage.Busy || WorkroomItemCodec.CleanupPending ||
         WorkroomStorage.State.PendingRecords.Count != 0 || WorkroomCashRepair.Pending ||
-        ComputerSupplierNpcs.StockPending || NpcStockOffers.Pending || !ServerRoomOrderStock.BeforeSave();
+        ComputerSupplierNpcs.StockPending || NpcStockOffers.Pending || !ServerRoomOrderStock.BeforeSave() ||
+        !WorkroomStoryTransfer.BeforeSave() || !LuoxiStory.BeforeSave() || !JiangbaiStory.BeforeSave() || !MysteriousContact.BeforeSave();
 
     private static void CompletePlan()
     {
         if (ticket?.Plan is { } result)
         {
-            Core.Log?.Msg($"[机房日结] 第{ticket.FromDay}→{ticket.FromDay + 1}日；费用{result.Fees}；" +
+            Core.Debug($"[机房日结] 第{ticket.FromDay}→{ticket.FromDay + 1}日；费用{result.Fees}；" +
                 $"运行矿机{result.PaidRecords.Count}；欠费跳过{result.SkippedRecords.Count}；" +
                 $"配置不可运行{result.UnavailableRecords.Count}；到期租约{result.ExpiredContracts.Count}。");
             RoomAudio.DailyNotice(result.SkippedRecords.Count > 0, result.ExpiredContracts.Count > 0);
@@ -123,7 +129,16 @@ internal static class ServerRoomDaily
             }
             if (current.Revision != value.Revision || store.GetCash() != value.CashBeforeCommit)
                 throw new InvalidOperationException("延后日结前现金或机房版本发生变化。");
-            ServerRoomRuntime.Commit(value.Plan.Change, null);
+            if (ServerRoomState.Serialize(current) != ServerRoomState.Serialize(value.Source))
+                throw new InvalidOperationException("睡前冻结状态已被改变。");
+            ServerRoomEconomy.RequireSameMachines(value.Machines, ServerRoomOperations.MachineFacts(current));
+            try { ServerRoomRuntime.Commit(value.Plan.Change, null); }
+            catch (ServerRoomRuntime.CommitRolledBackException)
+            {
+                // Keep this exact candidate after a verified rollback, including zero-cash nights.
+                // The existing bounded business retry rechecks session, assets and cash above.
+                return;
+            }
             if (ServerRoomRuntime.Current is not { } after ||
                 ServerRoomState.Serialize(after) != ServerRoomState.Serialize(value.Plan.Change.Next) ||
                 store.GetCash() != value.Plan.CashAfter)
@@ -142,7 +157,7 @@ internal static class ServerRoomDaily
         Core.Log?.Error("机房跨日结算暂停保存与交易：" + message);
         if (Environment.TickCount64 < nextNotice) return;
         nextNotice = Environment.TickCount64 + 4000;
-        try { StoreUIManager.Instance?.Notify("机房结算异常，已暂停保存和交易；请查看日志。", "#FFFFFF"); }
+        try { ModOperationNotice.Show(LanguageText.Get("serverroom.daily.settlement_fault")); }
         catch { /* Log is the durable diagnostic if native UI is unavailable. */ }
     }
 
@@ -156,7 +171,7 @@ internal static class ServerRoomDaily
         else if (StoreStation.Instance?.storeEventManager == null) reason = "no-event-manager";
         else if (ticket != null) reason = "ticket-pending";
         else if (fault != null) reason = "settlement-fault";
-        else if (!ServerRoomRuntime.Ready) reason = "runtime-not-ready";
+        else if (!ServerRoomRuntime.ValidateCurrent() || !ServerRoomRuntime.Ready) reason = "runtime-not-ready";
         else if (ServerRoomRuntime.Current is not { } current) reason = "no-current-document";
         else if (!current.Market.Initialized) reason = "market-not-initialized";
         else if (current.Market.QuoteDay != StoreStation.GetDayCounter()) reason = "quote-day-mismatch";
@@ -165,7 +180,7 @@ internal static class ServerRoomDaily
         if (reason != null)
         {
             PlayerHealthDiagnostics.SleepRejected(reason);
-            try { StoreUIManager.Instance?.Notify("机房资料或资产事务未就绪，请稍后再休息。", "#FFFFFF"); }
+            try { ModOperationNotice.Show(LanguageText.Get("serverroom.daily.sleep_not_ready")); }
             catch { }
             return false;
         }
@@ -212,6 +227,7 @@ internal static class ServerRoomDaily
                     Owner = __instance.Pointer, Run = __instance.runID, Slot = __instance.saveSlotId,
                     FromDay = StoreStation.GetDayCounter(), Revision = current.Revision,
                     StorageEpoch = WorkroomStorage.State.Epoch,
+                    Source = ServerRoomState.Clone(current),
                     Machines = ServerRoomOperations.MachineFacts(current)
                 };
             }
@@ -255,14 +271,18 @@ internal static class ServerRoomDaily
                     ServerRoomRuntime.Current is not { } current || current.Revision != value.Revision ||
                     current.Market.QuoteDay != value.FromDay || WorkroomStorage.State.Epoch != value.StorageEpoch)
                     throw new InvalidOperationException("新日、机房版本或睡前配置发生变化。");
+                if (ServerRoomState.Serialize(current) != ServerRoomState.Serialize(value.Source))
+                    throw new InvalidOperationException("睡前冻结状态已被改变。");
+                ServerRoomEconomy.RequireSameMachines(value.Machines, ServerRoomOperations.MachineFacts(current));
                 var boom = Boom(out var identity);
                 var market = ServerRoomMarket.Advance(current.Market, current.Run, current.Slot,
                     StoreStation.GetDayCounter(), boom, identity);
-                var result = ServerRoomEconomy.PrepareDay(current, value.Machines, value.FromDay,
+                var result = ServerRoomEconomy.PrepareDay(value.Source, value.Machines, value.FromDay,
                     StoreStation.GetDayCounter(), __instance.GetCash(), market);
                 value.Plan = result;
                 value.CashBeforeCommit = __instance.GetCash();
                 TryCommitPlan();
+                ServerBusiness.Wake(__instance);
             }
             catch (Exception ex) { Fault("新日结算失败：" + ex); }
         }

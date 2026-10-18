@@ -8,10 +8,8 @@ namespace PCExpansion;
 /// <summary>缓存浏览器圆角和导航图标；图标不依赖字体，不增加整页贴图。</summary>
 internal static class ServerRoomBrowserArt
 {
-    private static Sprite? rounded;
-    internal enum Icon { Back, Forward, Refresh, Home, Address, ChevronDown }
-    private static readonly Sprite?[] icons = new Sprite?[6];
-    internal static Sprite Rounded => GetRounded();
+    internal enum Icon { Back, Forward, Refresh, Home, Address, ChevronDown, Theme }
+    private static readonly Sprite?[] icons = new Sprite?[7];
 
     internal static Sprite GetIcon(Icon icon)
     {
@@ -36,6 +34,20 @@ internal static class ServerRoomBrowserArt
                 break;
             case Icon.ChevronDown:
                 Line(9, 12, 16, 19); Line(16, 19, 23, 12);
+                break;
+            case Icon.Theme:
+                // Half-shaded disc reads as appearance without relying on font glyphs.
+                for (var angle = 0; angle < 360; angle += 15)
+                {
+                    var a = angle * MathF.PI / 180; var b = (angle + 15) * MathF.PI / 180;
+                    Line(16 + 10 * MathF.Cos(a), 16 + 10 * MathF.Sin(a), 16 + 10 * MathF.Cos(b), 16 + 10 * MathF.Sin(b));
+                }
+                Line(16, 6, 16, 26);
+                for (var x = 18; x <= 24; x += 2)
+                {
+                    var half = MathF.Sqrt(100 - (x - 16) * (x - 16));
+                    Line(x, 16 - half, x, 16 + half);
+                }
                 break;
             default:
                 var start = icon == Icon.Refresh ? 45 : 0;
@@ -78,35 +90,4 @@ internal static class ServerRoomBrowserArt
         catch { UnityEngine.Object.Destroy(texture); throw; }
     }
 
-    private static Sprite GetRounded()
-    {
-        if (AssemblyDebugUi.Alive(rounded)) return rounded!;
-        const int size = 32;
-        var pixels = new Color[size * size];
-        for (var y = 0; y < size; y++)
-        for (var x = 0; x < size; x++)
-        {
-            const float radius = 8f;
-            var dx = Math.Max(0, Math.Abs(x + .5f - 16) - 8);
-            var dy = Math.Max(0, Math.Abs(y + .5f - 16) - 8);
-            var alpha = Math.Clamp(radius + .5f - MathF.Sqrt(dx * dx + dy * dy), 0, 1);
-            pixels[y * size + x] = new Color(1, 1, 1, alpha);
-        }
-        var texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
-        try
-        {
-            texture.name = "PCExpansion.WebRounded";
-            texture.filterMode = FilterMode.Bilinear;
-            texture.wrapMode = TextureWrapMode.Clamp;
-            texture.SetPixels(new Il2CppStructArray<Color>(pixels));
-            texture.Apply(false, true);
-            rounded = Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(.5f, .5f),
-                100, 0, SpriteMeshType.FullRect, new Vector4(8, 8, 8, 8));
-            rounded.name = texture.name;
-            UnityEngine.Object.DontDestroyOnLoad(texture);
-            UnityEngine.Object.DontDestroyOnLoad(rounded);
-            return rounded;
-        }
-        catch { UnityEngine.Object.Destroy(texture); throw; }
-    }
 }

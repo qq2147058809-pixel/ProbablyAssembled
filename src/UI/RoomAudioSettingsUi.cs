@@ -84,6 +84,7 @@ internal static class RoomAudioSettingsUi
         blocker = AssemblyDebugUi.Image(reference.transform, "AudioModalBlocker", new Color(0, 0, 0, .55f), true).gameObject;
         AssemblyDebugUi.Place(blocker, 0, 0, 1280, 720);
         panel = AssemblyDebugUi.Image(reference.transform, "AudioSettingsPanel", new Color(.10f, .16f, .16f, 1), true).gameObject;
+        UiRoundedGeometry.Fill(panel.GetComponent<Image>(), UiRoundedGeometry.WindowRadius);
         AssemblyDebugUi.Place(panel, 390, 224, 500, 272);
         var title = AssemblyDebugUi.Text(panel.transform, "Title", RoomAudio.Text("title"), font, 23, true);
         AssemblyDebugUi.Place(title.gameObject, 22, 10, 390, 35);
@@ -99,10 +100,13 @@ internal static class RoomAudioSettingsUi
             values[i] = AssemblyDebugUi.Text(panel.transform, "Volume" + i, "", font, 16);
             AssemblyDebugUi.Place(values[i]!.gameObject, 422, y, 56, 30);
             var track = AssemblyDebugUi.Image(panel.transform, "Slider" + i, new Color(.27f, .35f, .32f, 1), true);
+            UiRoundedGeometry.Fill(track);
             AssemblyDebugUi.Place(track.gameObject, 165, y + 10, 240, 12);
             var fill = AssemblyDebugUi.Image(track.transform, "Fill", new Color(.64f, .69f, .55f, 1), false);
+            UiRoundedGeometry.Fill(fill);
             AssemblyDebugUi.Stretch(fill.gameObject);
             var handle = AssemblyDebugUi.Image(track.transform, "Handle", new Color(.82f, .82f, .68f, 1), true);
+            UiRoundedGeometry.Fill(handle);
             AssemblyDebugUi.Place(handle.gameObject, 0, -4, 12, 20);
             var slider = Add<Slider>(track.gameObject);
             slider.direction = Slider.Direction.LeftToRight; slider.minValue = 0; slider.maxValue = 100; slider.wholeNumbers = true;
@@ -127,6 +131,7 @@ internal static class RoomAudioSettingsUi
             if (buttonGeneration != generation || !AssemblyDebugUi.Alive(canvas) || !canvas!.gameObject.activeInHierarchy) return;
             action();
         });
+        UiRoundedGeometry.Fill(go.GetComponent<Image>());
         AssemblyDebugUi.Place(go, x, y, width, height);
         var label = AssemblyDebugUi.Text(go.transform, "Label", text, font, 16);
         AssemblyDebugUi.Stretch(label.gameObject);

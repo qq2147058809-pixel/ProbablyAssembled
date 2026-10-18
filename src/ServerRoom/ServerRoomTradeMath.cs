@@ -1,83 +1,106 @@
 using System;
 using System.Globalization;
 using System.Linq;
+using System.Numerics;
 
 namespace PCExpansion;
 
-/// <summary>Whole-order fee rounding and wallet/cost candidates; publishing belongs to the transaction layer.</summary>
+/// <summary>One quote protocol for preview, manual orders and automatic settlement.</summary>
 internal static class ServerRoomTradeMath
 {
+    private static readonly decimal[] Depths = { 100000m, 80000m, 50000m, 30000m, 20000m };
+    internal static decimal Depth(int coin) => Depths[coin];
     internal sealed class TradeQuote
     {
         internal decimal Price { get; }
-        internal long Units10 { get; }
-        internal decimal Quantity => Units10 / 10m;
+        internal long MicroUnits { get; }
+        internal decimal Quantity => MicroUnits / 1000000m;
         internal decimal Value { get; }
         internal decimal Fee => Value * .01m;
         internal int CashDelta { get; }
         internal bool Buy { get; }
-        internal TradeQuote(decimal price, long units10, decimal value, int delta, bool buy)
-        { Price = price; Units10 = units10; Value = value; CashDelta = delta; Buy = buy; }
+        internal int Day { get; }
+        internal long Revision { get; }
+        internal long NetBefore { get; }
+        internal long NetAfter { get; }
+        internal TradeQuote(ServerRoomState.Document source, int index, long units, bool buy, ServerRoomTradeProtocol.TradeQuote quote)
+        {
+            Price = source.Market.Prices[index]; MicroUnits = units; Value = quote.Gross;
+            CashDelta = buy ? -quote.Cash : quote.Cash; Buy = buy;
+            Day = source.Market.QuoteDay!.Value; Revision = source.Revision;
+            NetBefore = source.Coins[index].DailyNetMicro; NetAfter = quote.AfterNetMicro;
+        }
     }
-
     internal static long ParseUnits(string input)
     {
         if (input == null) throw new InvalidOperationException("请输入交易数量。");
-        var text = input.Trim();
-        var dot = text.IndexOf('.');
-        if (text.Length == 0 || text.Length > 21 || text.Any(c => c != '.' && (c < '0' || c > '9')) ||
-            dot == 0 || dot >= 0 && (dot != text.LastIndexOf('.') || text.Length - dot != 2))
-            throw new InvalidOperationException("数量须为正数，且最多一位小数（0.1枚步长）。");
-        if (!decimal.TryParse(text, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var quantity) ||
-            quantity <= 0 || quantity * 10m > long.MaxValue)
-            throw new InvalidOperationException("交易数量超出范围。");
-        return checked((long)(quantity * 10m));
+        var text = input.Trim(); var dot = text.IndexOf('.');
+        if (text.Length == 0 || text.Length > 24 || text.Any(c => c != '.' && (c < '0' || c > '9')) ||
+            dot == 0 || dot >= 0 && (dot != text.LastIndexOf('.') || text.Length - dot is < 2 or > 5) ||
+            !decimal.TryParse(text, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var quantity) ||
+            quantity <= 0 || quantity > long.MaxValue / 1000000m)
+            throw new InvalidOperationException("数量须为正数，最多四位小数（0.0001枚步长）。");
+        return checked((long)(quantity * 1000000m));
     }
-
-    internal static TradeQuote Preview(decimal price, long units10, bool buy)
+    internal static TradeQuote Preview(ServerRoomState.Document source, int index, long units, bool buy)
     {
-        if (price <= 0 || units10 <= 0) throw new InvalidOperationException("单价和数量须为正数。");
-        try
-        {
-            var value = checked(price * (units10 / 10m));
-            var cash = buy ? decimal.Ceiling(checked(value * 1.01m)) : decimal.Floor(checked(value * .99m));
-            if (cash < 1) throw new InvalidOperationException("卖出到账不足1，请增加数量。");
-            if (cash > int.MaxValue) throw new InvalidOperationException("交易现金超出游戏整数范围。");
-            return new TradeQuote(price, units10, value, buy ? -(int)cash : (int)cash, buy);
-        }
-        catch (OverflowException) { throw new InvalidOperationException("交易金额超出安全范围。"); }
+        if (!source.Enabled || !source.Market.Initialized || index is < 0 or > 4)
+            throw new InvalidOperationException("行情尚未就绪。");
+        return new TradeQuote(source, index, units, buy, ServerRoomTradeProtocol.Quote(
+            source.Market.Prices[index], Depth(index), units, buy, source.Coins[index].DailyNetMicro));
     }
-
+    internal static long Maximum(ServerRoomState.Document source, int index, bool buy, int cash)
+    {
+        var coin = source.Coins[index];
+        if (cash < 0) return 0;
+        return buy ? ServerRoomTradeProtocol.MaxBuy(source.Market.Prices[index], Depth(index),
+                long.MaxValue - coin.MicroUnits, coin.DailyNetMicro, cash) :
+            ServerRoomTradeProtocol.MaxSell(source.Market.Prices[index], Depth(index), coin.MicroUnits,
+                coin.DailyNetMicro, int.MaxValue - cash);
+    }
     internal static ServerRoomState.Change Prepare(ServerRoomState.Document source, string coinId,
-        long units10, bool buy, int cash, int expectedQuoteDay)
+        long units, bool buy, int cash, int expectedQuoteDay)
     {
         ServerRoomState.Validate(source);
-        if (!source.Enabled || !source.Market.Initialized || source.Market.QuoteDay != expectedQuoteDay || cash < 0)
+        if (source.Market.QuoteDay != expectedQuoteDay || cash < 0)
             throw new InvalidOperationException("行情或可用现金已变化，请刷新交易确认。");
         var index = ServerRoomMarket.CoinIndex(coinId);
-        var quote = Preview(source.Market.Prices[index], units10, buy);
-        var old = source.Coins[index];
-        if (buy && (long)cash + quote.CashDelta < 0) throw new InvalidOperationException("现金不足。");
-        if (!buy && old.Units10 < units10) throw new InvalidOperationException("持币不足。");
-        if ((long)cash + quote.CashDelta > int.MaxValue) throw new InvalidOperationException("交易后现金超出游戏整数范围。");
-        try
+        var next = ServerRoomState.Advance(source);
+        var delta = Apply(next, index, units, buy, cash);
+        ServerRoomState.Validate(next);
+        return new ServerRoomState.Change(next, delta);
+    }
+    // Only mutates a detached candidate. Caller owns its one revision and atomic cash commit.
+    internal static int Apply(ServerRoomState.Document next, int index, long units, bool buy, int cash)
+    {
+        var quote = Preview(next, index, units, buy); var coin = next.Coins[index];
+        if (cash < 0 || (long)cash + quote.CashDelta < 0 || (long)cash + quote.CashDelta > int.MaxValue ||
+            !buy && units > coin.MicroUnits || buy && units > long.MaxValue - coin.MicroUnits)
+            throw new InvalidOperationException("现金、持币或钱包容量不足。");
+        if (buy)
         {
-            var next = ServerRoomState.Advance(source);
-            var coin = next.Coins[index];
-            if (buy)
-            {
-                coin.Units10 = checked(old.Units10 + units10);
-                coin.Cost = checked(old.Cost - quote.CashDelta);
-            }
-            else
-            {
-                coin.Units10 = old.Units10 - units10;
-                // Divide the quantity first to avoid overflowing a large valid total cost.
-                coin.Cost = coin.Units10 == 0 ? 0 : old.Cost * ((decimal)coin.Units10 / old.Units10);
-            }
-            ServerRoomState.Validate(next);
-            return new ServerRoomState.Change(next, quote.CashDelta);
+            coin.MicroUnits = checked(coin.MicroUnits + units); coin.BoughtMicro = checked(coin.BoughtMicro + units);
+            coin.Cost = checked(coin.Cost - quote.CashDelta);
+            ServerRoomLedger.Add(next, quote.Day, a =>
+            { a.BuyCash = -quote.CashDelta; a.BoughtMicro[index] = units; a.TradingFees = quote.Fee; });
         }
-        catch (OverflowException) { throw new InvalidOperationException("钱包数量、成本或版本超出安全范围。"); }
+        else
+        {
+            var bought = (long)((BigInteger)coin.BoughtMicro * units / coin.MicroUnits);
+            var mined = units - bought;
+            // Rounding of source attribution never changes the fungible wallet or total cash.
+            if (mined > coin.MinedMicro) { bought += mined - coin.MinedMicro; mined = coin.MinedMicro; }
+            var removedCost = bought == coin.BoughtMicro ? coin.Cost : coin.Cost * ((decimal)bought / coin.BoughtMicro);
+            var tradingCash = quote.CashDelta * ((decimal)bought / units);
+            coin.MicroUnits -= units; coin.BoughtMicro -= bought; coin.MinedMicro -= mined; coin.Cost -= removedCost;
+            ServerRoomLedger.Add(next, quote.Day, a =>
+            {
+                a.TradingSaleCash = tradingCash; a.MiningSaleCash = quote.CashDelta - tradingCash;
+                a.TradingRealized = tradingCash - removedCost; a.TradingFees = quote.Fee;
+                a.SoldBoughtMicro[index] = bought; a.SoldMinedMicro[index] = mined;
+            });
+        }
+        coin.DailyNetMicro = quote.NetAfter;
+        return quote.CashDelta;
     }
 }

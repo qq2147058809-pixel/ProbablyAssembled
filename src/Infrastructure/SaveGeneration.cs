@@ -6,12 +6,12 @@ using Il2Cpp;
 
 namespace PCExpansion;
 
-/// <summary>Loads marked saves from the 1.0 generation onward. No migration.</summary>
+/// <summary>Loads marked saves from the 2.6 generation onward. No migration.</summary>
 internal static class SaveGeneration
 {
     private const string Key = "pcexpansion.save-generation";
-    private const string Contract = "1.0";
-    private static readonly Version MinimumContract = new(1, 0);
+    private const string Contract = "2.6";
+    private static readonly Version MinimumContract = new(2, 6);
     private static IntPtr owner;
     private static string? run;
     private static string? expectedRun;
@@ -49,6 +49,7 @@ internal static class SaveGeneration
             if (!HasContract(saved) || string.IsNullOrEmpty(saved.runID) ||
                 NewGameData.Instance == null || saved.saveSlotId != NewGameData.Instance.saveSlot)
                 return Reject();
+            StartingPerksRewards.Reset();
             owner = store.Pointer; run = null; pendingNew = initialSave = false;
             expectedRun = saved.runID; expectedSlot = saved.saveSlotId; loading = true;
             return true;
@@ -62,6 +63,7 @@ internal static class SaveGeneration
 
     internal static void BeginNew(PlayerStore store)
     {
+        StartingPerksRewards.BeginNew(store);
         owner = store.Pointer; run = expectedRun = null;
         pendingNew = true; initialSave = loading = false;
         // The native new-run path can reuse its store object. Reset only this
@@ -76,6 +78,7 @@ internal static class SaveGeneration
 
     internal static void Failed()
     {
+        StartingPerksRewards.Reset();
         owner = IntPtr.Zero; run = expectedRun = null;
         pendingNew = initialSave = loading = false;
     }
@@ -89,7 +92,7 @@ internal static class SaveGeneration
             noticeAt = Environment.TickCount64 + 3000;
             var message = LanguageText.Get("save.unsupported");
             Core.Log?.Warning(message);
-            try { StoreUIManager.Instance?.Notify(message, "#FFFFFF"); }
+            try { ModOperationNotice.Show(message); }
             catch (Exception ex) { Core.Debug("存档校验提示暂不可显示：" + ex.Message); }
         }
         return false;
@@ -122,16 +125,19 @@ internal static class SaveGeneration
         {
             __state = pendingNew && __instance.Pointer == owner && WorkroomGameAdapter.SaveHooksReady;
             if (!__state) return Reject();
-            // InitialSave creates the native run GUID before calling SaveGame.
+            StartingPerksRewards.PrepareInitialSave(__instance);
+            // InitialSave allocates the final slot and run GUID before SaveGame.
             initialSave = true;
             return true;
         }
-        private static Exception? Finalizer(Exception? __exception, bool __state)
+        private static Exception? Finalizer(Exception? __exception, bool __state, PlayerStore __instance)
         {
             if (__state)
             {
                 initialSave = pendingNew = false;
-                if (__exception != null) Failed();
+                // Native->managed trampolines may log a SaveGame exception
+                // without propagating it back to the native InitialSave call.
+                if (__exception != null || !IsSupported(__instance)) Failed();
             }
             return __exception;
         }
@@ -151,6 +157,7 @@ internal static class SaveGeneration
             if (!WorkroomGameAdapter.SaveHooksReady) return Reject();
             if (initialSave && pendingNew && run == null && __instance.Pointer == owner && !string.IsNullOrEmpty(__instance.runID))
             {
+                StartingPerksRewards.BindInitialSave(__instance);
                 __instance.modData ??= new Il2CppSystem.Collections.Generic.Dictionary<string, string>();
                 __instance.modData[Key] = Contract;
                 run = __instance.runID;

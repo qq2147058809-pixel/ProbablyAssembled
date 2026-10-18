@@ -16,7 +16,6 @@ internal static class WorkroomPartProcessing
         internal string Id = "";
         internal int Count;
         internal long Value;
-        internal WorkroomItemCodec.Shape Shape = new();
     }
     private sealed class Plan
     {
@@ -29,16 +28,12 @@ internal static class WorkroomPartProcessing
         internal bool Chinese;
         internal string SourceId = "", Text = "", Refusal = "processing_unavailable";
         internal bool Allowed;
-        internal int Quantity, Cash;
+        internal int Cash;
         internal long Fee, TotalValue, Budget;
+        internal int RecoveryPercent;
         internal bool CashRepair;
-        internal List<Selection> Sources = new();
+        internal WorkroomStorageState.Record? Source;
         internal List<Material> Materials = new();
-    }
-    private sealed class Selection
-    {
-        internal WorkroomStorageState.Record Record = null!;
-        internal int Count;
     }
     private static Plan? cached;
     internal sealed class DiscardConfirmation
@@ -55,19 +50,20 @@ internal static class WorkroomPartProcessing
     private static string Text(string key, params object[] args) => WorkroomComponentTemplates.Text(key, args);
     private static void Notice(string key) => WorkroomComponentAssembly.Notice(key);
 
-    internal static string Preview(Mode mode, int quantity = 1) => WorkroomCashRepair.Pending ? Text("processing_cash_recovery") :
-        GetPlan(mode, quantity)?.Text ?? Text("processing_unavailable");
-    internal static bool CanExecute(Mode mode, int quantity = 1) => !WorkroomCashRepair.Pending && GetPlan(mode, quantity)?.Allowed == true;
+    internal static string Preview(Mode mode) => WorkroomCashRepair.Pending ? Text("processing_cash_recovery") :
+        GetPlan(mode)?.Text ?? Text("processing_unavailable");
+    internal static bool CanExecute(Mode mode) => !WorkroomCashRepair.Pending && GetPlan(mode)?.Allowed == true;
 
-    internal static void Execute(Mode mode, long epoch, int quantity = 1)
+    internal static void Execute(Mode mode, long epoch)
     {
         // Destructive disposal has its own target-bound two-click API.
         if (mode == Mode.Discard) { Notice("processing_discard_confirm_required"); return; }
         if (WorkroomCashRepair.Pending) { Notice("processing_cash_recovery"); return; }
         if (!WorkroomComponentAssembly.Ready(epoch)) return;
-        var plan = GetPlan(mode, quantity);
+        var plan = GetPlan(mode);
         if (plan == null || !plan.Allowed) { Notice(plan?.Refusal ?? "processing_unavailable"); return; }
         if (mode == Mode.Disassemble) { WorkroomComponentAssembly.Disassemble(epoch); return; }
+        var repaired = false;
         WorkroomStorage.Run(() =>
         {
             try
@@ -75,11 +71,12 @@ internal static class WorkroomPartProcessing
             RequireCurrent(plan);
             var source = WorkroomComponentAssembly.At(WorkroomComponentAssembly.Disassembly)
                 ?? throw new InvalidOperationException("处理目标已转移。");
-            if (mode == Mode.Repair) Repair(source, plan);
-            else if (mode == Mode.Recycle) Recycle(source, plan);
+            if (mode == Mode.Repair) repaired = Repair(source, plan);
             }
             finally { cached = null; }
         });
+        if (repaired && WorkroomSelection.AutoReturn)
+            WorkroomSelection.ReturnSlots(new[] { WorkroomComponentAssembly.Disassembly }, epoch);
     }
 
     internal static DiscardConfirmation? PrepareDiscard(long epoch)
@@ -87,7 +84,7 @@ internal static class WorkroomPartProcessing
         if (!WorkroomComponentAssembly.Ready(epoch) || WorkroomCashRepair.Pending) return null;
         try
         {
-        var plan = GetPlan(Mode.Discard, 1);
+        var plan = GetPlan(Mode.Discard);
         if (plan?.Allowed != true) { Notice(plan?.Refusal ?? "processing_unavailable"); return null; }
         RequireCurrent(plan);
         var target = WorkroomComponentAssembly.At(WorkroomComponentAssembly.Disassembly)!;
@@ -129,7 +126,7 @@ internal static class WorkroomPartProcessing
         // Requote single-item recycling now. A price change must not discard
         // something that has gained a usable material output since preview.
         cached = null;
-        var plan = GetPlan(Mode.Discard, 1);
+        var plan = GetPlan(Mode.Discard);
         if (plan?.Allowed != true) { Notice(plan?.Refusal ?? "processing_unavailable"); return; }
         WorkroomStorage.Run(() =>
         {
@@ -138,14 +135,14 @@ internal static class WorkroomPartProcessing
                 RequireCurrent(plan);
                 if (!IsDiscardConfirmationCurrent(confirmation)) throw new InvalidOperationException("报废目标或确认会话已变化。");
                 var source = WorkroomComponentAssembly.At(WorkroomComponentAssembly.Disassembly)!;
-                RequireSources(plan, source);
+                RequireDiscardSource(plan, source);
                 var next = new List<WorkroomStorageState.Record>(WorkroomStorage.State.Items);
                 if (next.RemoveAll(record => record.Id == confirmation.SourceId) != 1)
                     throw new InvalidOperationException("报废目标不唯一。");
                 WorkroomStorage.State.ValidateReplacement(next);
                 RequireCurrent(plan);
                 if (!IsDiscardConfirmationCurrent(confirmation)) throw new InvalidOperationException("报废确认已失效。");
-                RequireSources(plan, source);
+                RequireDiscardSource(plan, source);
                 WorkroomStorage.State.Replace(next);
                 Notice("processing_discarded");
             }
@@ -153,20 +150,21 @@ internal static class WorkroomPartProcessing
         });
     }
 
-    private static Plan? GetPlan(Mode mode, int quantity)
+    private static Plan? GetPlan(Mode mode)
     {
+        // Recycling belongs exclusively to the mixed-selection batch service.
+        if (mode == Mode.Recycle) return null;
         var state = WorkroomStorage.State;
         if (!state.Ready || WorkroomStorage.Busy || WorkroomItemCodec.CleanupPending ||
             !PlayerStore.IsInstanceExist() || PlayerStore.instance == null) return null;
         var owner = PlayerStore.instance;
-        quantity = mode == Mode.Recycle ? quantity : 1;
         var cash = owner.GetCash();
         if (cached != null && cached.Owner == owner.Pointer && cached.Run == owner.runID &&
             cached.SaveSlot == owner.saveSlotId && cached.Epoch == state.Epoch && cached.Revision == state.Revision &&
-            cached.Mode == mode && cached.Quantity == quantity && cached.Cash == cash && cached.Chinese == LanguageText.IsChinese &&
+            cached.Mode == mode && cached.Cash == cash && cached.Chinese == LanguageText.IsChinese &&
             (cached.RetryAt == 0 || Environment.TickCount64 < cached.RetryAt)) return cached;
         var plan = new Plan { Owner = owner.Pointer, Run = owner.runID, SaveSlot = owner.saveSlotId,
-            Epoch = state.Epoch, Revision = state.Revision, Mode = mode, Quantity = quantity, Cash = cash, Chinese = LanguageText.IsChinese };
+            Epoch = state.Epoch, Revision = state.Revision, Mode = mode, Cash = cash, Chinese = LanguageText.IsChinese };
         var source = WorkroomComponentAssembly.At(WorkroomComponentAssembly.Disassembly);
         plan.SourceId = source?.Id ?? "";
         try
@@ -192,7 +190,6 @@ internal static class WorkroomPartProcessing
     private static void BuildPlan(Plan plan, WorkroomStorageState.Record? source)
     {
         if (source == null) { Refuse(plan, "processing_need_target"); return; }
-        if (plan.Quantity < 1) { Refuse(plan, "processing_invalid_quantity"); return; }
         var item = source.Item;
         WorkroomItemCodec.Validate(item);
         var whole = WorkroomComponentTemplates.TryWhole(item.Identifier, out _, out _, out _);
@@ -244,78 +241,24 @@ internal static class WorkroomPartProcessing
             lines.Add(Text(enough ? "processing_repair_ready" : plan.Refusal));
             plan.Text = string.Join("\n", lines); return;
         }
-        if (plan.Mode != Mode.Recycle && plan.Mode != Mode.Discard) { Refuse(plan, "processing_unavailable"); return; }
-        if (plan.Mode == Mode.Discard && (!item.Broken || !extraWhole &&
-            (CashRepair(template.Key, kind) || RepairRecipe(template.Key, kind).Length != 0)))
+        if (plan.Mode != Mode.Discard) { Refuse(plan, "processing_unavailable"); return; }
+        if (!item.Broken || !extraWhole &&
+            (CashRepair(template.Key, kind) || RepairRecipe(template.Key, kind).Length != 0))
         { Refuse(plan, "processing_discard_unrepairable_only"); return; }
-        if (!SelectSources(plan, source)) { Refuse(plan, "processing_missing_quantity"); return; }
-        if (plan.Mode == Mode.Discard && item.Value == 0) { AllowDiscard(plan, item); return; }
+        plan.Source = CaptureDiscardSource(source);
+        plan.TotalValue = item.Value;
+        plan.RecoveryPercent = WorkroomRecyclingValue.CurrentPercent;
+        plan.Budget = WorkroomRecyclingValue.Budget(plan.TotalValue, plan.RecoveryPercent);
+        if (item.Value == 0) { AllowDiscard(plan, item); return; }
         var preferred = wholeSpec != null ? WorkroomRecyclingRules.WholeRecipe(wholeSpec) : RecycleRecipe(template.Key, kind);
         if (preferred.Length == 0) { Refuse(plan, "processing_need_part"); return; }
         var fallback = wholeSpec != null ? WorkroomRecyclingRules.WholeFallback(wholeSpec) : BaseMaterial(template.Key, kind);
-        var quotes = preferred.Append(fallback).Distinct(StringComparer.Ordinal).ToDictionary(id => id, Quote, StringComparer.Ordinal);
-        var remaining = plan.Budget;
-        var maximum = checked((long)plan.Quantity * multiplier);
-        var counts = new Dictionary<string, long>(StringComparer.Ordinal);
-        // Repeat each unit's m rounds in order against this single aggregate
-        // budget. No remaining budget or partial material survives this plan.
-        for (long round = 0; round < maximum;)
-        {
-            var delta = new Dictionary<string, long>(StringComparer.Ordinal);
-            long cost = 0;
-            var steps = new List<(string Id, long Offset, long Used)>();
-            foreach (var id in preferred)
-            {
-                var chosen = quotes[id].Value <= remaining - cost && counts.GetValueOrDefault(id) + delta.GetValueOrDefault(id) < maximum ? id : fallback;
-                var used = delta.GetValueOrDefault(chosen);
-                if (counts.GetValueOrDefault(chosen) + used >= maximum || quotes[chosen].Value > remaining - cost) continue;
-                steps.Add((chosen, cost, used));
-                delta[chosen] = used + 1; cost = checked(cost + quotes[chosen].Value);
-            }
-            if (cost == 0) break;
-            // Repeat only while this exact sequence stays affordable and below
-            // every material's N*m cap. Prices and counts move monotonically,
-            // so skipped choices cannot become available in the repeated run.
-            var repeats = maximum - round;
-            foreach (var step in steps)
-            {
-                repeats = Math.Min(repeats, (remaining - step.Offset - quotes[step.Id].Value) / cost + 1);
-                repeats = Math.Min(repeats, (maximum - counts.GetValueOrDefault(step.Id) - step.Used - 1) / delta[step.Id] + 1);
-            }
-            foreach (var pair in delta) counts[pair.Key] = checked(counts.GetValueOrDefault(pair.Key) + pair.Value * repeats);
-            remaining = checked(remaining - cost * repeats); round += repeats;
-        }
-        if (plan.Mode == Mode.Discard)
-        {
-            if (counts.Count != 0) Refuse(plan, "processing_discard_recoverable");
-            else AllowDiscard(plan, item);
-            return;
-        }
-        var preview = new List<string> { Text("processing_recycle_batch_header", plan.Quantity, plan.TotalValue, plan.Budget, plan.Budget - remaining) };
-        preview.AddRange(preferred.Append(fallback).Distinct(StringComparer.Ordinal).Where(counts.ContainsKey)
-            .Select(id => Text("processing_recycle_material", MaterialName(id), counts[id], quotes[id].Value)));
-        if (counts.Values.Sum() > WorkroomStorageState.Columns * WorkroomStorageState.Rows)
-        {
-            plan.Allowed = false; plan.Refusal = "full"; preview.Add(Text("full"));
-            plan.Text = string.Join("\n", preview); return;
-        }
-        foreach (var id in preferred.Append(fallback).Distinct(StringComparer.Ordinal))
-            if (counts.TryGetValue(id, out var count))
-            { var material = quotes[id]; material.Count = checked((int)count); plan.Materials.Add(material); }
-        if (plan.Materials.Count == 0)
-        {
-            Refuse(plan, "processing_zero_recycle");
-            preview.Add(plan.Text);
-            preview.Add(RecycleQuantityHint(plan, source, quotes.Values.Min(material => material.Value)));
-            plan.Text = string.Join("\n", preview); return;
-        }
-        var outputs = plan.Materials.SelectMany(material => Enumerable.Range(0, material.Count)
-            .Select(_ => new WorkroomStorageState.Record { Item = new WorkroomItemCodec.Snapshot { Footprint = material.Shape } })).ToList();
-        var next = PreviewRemainders(plan);
-        var fits = WorkroomStorageState.PlaceAll(next, outputs);
-        plan.Allowed = fits; plan.Refusal = "full";
-        preview.Add(Text(fits ? "processing_recycle_ready" : "full"));
-        plan.Text = string.Join("\n", preview);
+        var quotes = preferred.Append(fallback).Distinct(StringComparer.Ordinal).Select(Quote).ToArray();
+        // Only a single, unrepairable target can be discarded. The former
+        // single-item recovery loop produced something iff any allowed material
+        // fit this same budget; quantity caps are always positive for one item.
+        if (quotes.Any(material => material.Value <= plan.Budget)) Refuse(plan, "processing_discard_recoverable");
+        else AllowDiscard(plan, item);
     }
 
     private static void AllowDiscard(Plan plan, WorkroomItemCodec.Snapshot item)
@@ -324,13 +267,13 @@ internal static class WorkroomPartProcessing
         plan.Text = Text("processing_discard_preview", item.Name);
     }
 
-    private static void Repair(WorkroomStorageState.Record source, Plan plan)
+    private static bool Repair(WorkroomStorageState.Record source, Plan plan)
     {
         var next = new List<WorkroomStorageState.Record>(WorkroomStorage.State.Items);
         foreach (var material in plan.Materials)
         {
             if (!WorkroomComponentParts.ConsumeMaterial(next, material.Id, material.Count))
-            { Notice("processing_missing_materials"); return; }
+            { Notice("processing_missing_materials"); return false; }
         }
         var repaired = WorkroomComponentParts.Repair(source.Item);
         if (repaired.Broken || repaired.Count != source.Item.Count ||
@@ -355,137 +298,35 @@ internal static class WorkroomPartProcessing
         }
         else WorkroomStorage.State.Replace(next);
         Notice("processing_repaired");
-    }
-
-    private static void Recycle(WorkroomStorageState.Record source, Plan plan)
-    {
-        RequireSources(plan, source);
-        var outputs = new List<WorkroomStorageState.Record>();
-        long total = 0;
-        foreach (var material in plan.Materials)
-            for (var i = 0; i < material.Count; i++)
-            {
-                var snapshot = CaptureMaterial(material.Id);
-                if (snapshot.Value != material.Value || !SameShape(snapshot.Footprint, material.Shape))
-                    throw new InvalidOperationException("原版材料报价或占格发生变化，请刷新预览。");
-                total = checked(total + snapshot.Value);
-                outputs.Add(new WorkroomStorageState.Record { Item = snapshot });
-            }
-        if (outputs.Count == 0 || total > plan.Budget)
-            throw new InvalidOperationException("回收产物为空或超过残值预算。");
-        var next = new List<WorkroomStorageState.Record>(WorkroomStorage.State.Items);
-        foreach (var selection in plan.Sources)
-        {
-            var record = selection.Record;
-            var index = next.FindIndex(value => value.Id == record.Id);
-            if (record.Item.Count != 1 || selection.Count != 1)
-                throw new InvalidOperationException("回收只支持独立单件来源。");
-            next.RemoveAt(index);
-        }
-        if (!WorkroomStorageState.PlaceAll(next, outputs)) { Notice("full"); return; }
-        RequireCurrent(plan);
-        RequireSources(plan, source);
-        WorkroomStorage.State.ValidateReplacement(next);
-        RequireCurrent(plan);
-        WorkroomStorage.State.Replace(next);
-        Notice("processing_recycled");
-    }
-
-    private static bool SelectSources(Plan plan, WorkroomStorageState.Record source)
-    {
-        plan.Sources.Add(SelectOne(source));
-        var remaining = plan.Quantity - 1;
-        if (remaining > 0)
-        foreach (var record in RecyclingCandidates(source))
-        {
-            if (remaining == 0) break;
-            var count = Math.Min(remaining, record.Item.Count);
-            if (count <= 0) continue;
-            plan.Sources.Add(SelectOne(record)); remaining -= count;
-        }
-        if (remaining != 0) return false;
-        plan.TotalValue = plan.Sources.Aggregate(0L, (sum, selection) =>
-            checked(sum + checked(selection.Record.Item.Value * selection.Count)));
-        if (plan.TotalValue < 0) throw new InvalidOperationException("本次回收价格为负。");
-        plan.Budget = plan.TotalValue / 2;
         return true;
     }
 
-    // The hint must follow the same stable room-first order as actual selection.
-    private static IEnumerable<WorkroomStorageState.Record> RecyclingCandidates(WorkroomStorageState.Record source) =>
-        WorkroomStorage.State.Items.Where(record => record.Id != source.Id &&
-            (record.Place == "room" || record.Place == "box") &&
-            WorkroomRecyclingRules.SamePhysicalSpec(source.Item, record.Item))
-        .OrderBy(record => record.Place == "room" ? 0 : 1);
-
-    private static string RecycleQuantityHint(Plan plan, WorkroomStorageState.Record source, long cheapestMaterial)
+    private static WorkroomStorageState.Record CaptureDiscardSource(WorkroomStorageState.Record record)
     {
-        // With positive material quotes and N >= 1, any output needs at least
-        // the cheapest allowed material's price. floor(total / 2) must reach it.
-        var requiredValue = 2m * cheapestMaterial;
-        decimal totalValue = plan.TotalValue;
-        long quantity = plan.Quantity;
-        foreach (var record in RecyclingCandidates(source).Skip(plan.Quantity - 1))
-        {
-            WorkroomItemCodec.Validate(record.Item);
-            if (record.Item.Count != 1 || record.Item.Value < 0)
-                throw new InvalidOperationException("回收数量提示候选状态无效。");
-            totalValue += record.Item.Value;
-            quantity++;
-            if (totalValue >= requiredValue)
-                return Text("processing_recycle_quantity_needed", plan.Quantity, quantity, quantity - plan.Quantity);
-        }
-        if (source.Item.Value == 0)
-            return Text("processing_recycle_quantity_zero", quantity);
-        // Future items can have other prices. Extrapolate only the unowned
-        // remainder at the target's unit value, and label this as an estimate.
-        var estimatedQuantity = quantity + decimal.Ceiling((requiredValue - totalValue) / source.Item.Value);
-        if (estimatedQuantity > int.MaxValue)
-            return Text("processing_recycle_quantity_limit", quantity);
-        return Text("processing_recycle_quantity_estimate", plan.Quantity, estimatedQuantity,
-            estimatedQuantity - plan.Quantity, quantity);
-    }
-
-    private static Selection SelectOne(WorkroomStorageState.Record record)
-    {
-        if (record.Item.Count != 1) throw new InvalidOperationException("回收只支持独立单件。");
+        if (record.Item.Count != 1) throw new InvalidOperationException("报废只支持独立单件。");
         var snapshot = JsonSerializer.Deserialize<WorkroomItemCodec.Snapshot>(
             JsonSerializer.Serialize(record.Item, WorkroomStorageState.JsonOptions), WorkroomStorageState.JsonOptions)
-            ?? throw new InvalidOperationException("回收来源快照无法建立。");
+            ?? throw new InvalidOperationException("报废来源快照无法建立。");
         WorkroomItemCodec.Validate(snapshot);
-        return new Selection { Record = Copy(record, snapshot), Count = 1 };
+        return Copy(record, snapshot);
     }
 
-    // A preview only needs to know whether a record remains in its room cells;
-    // it never creates a second identity or performs a native stack split.
-    private static List<WorkroomStorageState.Record> PreviewRemainders(Plan plan) => WorkroomStorage.State.Items
-        .Where(record => !plan.Sources.Any(selection => selection.Record.Id == record.Id && selection.Count == record.Item.Count)).ToList();
-
-    private static void RequireSources(Plan plan, WorkroomStorageState.Record source)
+    private static void RequireDiscardSource(Plan plan, WorkroomStorageState.Record source)
     {
-        var ids = new HashSet<string>(StringComparer.Ordinal);
-        long quantity = 0, value = 0;
-        foreach (var selection in plan.Sources)
-        {
-            var expected = selection.Record;
-            var actual = WorkroomStorage.State.Find(expected.Id);
-            if (!ids.Add(expected.Id) || actual == null || actual.Place != expected.Place || actual.Slot != expected.Slot ||
-                actual.X != expected.X || actual.Y != expected.Y || !SameSnapshot(expected.Item, actual.Item) ||
-                selection.Count <= 0 || selection.Count > actual.Item.Count ||
-                (actual.Id == source.Id ? actual.Place != "slot" || actual.Slot != WorkroomComponentAssembly.Disassembly || selection.Count != 1 :
-                    actual.Place != "room" && actual.Place != "box") || !WorkroomRecyclingRules.SamePhysicalSpec(source.Item, actual.Item))
-                throw new InvalidOperationException("本次回收候选的数量、状态、价格或所有权已变化。");
-            quantity = checked(quantity + selection.Count);
-            value = checked(value + checked(actual.Item.Value * selection.Count));
-        }
-        if (!ids.Contains(source.Id) || quantity != plan.Quantity || value != plan.TotalValue || value / 2 != plan.Budget)
-            throw new InvalidOperationException("本次回收候选数量或总价与预览不符。");
+        var expected = plan.Source;
+        var actual = expected == null ? null : WorkroomStorage.State.Find(expected.Id);
+        if (expected == null || actual == null || actual.Id != source.Id || actual.Place != "slot" ||
+            actual.Slot != WorkroomComponentAssembly.Disassembly || actual.Place != expected.Place || actual.Slot != expected.Slot ||
+            actual.X != expected.X || actual.Y != expected.Y || actual.Item.Count != 1 || !SameSnapshot(expected.Item, actual.Item) ||
+            actual.Item.Value != plan.TotalValue || plan.RecoveryPercent != WorkroomRecyclingValue.CurrentPercent ||
+            WorkroomRecyclingValue.Budget(actual.Item.Value, plan.RecoveryPercent) != plan.Budget)
+            throw new InvalidOperationException("报废目标的状态、价格、位置或回收预算与预览不符。");
     }
 
     private static Material Quote(string id)
     {
         var snapshot = CaptureMaterial(id);
-        return new Material { Id = id, Value = snapshot.Value, Shape = snapshot.Footprint };
+        return new Material { Id = id, Value = snapshot.Value };
     }
 
     private static WorkroomItemCodec.Snapshot CaptureMaterial(string id)
@@ -511,7 +352,7 @@ internal static class WorkroomPartProcessing
     private static int Multiplier(int tier) => tier switch { 1 or 2 => 1, 3 or 4 => 2, 5 => 3,
         _ => throw new InvalidOperationException("子件档位无效。") };
     private static WorkroomStorageState.Record Copy(WorkroomStorageState.Record record, WorkroomItemCodec.Snapshot item) =>
-        new() { Id = record.Id, Place = record.Place, Slot = record.Slot, X = record.X, Y = record.Y, Item = item };
+        WorkroomStorageState.Copy(record, item: item);
     private static bool SameShape(WorkroomItemCodec.Shape a, WorkroomItemCodec.Shape b) =>
         a.Width == b.Width && a.Height == b.Height && a.Cells.SequenceEqual(b.Cells);
     private static bool SameSnapshot(WorkroomItemCodec.Snapshot a, WorkroomItemCodec.Snapshot b) =>

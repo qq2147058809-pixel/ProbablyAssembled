@@ -31,7 +31,24 @@ internal sealed class WorkroomStorageState
         public int X { get; set; }
         public int Y { get; set; }
         public WorkroomItemCodec.Snapshot Item { get; set; } = new();
+        public Origin? ReturnTo { get; set; }
     }
+
+    internal sealed class Origin
+    {
+        public Origin() { }
+        public string Place { get; set; } = "";
+        public string Inventory { get; set; } = "";
+        public int X { get; set; }
+        public int Y { get; set; }
+        public int Orientation { get; set; }
+        public bool Flipped { get; set; }
+    }
+
+    internal static Record Copy(Record source, string? place = null, string? slot = null,
+        WorkroomItemCodec.Snapshot? item = null) => new()
+    { Id = source.Id, Place = place ?? source.Place, Slot = slot ?? source.Slot,
+        X = source.X, Y = source.Y, Item = item ?? source.Item, ReturnTo = source.ReturnTo };
 
     private PlayerStore? owner;
     private string? run;
@@ -84,19 +101,7 @@ internal sealed class WorkroomStorageState
             throw new InvalidOperationException("储物持有检查不属于当前存档。");
         Document? saved = null;
         if (store.modData != null && store.modData.ContainsKey(SaveKey))
-        {
-            // DTO defaults are useful when creating a new model, but must not
-            // turn a truncated/unknown saved envelope into an empty inventory.
-            using var raw = JsonDocument.Parse(store.modData[SaveKey]);
-            var root = raw.RootElement;
-            if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("Version", out var version) ||
-                version.ValueKind != JsonValueKind.Number || !version.TryGetInt32(out var number) || number != 2 ||
-                !root.TryGetProperty("Items", out var items) || items.ValueKind != JsonValueKind.Array)
-                throw new InvalidOperationException("储物记录封套不支持，不能判定物品丢失。");
-            saved = JsonSerializer.Deserialize<Document>(store.modData[SaveKey], JsonOptions)
-                ?? throw new InvalidOperationException("空储物记录，不能判定物品丢失。");
-            Validate(saved);
-        }
+            saved = ReadDocument(store.modData[SaveKey]);
         Document source;
         if (SameOwner() && owner!.Pointer == store.Pointer)
         {
@@ -129,14 +134,7 @@ internal sealed class WorkroomStorageState
         try
         {
             if (store.modData == null || !store.modData.ContainsKey(SaveKey)) return;
-            using var raw = JsonDocument.Parse(store.modData[SaveKey]);
-            if (raw.RootElement.ValueKind != JsonValueKind.Object ||
-                !raw.RootElement.TryGetProperty("Version", out var version) || !version.TryGetInt32(out var versionNumber) || versionNumber != 2 ||
-                !raw.RootElement.TryGetProperty("Items", out var items) || items.ValueKind != JsonValueKind.Array)
-                throw new InvalidOperationException("储物记录封套不支持，保留原文。");
-            var parsed = JsonSerializer.Deserialize<Document>(store.modData[SaveKey], JsonOptions)
-                ?? throw new InvalidOperationException("空储物记录");
-            Validate(parsed);
+            var parsed = ReadDocument(store.modData[SaveKey]);
             var serialized = JsonSerializer.Serialize(parsed, JsonOptions);
             var catalog = CreateCatalogProjection(serialized);
             var highestId = parsed.Items.SelectMany(item => WorkroomItemCodec.Identities(item.Item))
@@ -150,6 +148,61 @@ internal sealed class WorkroomStorageState
             Error = "data_error";
             Core.Log?.Error("工作间储物记录未加载；保留原文并禁止覆盖：" + ex.Message);
         }
+    }
+
+    private static Document ReadDocument(string raw)
+    {
+        // Creation defaults must never repair missing custody fields in saved
+        // records. Inspect their raw shape before deserializing any Record.
+        using var parsed = JsonDocument.Parse(raw);
+        var root = parsed.RootElement;
+        RequireFields(root, "Version", "Items");
+        var version = root.GetProperty("Version");
+        var items = root.GetProperty("Items");
+        if (version.ValueKind != JsonValueKind.Number || !version.TryGetInt32(out var number) || number != 2 ||
+            items.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException("储物记录封套不支持，保留原文。");
+        foreach (var record in items.EnumerateArray())
+        {
+            RequireFields(record, "Id", "Place", "Slot", "X", "Y", "Item");
+            if (record.GetProperty("Id").ValueKind != JsonValueKind.String ||
+                record.GetProperty("Place").ValueKind != JsonValueKind.String ||
+                record.GetProperty("Slot").ValueKind != JsonValueKind.String ||
+                record.GetProperty("X").ValueKind != JsonValueKind.Number || !record.GetProperty("X").TryGetInt32(out _) ||
+                record.GetProperty("Y").ValueKind != JsonValueKind.Number || !record.GetProperty("Y").TryGetInt32(out _) ||
+                record.GetProperty("Item").ValueKind != JsonValueKind.Object)
+                throw new InvalidOperationException("储物记录字段类型无效，保留原文。");
+            if (record.TryGetProperty("ReturnTo", out var origin) && origin.ValueKind != JsonValueKind.Null)
+            {
+                RequireFields(origin, "Place", "Inventory", "X", "Y", "Orientation", "Flipped");
+                if (origin.GetProperty("Place").ValueKind != JsonValueKind.String ||
+                    origin.GetProperty("Inventory").ValueKind != JsonValueKind.String ||
+                    !origin.GetProperty("X").TryGetInt32(out _) || !origin.GetProperty("Y").TryGetInt32(out _) ||
+                    !origin.GetProperty("Orientation").TryGetInt32(out _) ||
+                    origin.GetProperty("Flipped").ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                    throw new InvalidOperationException("槽位原来源字段无效，保留原文。");
+            }
+        }
+        var result = JsonSerializer.Deserialize<Document>(raw, JsonOptions)
+            ?? throw new InvalidOperationException("空储物记录，保留原文。");
+        Validate(result);
+        return result;
+    }
+
+    private static void RequireFields(JsonElement value, params string[] required)
+    {
+        if (value.ValueKind != JsonValueKind.Object)
+            throw new InvalidOperationException("储物记录缺少对象，保留原文。");
+        var remaining = new HashSet<string>(required, StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var field in value.EnumerateObject())
+        {
+            if (!seen.Add(field.Name))
+                throw new InvalidOperationException("储物记录字段重复：" + field.Name);
+            remaining.Remove(field.Name);
+        }
+        if (remaining.Count != 0)
+            throw new InvalidOperationException("储物记录缺少必需字段，保留原文。");
     }
 
     internal void Unbind()
@@ -227,6 +280,7 @@ internal sealed class WorkroomStorageState
         document = next; Revision++;
         PublishCatalog(catalog);
         timing.Mark("publish");
+        BusinessRuntime.Wake();
     }
 
     private void ResetCatalog()
@@ -315,7 +369,7 @@ internal sealed class WorkroomStorageState
     internal void Move(string id, string place, int x = 0, int y = 0, WorkroomItemCodec.Snapshot? snapshot = null, string slotName = "")
     {
         var old = Find(id) ?? throw new InvalidOperationException("记录已转移。");
-        var replacement = new Record { Id = old.Id, Place = place, Slot = slotName, X = x, Y = y, Item = snapshot ?? old.Item };
+        var replacement = new Record { Id = old.Id, Place = place, Slot = slotName, X = x, Y = y, Item = snapshot ?? old.Item, ReturnTo = old.ReturnTo };
         Replace(document.Items.Select(item => item.Id == id ? replacement : item).ToList());
     }
 
@@ -353,6 +407,13 @@ internal sealed class WorkroomStorageState
             if (!found) return false;
         }
         return true;
+    }
+
+    internal static bool PlaceAt(List<Record> next, Record record, int x, int y)
+    {
+        if (!Fits(Occupancy(next), record.Item.Footprint, x, y)) return false;
+        record.Place = "room"; record.Slot = ""; record.X = x; record.Y = y;
+        next.Add(record); return true;
     }
 
     // One bit per actual occupied cell: bounding-box holes remain usable.
@@ -400,6 +461,9 @@ internal sealed class WorkroomStorageState
                 !ServerRoomMachine.TryDefinition(item.Item.Identifier, out _)))
                 throw new InvalidOperationException("机架槽位或专用机器无效。");
             WorkroomItemCodec.Validate(item.Item);
+            if (item.ReturnTo is { } origin && (origin.Place is not ("room" or "box" or "shop") ||
+                origin.Orientation is < 0 or > 3 || origin.Place == "shop" && string.IsNullOrEmpty(origin.Inventory)))
+                throw new InvalidOperationException("槽位原来源记录无效。");
             if (item.Item.Count != 1) throw new InvalidOperationException("当前储物记录只支持独立单件。");
             foreach (var id in WorkroomItemCodec.Identities(item.Item))
                 if (!nativeIds.Add(id)) throw new InvalidOperationException("重复物品身份。");

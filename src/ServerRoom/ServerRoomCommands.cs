@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Il2Cpp;
+using System.Text.Json;
 
 namespace PCExpansion;
 
@@ -23,7 +24,10 @@ internal static partial class ServerRoomOperations
                 { Version = 3, Kind = definition.Kind, Body = record.Item };
             var capacity = ServerRoomCapacity.Read(info);
             facts.Add(new ServerRoomEconomy.MachineFact(reference.RecordId, reference.UniqueId,
-                reference.Kind, capacity.EffectiveCompute, capacity.DailyFee, capacity.CanRun));
+                reference.Kind, capacity.Tier, capacity.EffectiveCompute, capacity.Watts, capacity.CanRun,
+                capacity.Gpus.Select(gpu => new ServerRoomMiningModel.Card { Tier = gpu.Tier,
+                    VramGb = checked((int)gpu.MemoryGB), Intact = gpu.Intact }).ToArray(),
+                ServerRoomTransaction.Fingerprint(JsonSerializer.Serialize(info, WorkroomStorageState.JsonOptions))));
         }
         return facts;
     }
@@ -72,24 +76,51 @@ internal static partial class ServerRoomOperations
             StoreStation.GetDayCounter(), Guid.NewGuid().ToString("N")), null);
     }
 
-    internal static ServerRoomTradeMath.TradeQuote TradeQuote(string coinId, long units10, bool buy)
+    internal static void Mode(string recordId, int mode, bool downshift)
+    { var current = Require(); ServerRoomRuntime.Commit(ServerRoomEconomy.PrepareMode(current, recordId, mode, downshift), null); }
+
+    internal static void Pool(string coinId, int pool)
+    { var current = Require(); ServerRoomRuntime.Commit(ServerRoomEconomy.PreparePool(current, coinId, pool), null); }
+
+    internal static void AutoSale(ServerRoomState.AutoSalePolicy policy)
+    { var current = Require(); ServerRoomRuntime.Commit(ServerRoomEconomy.PreparePolicy(current, policy), null); }
+
+    internal static void Maintain(string recordId)
+    {
+        var current = Require(); var fact = MachineFact(current, recordId);
+        var change = ServerRoomEconomy.PrepareMaintenance(current, recordId);
+        var storage = WorkroomStorage.State.Items.ToList();
+        if (!WorkroomComponentParts.ConsumeMaterial(storage, "common_electronic", ServerRoomEconomy.MaintenanceMaterials(fact.Tier)))
+            throw new InvalidOperationException("工作间和储物箱内的电子零件不足。");
+        ServerRoomRuntime.Commit(change, storage);
+    }
+
+    internal static long MaximumTrade(string coinId, bool buy)
+    {
+        var current = Require(); ServerRoomDaily.RequireToday(current);
+        var store = PlayerStore.Instance ?? throw new InvalidOperationException("玩家现金不可用。");
+        return ServerRoomTradeMath.Maximum(current, ServerRoomMarket.CoinIndex(coinId), buy, store.GetCash());
+    }
+
+    internal static ServerRoomTradeMath.TradeQuote TradeQuote(string coinId, long microUnits, bool buy)
     {
         var current = Require();
         ServerRoomDaily.RequireToday(current);
         var index = ServerRoomState.CoinIds.ToList().IndexOf(coinId);
         if (index < 0) throw new InvalidOperationException("币种无效。");
-        return ServerRoomTradeMath.Preview(current.Market.Prices[index], units10, buy);
+        return ServerRoomTradeMath.Preview(current, index, microUnits, buy);
     }
 
-    internal static void TradeConfirmed(string coinId, long units10, bool buy, int expectedDay, decimal expectedPrice)
+    internal static void TradeConfirmed(string coinId, long microUnits, bool buy, int expectedDay, decimal expectedPrice, long expectedRevision, long expectedNet)
     {
         var current = Require();
         ServerRoomDaily.RequireToday(current);
         var index = ServerRoomMarket.CoinIndex(coinId);
-        if (current.Market.QuoteDay != expectedDay || current.Market.Prices[index] != expectedPrice)
+        if (current.Market.QuoteDay != expectedDay || current.Market.Prices[index] != expectedPrice ||
+            current.Revision != expectedRevision || current.Coins[index].DailyNetMicro != expectedNet)
             throw new InvalidOperationException("确认后行情已变化，请重新查看订单。");
         var store = PlayerStore.Instance ?? throw new InvalidOperationException("玩家现金不可用。");
-        ServerRoomRuntime.Commit(ServerRoomTradeMath.Prepare(current, coinId, units10, buy,
+        ServerRoomRuntime.Commit(ServerRoomTradeMath.Prepare(current, coinId, microUnits, buy,
             store.GetCash(), expectedDay), null);
     }
 }

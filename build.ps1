@@ -140,6 +140,9 @@ if ($duplicateNames.Count -gt 0) {
     $chineseManualPath = Join-Path $projectDir 'src\Infrastructure\computer_manual.zh.json'
     $chineseManualProvider = [System.Func[System.IO.Stream]]({ [IO.File]::OpenRead($chineseManualPath) }.GetNewClosure())
     [Microsoft.CodeAnalysis.ResourceDescription]::new('PCExpansion.Manual.zh.json', $chineseManualProvider, $true)
+    $storyContentPath = Join-Path $projectDir 'Stories\npc-stories.json'
+    $storyProvider = [System.Func[System.IO.Stream]]({ [IO.File]::OpenRead($storyContentPath) }.GetNewClosure())
+    [Microsoft.CodeAnalysis.ResourceDescription]::new('PCExpansion.Stories.npc-stories.json', $storyProvider, $true)
 )
 
 New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
@@ -201,6 +204,13 @@ $buildToken = [Guid]::NewGuid().ToString('N')
 $publications = @(
     @{ Target = $outputDll; Bytes = $mainBytes }
 )
+$storyOutputDir = Join-Path $outputDir 'PCExpansion/Stories'
+New-Item -ItemType Directory -Path $storyOutputDir -Force | Out-Null
+foreach ($storyName in @('npc-stories.json', '使用说明.txt')) {
+    $storySource = Join-Path $projectDir ('Stories/' + $storyName)
+    if (-not (Test-Path -LiteralPath $storySource -PathType Leaf)) { throw "缺少剧情资源：$storySource" }
+    $publications += @{ Target = (Join-Path $storyOutputDir $storyName); Bytes = [IO.File]::ReadAllBytes($storySource) }
+}
 if ($UpdateEnglishPatch) { $publications += @{ Target = $englishPatchOutputDll; Bytes = $englishBytes } }
 $committed = [System.Collections.Generic.List[object]]::new()
 try {

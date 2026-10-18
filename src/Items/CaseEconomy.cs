@@ -4,14 +4,12 @@ using Il2Cpp;
 
 namespace PCExpansion;
 
-/// <summary>配件分档价值、损坏回收、物资箱期望价和整机组装估价。</summary>
+/// <summary>配件分档价值、损坏回收、物资箱基础价和整机组装估价。</summary>
 internal static class CaseEconomy
 {
+    // 原独立抽法的提案权重与中奖率基准；不是新金额约束后的最终边际概率。
     internal const double LootChance = 0.65;
     internal const double BrokenChance = 0.40;
-    // Target weighted return: 80% of openings lose about 30%, 20% gain about 10%.
-    // Those outcomes average to 78% of purchase price, so price the case at EV / 0.78.
-    private const double TargetAverageReturn = 0.78;
     internal const string MachinePriceFeatureId = "pcrepair.machine_profile";
 
     private static readonly (int Offset, double Weight)[] TierRolls =
@@ -19,9 +17,8 @@ internal static class CaseEconomy
         (-2, 0.20), (-1, 0.34), (0, 0.45), (1, 0.01),
     };
 
-    // T5 crates are half of the expected T4/T5 crate mix. At 12% per slot,
-    // their 12 slots yield about 0.94 T5 parts; T4 crates yield about 0.08,
-    // for roughly 0.51 T5 parts per opening across an even T4/T5 mix.
+    // 原始提案权重。新规划器另保持原每箱T5/完好T5中奖率，
+    // 条件凑值后的每件档位占比和平均T5件数不再由此注释推算。
     private static readonly (int Offset, double Weight)[] Tier5CaseRolls =
     {
         (-2, 0.45), (-1, 0.43), (0, 0.11), (1, 0.01),
@@ -45,53 +42,17 @@ internal static class CaseEconomy
         internal List<PartRecord>? Nested { get; }
     }
 
-    internal static int MinimumLootTier(int caseTier) =>
-        Math.Max(1, Math.Clamp(caseTier, 1, Components.TierCount) - 2);
+    /// <summary>统一表中的五档固定箱价；出货不抬价，行情、零售和议价由原报价路径处理。</summary>
+    internal static long CratePrice(int tier) => HardwareEconomyPrices.UnopenedCrate(tier);
 
-    /// <summary>按物资箱等级窗口抽取配件档位；T5 箱单独降低 T5 出货占比。</summary>
-    internal static int RollLootTier(int caseTier, Random random)
+    internal static double LootTierChance(int caseTier, int partTier)
     {
         caseTier = Math.Clamp(caseTier, 1, Components.TierCount);
-        var rolls = GetTierRolls(caseTier);
-        var roll = random.NextDouble();
-        var cumulative = 0.0;
-        foreach (var entry in rolls)
-        {
-            cumulative += entry.Weight;
-            if (roll < cumulative)
-                return Math.Clamp(caseTier + entry.Offset, 1, Components.TierCount);
-        }
-        return Math.Clamp(caseTier, 1, Components.TierCount);
-    }
-
-    /// <summary>箱价按出货期望价值 / 78% 定价，对应目标的加权回收率。</summary>
-    internal static long CratePrice(int tier)
-    {
-        tier = Math.Clamp(tier, 1, Components.TierCount);
-        var expected = 0.0;
-        var rolls = GetTierRolls(tier);
-
-        foreach (var slot in CaseContents.SlotTags)
-        {
-            var type = FindType(slot);
-            if (type == null) continue;
-
-            var averageTierValue = 0.0;
-            foreach (var entry in rolls)
-            {
-                var itemTier = Math.Clamp(tier + entry.Offset, 1, Components.TierCount);
-                var intact = Components.ValueFor(type, itemTier, false);
-                var broken = Components.ValueFor(type, itemTier, true);
-                averageTierValue += entry.Weight * (intact * (1 - BrokenChance) + broken * BrokenChance);
-            }
-            expected += LootChance * averageTierValue;
-        }
-
-        var emptyProbability = Math.Pow(1 - LootChance, CaseContents.SlotTags.Length);
-        var cpu = FindType(Components.CpuTag);
-        if (cpu != null) expected += emptyProbability * Components.ValueFor(cpu, MinimumLootTier(tier), false);
-
-        return Math.Max(1, (long)Math.Round(expected / TargetAverageReturn));
+        double chance = 0;
+        foreach (var entry in GetTierRolls(caseTier))
+            if (Math.Clamp(caseTier + entry.Offset, 1, Components.TierCount) == partTier)
+                chance += entry.Weight;
+        return chance;
     }
 
     private static (int Offset, double Weight)[] GetTierRolls(int caseTier) =>
@@ -170,7 +131,7 @@ internal static class CaseEconomy
     internal static int MachineBonusPercent(string? label) => label switch
     {
         "整机" => 20,
-        "性价比机器" => 25,
+        "性价比机器" => 30,
         "刀把机" => 10,
         _ => 0,
     };

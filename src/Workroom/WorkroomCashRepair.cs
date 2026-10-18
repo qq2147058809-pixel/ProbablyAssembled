@@ -35,6 +35,7 @@ internal static class WorkroomCashRepair
 
     internal static bool AllowSessionChange()
     {
+        WakeRecovery();
         foreach (var receipt in receipts.ToArray()) if (receipt.Recovery) Recover(receipt);
         if (!Pending) return true;
         Core.Log?.Warning("当前存档现金维修仍待恢复，暂不切档；原凭据保留，稍后重试。");
@@ -66,6 +67,7 @@ internal static class WorkroomCashRepair
         {
             receipt.Recovery = true;
             Recover(receipt);
+            WakeRecovery();
             throw;
         }
     }
@@ -75,6 +77,16 @@ internal static class WorkroomCashRepair
         if (receipts.Count == 0 || Environment.TickCount64 < retryAt) return;
         retryAt = Environment.TickCount64 + 500;
         foreach (var receipt in receipts.ToArray()) if (receipt.Recovery) Recover(receipt);
+    }
+
+    internal static void WakeRecovery()
+    {
+        if (receipts.Count == 0) return;
+        BusinessWork.Schedule("workroom-cash", () =>
+        {
+            RetryRecovery();
+            return Pending;
+        }, intervalMs: 500);
     }
 
     private static bool SameOwner(Receipt receipt) => PlayerStore.IsInstanceExist() && PlayerStore.instance != null &&

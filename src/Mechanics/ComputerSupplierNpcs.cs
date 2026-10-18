@@ -20,7 +20,6 @@ internal static class ComputerSupplierNpcs
     private const string ThiefTag = "PCREPAIR_COMPUTER_PARTS_THIEF";
     private static readonly Random random = new();
     private static Il2CppSystem.Func<StoreClient>? sellerFactory, thiefFactory;
-    private static Il2CppSystem.Action? introduceAction;
     private static bool stocking;
     private static long cleanupAt;
     private sealed class StockCandidate
@@ -42,6 +41,7 @@ internal static class ComputerSupplierNpcs
     // retried before creating more stock, never against a later save session.
     private static readonly List<StockCandidate> stockCandidates = new();
 
+    internal static bool WorkPending => stocking || stockCandidates.Count != 0;
     internal static bool StockPending
     {
         get
@@ -72,6 +72,7 @@ internal static class ComputerSupplierNpcs
                 {
                     candidate.Destroyed = error == null;
                     candidate.DestroyUncertain = error != null;
+                    BusinessRuntime.Wake();
                 }
             }
             // An observer must never replace the original Destroy result.
@@ -176,8 +177,7 @@ internal static class ComputerSupplierNpcs
             LanguageText.Get(thief ? "supplier.thief.offer" : "text.055f6bdf0038"));
         greeting.isMainDialog = true;
         greeting.SetNextDialogue(offer);
-        introduceAction ??= (Il2CppSystem.Action)(Action)IntroduceCurrentSupplier;
-        offer.SetEndAction(introduceAction);
+        NpcIntroduction.Bind(client, greeting, offer, IntroduceCurrentSupplier);
         client.mainDialogue = greeting;
         client.isMainDialogueStarted = false;
     }
@@ -196,11 +196,10 @@ internal static class ComputerSupplierNpcs
         registry[ThiefId] = thiefFactory;
     }
 
-    private static void IntroduceCurrentSupplier()
+    private static void IntroduceCurrentSupplier(StoreClient client)
     {
         try
         {
-            var client = PlayerStore.Instance?.currentClientInstance?.storeClient;
             if (!IsSupplier(client)) return;
             AddStock(client!);
             client!.OnIntroduced();
@@ -361,7 +360,7 @@ internal static class ComputerSupplierNpcs
         if (store == null) return;
         stocking = true;
         try { AddStockCore(store, client); }
-        finally { stocking = false; }
+        finally { stocking = false; BusinessRuntime.Wake(); }
     }
 
     private static void AddStockCore(PlayerStore store, StoreClient client)
@@ -427,7 +426,7 @@ internal static class ComputerSupplierNpcs
             if (!client.IsTag(PostedPrefix + batchId + "_" + i))
                 throw new InvalidOperationException("电脑供应者货单尚有未交付商品。");
         client.AddTag(StockedTag);
-        Core.Log?.Msg(IsThief(client) ? "电脑配件小偷库存已上柜：" + plan.Count + " 件 T4/T5 配件，按原版标为赃物。" :
+        Core.Debug(IsThief(client) ? "电脑配件小偷库存已上柜：" + plan.Count + " 件 T4/T5 配件，按原版标为赃物。" :
             "电脑材料卖家库存已上柜：" + (plan.Count - 5) + " 件 T1～T3 完好随机配件、额外 1 颗完好 CPU 和 4 件维修材料（含螺丝、电子零件）。");
     }
 

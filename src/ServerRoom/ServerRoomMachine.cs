@@ -31,12 +31,16 @@ internal static class ServerRoomMachine
 
     private static readonly IReadOnlyList<Definition> definitions = Array.AsReadOnly(new[]
     {
-        new Definition(Mining, 1, 100, 1, 0, 0), new Definition(Mining, 2, 260, 2, 0, 0),
-        new Definition(Mining, 3, 550, 3, 0, 0), new Definition(Mining, 4, 1100, 4, 0, 0),
-        new Definition(Mining, 5, 2200, 6, 0, 0),
-        new Definition(Server, 1, 120, 0, 1, 2), new Definition(Server, 2, 200, 0, 1, 4),
-        new Definition(Server, 3, 500, 0, 2, 6), new Definition(Server, 4, 1100, 0, 3, 8),
-        new Definition(Server, 5, 2300, 0, 4, 12)
+        new Definition(Mining, 1, HardwareEconomyPrices.DedicatedBody(Mining, 1), 1, 0, 0),
+        new Definition(Mining, 2, HardwareEconomyPrices.DedicatedBody(Mining, 2), 2, 0, 0),
+        new Definition(Mining, 3, HardwareEconomyPrices.DedicatedBody(Mining, 3), 3, 0, 0),
+        new Definition(Mining, 4, HardwareEconomyPrices.DedicatedBody(Mining, 4), 4, 0, 0),
+        new Definition(Mining, 5, HardwareEconomyPrices.DedicatedBody(Mining, 5), 6, 0, 0),
+        new Definition(Server, 1, HardwareEconomyPrices.DedicatedBody(Server, 1), 0, 1, 2),
+        new Definition(Server, 2, HardwareEconomyPrices.DedicatedBody(Server, 2), 0, 1, 4),
+        new Definition(Server, 3, HardwareEconomyPrices.DedicatedBody(Server, 3), 0, 2, 6),
+        new Definition(Server, 4, HardwareEconomyPrices.DedicatedBody(Server, 4), 0, 3, 8),
+        new Definition(Server, 5, HardwareEconomyPrices.DedicatedBody(Server, 5), 0, 4, 12)
     });
     private static readonly Dictionary<string, Definition> byId = definitions.ToDictionary(d => d.Identifier, StringComparer.Ordinal);
     internal static IReadOnlyList<Definition> Definitions => definitions;

@@ -40,7 +40,7 @@ internal static class ComputerManualFont
         var material = font.material;
         if (material == null || material.mainTexture == null)
             throw new InvalidOperationException("原版简体中文手册字体图集材质尚未就绪。");
-        Core.Log?.Msg("[电脑手册字体] 字体=" + font.name + "，材质=" + material.name +
+        Core.Debug("[电脑手册字体] 字体=" + font.name + "，材质=" + material.name +
             "，图集=" + material.mainTexture.name + "，模式=" + font.atlasPopulationMode +
             "，所需字符=" + required.Length + "，补字前缺字=" + before.Count + "，添加后缺字=0。");
         return font;
@@ -103,7 +103,7 @@ internal static class ComputerManualFont
                     glyphMaterial = material == null ? "无" : material.name;
                     glyphAtlas = material == null || material.mainTexture == null ? "无" : material.mainTexture.name;
                 }
-                Core.Log?.Msg("[电脑手册字形] 页=" + (pageIndex + 1) + "，元素=" + text.gameObject.name +
+                Core.Debug("[电脑手册字形] 页=" + (pageIndex + 1) + "，元素=" + text.gameObject.name +
                     "，可见中文字形=" + visibleChinese + "，可见箭头=" + visibleArrows +
                     "，实际字形字体=" + glyphFont + "，材质=" + glyphMaterial + "，图集=" + glyphAtlas + "。");
                 if (title) observedTitle = true;

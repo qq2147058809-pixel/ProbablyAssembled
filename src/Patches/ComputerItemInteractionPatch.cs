@@ -8,7 +8,7 @@ internal static class ComputerItemInteraction
 {
     internal static bool Intercept(GameItem? item)
     {
-        if (ContactCard.IsCard(item)) return false;
+        if (ContactCard.IsCard(item) || MysteriousContactCard.IsCard(item)) return false;
         if (ComputerCase.IsCase(item))
         {
             CaseUnboxing.Notify(WorkroomMachineAssembly.Text("open_workroom"));

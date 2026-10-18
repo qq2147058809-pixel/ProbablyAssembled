@@ -293,7 +293,7 @@ internal static class UpperComputerBuyerNpc
             if (store == null || !IsBuyer(client)) return;
 
             ConfigurePurchaseRules(client!);
-            ApplyBuyerBudget(client!);
+            // Restore trading rules and offers without refilling this visit's spent budget.
             NpcStockOffers.Stock(store, client!, StockTag, "UPPER", () => new List<string>
             {
                 "pcrepair.computer_case_t" + random.Next(4, 6) + "_broken"
@@ -438,7 +438,7 @@ internal static class UpperComputerBuyerNpc
                 var dialogue = new Dialogue().SetText(client.displayName,
                     LanguageText.Get("npc.refusal.upper.low_tier"));
                 var shown = DialogUIManager.Instance?.StartDialogue(dialogue, true) == true;
-                Core.Log?.Msg("[电脑拒收对白] " + Core.Clean(targetItem.identifier) +
+                Core.Debug("[电脑拒收对白] " + Core.Clean(targetItem.identifier) +
                     "，npc.refusal.upper.low_tier，已显示=" + shown);
             }
             catch (Exception ex) { Core.Log?.Warning("上城区拒收对白显示失败：" + ex.Message); }

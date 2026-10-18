@@ -109,7 +109,8 @@ internal static class LowerAssemblerNpc
     {
         // AddBasicDialog 已按旧模板生成交易对白，修改委托后还需要替换这些缓存对白。
         client.placedWrongItemWhenSellingToDialogue = new Dialogue().SetText(client.displayName,
-            LanguageText.Get("text.79392d2f43d1") );
+            LanguageText.Get(PhoneAssemblerNpc.IsPhoneAssembler(client)
+                ? "npc.purchase.vesper.rules" : "text.79392d2f43d1") );
         client.placeRightItemWhenSellingToDialogue = new Dialogue().SetText(client.displayName,
             LanguageText.Get("text.386d849e56df") );
     }
@@ -164,7 +165,7 @@ internal static class LowerAssemblerNpc
         {
             if (ServerRoomHardware.IsHardware(item))
                 return PhoneAssemblerNpc.IsPhoneAssembler(client) && DedicatedSaleReady(item);
-            return IsAllowedAssemblerPurchase(item);
+            return PurchaseRefusalReason(item, PhoneAssemblerNpc.IsPhoneAssembler(client)) == null;
         }
         catch (Exception ex)
         {
@@ -179,23 +180,47 @@ internal static class LowerAssemblerNpc
         if (item == null) return false;
         try
         {
-            if (!Components.IsComponent(item) && !ComputerCase.IsCase(item) && !ServerRoomHardware.IsHardware(item)) return false;
-            var allowed = ServerRoomHardware.IsHardware(item) ? DedicatedSaleReady(item) : IsAllowedAssemblerPurchase(item);
+            var partId = Core.Clean(item.identifier);
+            var isPart = WorkroomComponentTemplates.TryPart(partId, out _, out _, out _);
+            if (!Components.IsComponent(item) && !ComputerCase.IsCase(item) &&
+                !ServerRoomHardware.IsHardware(item) && !isPart && !item.IsTag("PCREPAIR_COMPONENT_PART")) return false;
+            var allowed = ServerRoomHardware.IsHardware(item) ? DedicatedSaleReady(item) :
+                isPart ? IsPhonePartPurchase(item, validateState: true) :
+                IsAllowedAssemblerPurchase(item) || PurchaseRefusalReason(item, allowHighTier: true) == null;
             if (allowed && !item.IsTag(PurchaseTag)) item.EnableTag(PurchaseTag, false);
             else if (!allowed && item.IsTag(PurchaseTag)) item.DisableTag(PurchaseTag, false);
             return allowed;
         }
         catch (Exception ex)
         {
+            try { item?.DisableTag(PurchaseTag, false); } catch { /* An unreadable item must not keep a stale purchase tag. */ }
             Core.Log?.Warning("同步装机佬收购标签失败：" + ex.Message);
             return false;
         }
     }
 
-    private static string? PurchaseRefusalReason(GameItem? item)
+    private static bool IsPhonePartPurchase(GameItem item, bool validateState = false)
+    {
+        var id = Core.Clean(item.identifier);
+        if (!WorkroomComponentTemplates.TryPart(id, out _, out _, out _) ||
+            !item.IsTag("PCREPAIR_COMPONENT_PART") || !item.IsTag(WorkroomComponentParts.PartTag) ||
+            item.unitCount != 1 || id.EndsWith("_broken", StringComparison.Ordinal) ||
+            item.IsTag(Components.BrokenTag) || item.IsTag("BROKEN_MACHINE")) return false;
+        if (!validateState) return true;
+        var part = WorkroomComponentParts.ReadPart(item);
+        if (part == null || part.Broken) return false;
+        WorkroomComponentParts.ValidatePart(new WorkroomItemCodec.Node { Identifier = id, Part = part });
+        return true;
+    }
+
+    private static string? PurchaseRefusalReason(GameItem? item, bool allowHighTier = false)
     {
         if (item == null) return "没有物品";
         if (ServerRoomHardware.IsHardware(item)) return "机房专用设备仅洛夕回收";
+
+        if (WorkroomComponentTemplates.TryPart(Core.Clean(item.identifier), out _, out _, out _))
+            return allowHighTier && item.IsTag(PurchaseTag) && IsPhonePartPurchase(item) ?
+                null : "散件只收完好电脑配件";
 
         // 单独散件只收完好电脑配件；原版其他客户行为保持不变。
         if (Components.IsComponent(item))
@@ -205,15 +230,21 @@ internal static class LowerAssemblerNpc
             {
                 var board = WorkroomMachineAssembly.Read(item);
                 if (WorkroomMachineAssembly.AllowsBoardPurchase(board, spec.Tier,
-                    spec.Broken || item.IsTag(Components.BrokenTag), 1, 3)) return null;
-                if (board == null ? spec.Tier >= 4 : WorkroomMachineAssembly.Assess(board).Parts.Any(part => part.Tier >= 4))
+                    spec.Broken || item.IsTag(Components.BrokenTag), 1, allowHighTier ? 5 : 3)) return null;
+                if (!allowHighTier && (board == null ? spec.Tier >= 4 :
+                    WorkroomMachineAssembly.Assess(board).Parts.Any(part => part.Tier >= 4)))
                     return "高阶配件";
                 return "缺少配件或 T 度搭配不合规";
             }
-            if (WorkroomMachineAssembly.Read(item) is { } machine)
+            if (WorkroomMachineAssembly.Read(item) is { } machine && !allowHighTier)
                 foreach (var part in WorkroomMachineAssembly.Flatten(machine)) if (part.Tier >= 4) return "高阶配件";
-            if (spec != null && !spec.Owner.IsCase && WorkroomComponentParts.ConfigurationTier(item) >= 4) return "高阶配件";
-            return item.IsTag(Components.BrokenTag) ? "散件只收完好电脑配件" : null;
+            if (spec != null && !spec.Owner.IsCase)
+            {
+                var tier = WorkroomComponentParts.ConfigurationTier(item);
+                if (!allowHighTier && tier >= 4) return "高阶配件";
+            }
+            return spec?.Broken == true || item.IsTag(Components.BrokenTag) ?
+                "散件只收完好电脑配件" : null;
         }
 
         if (!ComputerCase.IsCase(item)) return "不是电脑商品";
@@ -221,28 +252,30 @@ internal static class LowerAssemblerNpc
         // 因为 SyncCaseForTrading 会重跑估价，从而递归回本方法并耗尽调用栈。
         // 拖放回调会实时写入槽位标签，交易入口也会先同步仍打开的机箱。
         var parts = CaseEconomy.InspectCase(item, out var label);
-        return CasePurchaseRefusalReason(item, label, parts);
+        return CasePurchaseRefusalReason(item, label, parts, allowBottleneck: allowHighTier);
     }
 
     internal static void RefreshCasePurchaseEligibility(GameItem item, string? label,
         IReadOnlyList<CaseEconomy.PartRecord> parts)
     {
-        var allowed = ComputerCase.IsCase(item) && CasePurchaseRefusalReason(item, label, parts) == null;
+        // Shared native tag covers either assembler; IsAllowedFor still enforces the current client's rules.
+        var allowed = ComputerCase.IsCase(item) && CasePurchaseRefusalReason(item, label, parts, allowBottleneck: true) == null;
         if (allowed && !item.IsTag(PurchaseTag)) item.EnableTag(PurchaseTag, false);
         else if (!allowed && item.IsTag(PurchaseTag)) item.DisableTag(PurchaseTag, false);
     }
 
     private static string? CasePurchaseRefusalReason(GameItem item, string? label,
-        IReadOnlyList<CaseEconomy.PartRecord> parts)
+        IReadOnlyList<CaseEconomy.PartRecord> parts, bool allowBottleneck = false)
     {
-        if (label == "刀把机") return "刀把机";
+        if (label == "刀把机" && !allowBottleneck) return "刀把机";
         if (parts.Any(part => part.Tier >= 4)) return "高阶配件";
         if (item.IsTag(Components.BrokenTag)) return "不收购破损机箱货箱";
         if (Components.TierOf(item) is < 1 or > 3) return "机箱超过收购 T 度范围";
 
-        if (label != "整机" && label != "性价比机器") return "缺少配件或 T 度搭配不合规";
+        if (label != "整机" && label != "性价比机器" && !(allowBottleneck && label == "刀把机"))
+            return "缺少配件或 T 度搭配不合规";
 
-        // 整机必须装齐，所有已装配部件均为完好 T1–T3；明确排除刀把机。
+        // 洛夕可收刀把机；所有机型仍须装齐，机箱和内部配件均为完好 T1–T3。
         foreach (var part in parts)
             if (part.Tier > 3 || part.Broken) return part.Broken ? "整机含有损坏配件" : "整机含有 T4/T5 配件";
         return null;
@@ -250,12 +283,13 @@ internal static class LowerAssemblerNpc
 
     private static Dialogue RefusalDialogue(StoreClient client, GameItem? item)
     {
-        var reason = PurchaseRefusalReason(item);
+        var reason = PurchaseRefusalReason(item, PhoneAssemblerNpc.IsPhoneAssembler(client));
         var line = reason switch
         {
             "高阶配件" => LanguageText.Get("text.6a7bc1081071"),
             "刀把机" => LanguageText.Get("text.e6f3fbcb2abf"),
-            _ => LanguageText.Get("text.4887c4447d04")
+            _ => LanguageText.Get(PhoneAssemblerNpc.IsPhoneAssembler(client)
+                ? "npc.purchase.vesper.rules" : "text.4887c4447d04")
         };
         return new Dialogue().SetText(client.displayName, line);
     }
@@ -270,7 +304,7 @@ internal static class LowerAssemblerNpc
             // 当前访客读档后也重新配置，避免存档实例保留模板清单或旧交易对白。
             ConfigurePurchaseRules(client!);
             ConfigureTradeDialogue(client!);
-            ApplyAssemblerBudget(client!);
+            // The factory initializes a new visit; a loaded visitor keeps its remaining budget.
             EnsureManualOffer(store, client!);
             EnsureContactOffer(store, client!);
             NpcStockOffers.Stock(store, client!, StockTag, "LOWER", CreateStockPlan, 5, 6,
@@ -302,7 +336,8 @@ internal static class LowerAssemblerNpc
             "pcrepair.computer_case_t" + random.Next(1, 4) + "_broken",
             "pcrepair.computer_case_t" + random.Next(1, 4)
         };
-        var available = Components.All.Where(type => !type.IsCase).ToList();
+        // Existing saved plans still validate; only newly rolled stock excludes broken CPUs.
+        var available = Components.All.Where(type => !type.IsCase && type.Tag != Components.CpuTag).ToList();
         for (var i = available.Count - 1; i > 0; i--)
         {
             var j = random.Next(i + 1);
@@ -417,7 +452,7 @@ internal static class LowerAssemblerNpc
             if (injected > 0)
             {
                 spawnWeightRegistered = true;
-                Core.Log?.Msg("[深空装机] 下层装机佬已加入客户权重表，权重按下城区化学家配置复制；注册组数=" + injected + "。");
+                Core.Debug("[深空装机] 下层装机佬已加入客户权重表，权重按下城区化学家配置复制；注册组数=" + injected + "。");
             }
             else
             {
@@ -510,13 +545,11 @@ internal static class LowerAssemblerNpc
                 if (!IsAssembler(__instance)) return;
                 __result = IsAllowedFor(__instance, gameItem);
                 // 摆货流程在拒收检查之前读取此对白；按当前物品刷新，避免沿用上一件的原因。
-                if (!__result && gameItem != null && ComputerCase.IsCase(gameItem) &&
+                if (!__result && !PhoneAssemblerNpc.IsPhoneAssembler(__instance) && gameItem != null && ComputerCase.IsCase(gameItem) &&
                     CaseEconomy.MachineLabel(gameItem) == "刀把机")
                 {
-                    var key = PhoneAssemblerNpc.IsPhoneAssembler(__instance)
-                        ? "npc.refusal.vesper.bottleneck" : "npc.refusal.lower.bottleneck";
                     __instance.placedWrongItemWhenSellingToDialogue = new Dialogue()
-                        .SetText(__instance.displayName, LanguageText.Get(key));
+                        .SetText(__instance.displayName, LanguageText.Get("npc.refusal.lower.bottleneck"));
                 }
                 else if (!__result)
                 {
@@ -539,11 +572,10 @@ internal static class LowerAssemblerNpc
                 if (!IsAssembler(client) || targetItem == null) return;
                 if (ComputerCase.IsCase(targetItem)) CaseEconomy.EvaluateCase(targetItem);
                 RefreshPurchaseEligibility(targetItem);
-                var reason = PurchaseRefusalReason(targetItem);
+                var reason = PurchaseRefusalReason(targetItem, PhoneAssemblerNpc.IsPhoneAssembler(client));
                 if (reason == "刀把机")
-                    __state = PhoneAssemblerNpc.IsPhoneAssembler(client)
-                        ? "npc.refusal.vesper.bottleneck" : "npc.refusal.lower.bottleneck";
-                Core.Log?.Msg("[深空装机] 装机佬收购检查：" + Core.Clean(targetItem.identifier) +
+                    __state = "npc.refusal.lower.bottleneck";
+                Core.Debug("[深空装机] 装机佬收购检查：" + Core.Clean(targetItem.identifier) +
                     "，资格=" + (reason ?? "符合") +
                     "，原版收购标签=" + targetItem.IsTag(PurchaseTag) +
                     "，剩余预算=" + client!.clientBudget +
@@ -561,7 +593,7 @@ internal static class LowerAssemblerNpc
                 if (!IsAssembler(client) || client!.clientIntent != StoreClient.ClientIntent.SELLNBUY) return;
                 var dialogue = new Dialogue().SetText(client.displayName, LanguageText.Get(__state));
                 var shown = DialogUIManager.Instance?.StartDialogue(dialogue, true) == true;
-                Core.Log?.Msg("[电脑拒收对白] " + Core.Clean(targetItem.identifier) + "，" + __state + "，已显示=" + shown);
+                Core.Debug("[电脑拒收对白] " + Core.Clean(targetItem.identifier) + "，" + __state + "，已显示=" + shown);
             }
             catch (Exception ex) { Core.Log?.Warning("装机佬拒收对白显示失败：" + ex.Message); }
         }
@@ -595,7 +627,7 @@ internal static class LowerAssemblerNpc
                 if (lastItem == gameItem.Pointer && lastResult == __result) return;
                 lastItem = gameItem.Pointer;
                 lastResult = __result;
-                Core.Log?.Msg("[深空装机] 装机佬原版成交资格：" + Core.Clean(gameItem.identifier) +
+                Core.Debug("[深空装机] 装机佬原版成交资格：" + Core.Clean(gameItem.identifier) +
                     "，允许成交=" + __result + "，收购标签=" + gameItem.IsTag(PurchaseTag) +
                     "，预算足够=" + client!.HasBudgetLeftToBuy(gameItem) +
                     "，待鉴定=" + client.CanClientExposeAnyFeature(gameItem));

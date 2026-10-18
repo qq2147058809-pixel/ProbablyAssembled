@@ -72,7 +72,9 @@ internal sealed class WorkroomItemInfo : IDisposable
             stage = "悬停框绘制";
             var infoKey = ItemTooltipHandler.current?.key ?? KeyCode.LeftAlt;
             var text = Input.GetKey(infoKey) ? saved.Content.Advanced : saved.Content.Basic;
-            Draw(text, saved.Content.Characters);
+            var compatible = WorkroomCandidateHighlight.Description(record.Item);
+            if (compatible.Length > 0) text += "\n" + compatible;
+            Draw(text, saved.Content.Characters + compatible);
         }
         catch (Exception ex) { Clear(); Warn(stage, record.Item.Identifier, ex); }
     }
@@ -85,8 +87,10 @@ internal sealed class WorkroomItemInfo : IDisposable
         {
             canvas.GetComponent<GraphicRaycaster>().enabled = false;
             face = AssemblyDebugUi.Image(canvas.transform, "TooltipBorder", new Color(.53f,.29f,.25f,1), false).gameObject;
+            UiRoundedGeometry.Fill(face.GetComponent<Image>());
             face.SetActive(false);
             background = AssemblyDebugUi.Image(face.transform, "TooltipBackground", new Color(.16f,.13f,.20f,1), false).gameObject;
+            UiRoundedGeometry.Fill(background.GetComponent<Image>(), UiRoundedGeometry.ControlRadius - 2);
             label = AssemblyDebugUi.Text(face.transform, "ItemInformation", "", font, BodySize, true);
             label.fontSize = BodySize;
             label.fontStyle = FontStyles.Normal;

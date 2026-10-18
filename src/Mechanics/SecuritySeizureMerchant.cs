@@ -16,7 +16,6 @@ internal static class SecuritySeizureMerchant
     private const string LargeSkippedTag = "PCREPAIR_SECURITY_SEIZURE_LARGE_SKIPPED";
     private const string SmallSkippedTag = "PCREPAIR_SECURITY_SEIZURE_SMALL_SKIPPED";
     private const string LastDayKey = "pcrepair.security_seizure.last_scheduled_day";
-    private static Il2CppSystem.Action? introduceAction;
 
     internal static bool IsMerchant(StoreClient? client) => client != null &&
         (client.IsTag(ClientTag) || Core.Clean(client.identifier) == Id);
@@ -52,17 +51,15 @@ internal static class SecuritySeizureMerchant
         greeting.isMainDialog = true;
         greeting.SetNextDialogue(offer);
         offer.SetNextDialogue(question);
-        introduceAction ??= (Il2CppSystem.Action)(Action)IntroduceCurrent;
-        question.SetEndAction(introduceAction);
+        NpcIntroduction.Bind(client, greeting, question, IntroduceCurrent);
         client.mainDialogue = greeting;
         client.isMainDialogueStarted = false;
     }
 
-    private static void IntroduceCurrent()
+    private static void IntroduceCurrent(StoreClient client)
     {
         try
         {
-            var client = PlayerStore.Instance?.currentClientInstance?.storeClient;
             if (!IsMerchant(client)) return;
             AddStock();
             client!.OnIntroduced();
@@ -87,7 +84,7 @@ internal static class SecuritySeizureMerchant
         {
             var store = PlayerStore.Instance;
             var client = store?.currentClientInstance?.storeClient;
-            if (store == null || !IsMerchant(client)) return;
+            if (store == null || !IsMerchant(client) || !JiangbaiStory.AllowsOrdinary(store)) return;
             StockOne(store, client!, SecuritySeizureBoxes.LargeId,
                 "SECURITY_SEIZURE_LARGE", LargeSkippedTag);
             StockOne(store, client!, SecuritySeizureBoxes.SmallId,
@@ -125,14 +122,14 @@ internal static class SecuritySeizureMerchant
         try
         {
             var day = StoreStation.GetDayCounter();
-            if (day < 4 || day % 7 != 4) return;
+            if (!JiangbaiStory.AllowsOrdinary(store) || day < 4 || day % 7 != 4) return;
             var manager = store.storeClientManager;
             var stack = manager?.clientStack;
             if (manager == null || stack == null) return;
             EnsureRegistered();
             var text = day.ToString(CultureInfo.InvariantCulture);
             var current = store.currentClientInstance?.storeClient;
-            if (store.isClientArrived && IsMerchant(current)) { RecordDay(store, text); return; }
+            if (IsMerchant(current)) { RecordDay(store, text); return; }
             StoreClient? existing = null;
             for (var i = stack.Count - 1; i >= 0; i--)
             {
@@ -156,7 +153,7 @@ internal static class SecuritySeizureMerchant
                 stack.RemoveAt(i);
                 stack.Insert(0, client);
                 RecordDay(store, text);
-                Core.Log?.Msg("[治安收缴] 江白已排在周四队首：第 " + text + " 天。");
+                Core.Debug("[治安收缴] 江白已排在周四队首：第 " + text + " 天。");
                 return;
             }
             Core.Log?.Warning("江白入队未确认，保留次日重试资格。");
@@ -199,7 +196,7 @@ internal static class SecuritySeizureMerchant
     internal static class ArrivalStockPatch
     {
         [HarmonyPriority(Priority.Last)]
-        private static void Postfix() => AddStock();
+        private static void Postfix() { AddStock(); BusinessRuntime.Wake(); }
     }
 
     [HarmonyPatch(typeof(StoreClient), nameof(StoreClient.OnIntroduced))]

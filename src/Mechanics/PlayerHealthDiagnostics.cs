@@ -52,7 +52,7 @@ internal static class PlayerHealthDiagnostics
         try
         {
             if (Read() is { Injured: true } sample)
-                Core.Log?.Msg($"{Marker} sleep=admitted-by-PCExpansion; {sample.Describe}");
+                Core.Debug($"{Marker} sleep=admitted-by-PCExpansion; {sample.Describe}");
         }
         catch { }
     }
@@ -70,9 +70,9 @@ internal static class PlayerHealthDiagnostics
                 var owners = HarmonyLib.Harmony.GetPatchInfo(method)?.Owners;
                 var text = owners == null ? "unavailable" : string.Join(",", owners.OrderBy(x => x).Take(20));
                 text = new string(text.Where(c => !char.IsControl(c)).Take(500).ToArray());
-                Core.Log?.Msg($"{Marker} method={method.Name}; harmonyOwners={text}");
+                Core.Debug($"{Marker} method={method.Name}; harmonyOwners={text}");
             }
-            Core.Log?.Msg($"{Marker} method={method.Name}; before=({before.Describe}); " +
+            Core.Debug($"{Marker} method={method.Name}; before=({before.Describe}); " +
                 $"after=({after.Describe}); originalRan={originalRan?.ToString() ?? "unknown"}; " +
                 $"result={(error == null ? "returned" : "exception:" + error.GetType().Name)}");
         }

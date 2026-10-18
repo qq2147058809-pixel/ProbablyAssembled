@@ -83,7 +83,7 @@ internal static class ComputerSupplierSchedule
                 if (actual != null && actual.Pointer == client.Pointer)
                 {
                     data[key] = dayText + ":1:1";
-                    Core.Log?.Msg("[深空装机] 已在当日来客队尾加入" + client.displayName + "，第" + dayText + "天。");
+                    Core.Debug("[深空装机] 已在当日来客队尾加入" + client.displayName + "，第" + dayText + "天。");
                     break;
                 }
         }
@@ -106,7 +106,7 @@ internal static class ComputerSupplierSchedule
                 sign ? ComputerSign.SellerInviteChance : 30); }
             catch (Exception ex) { Core.Log?.Error("安排电脑材料卖家失败：" + ex); }
             try { ArrangeOne(store, manager, day, run, ComputerSupplierNpcs.ThiefId, ThiefDecisionKey, 12,
-                sign ? ComputerSign.ThiefInviteChance : 20); }
+                sign ? ComputerSign.ThiefInviteChance : 15); }
             catch (Exception ex) { Core.Log?.Error("安排电脑配件小偷失败：" + ex); }
         }
         catch (Exception ex) { Core.Log?.Error("电脑供应者每日安排失败：" + ex); }
@@ -123,9 +123,12 @@ internal static class ComputerSupplierSchedule
         {
             Arrange(__instance);
             // 原版和随机供应者的当日安排都结束后，再把周四江白固定到队首。
+            JiangbaiStory.Update(__instance);
             SecuritySeizureMerchant.Arrange(__instance);
             // 订货送货是本日最终队首；0504 电话访客仍独立留在队列中。
             ServerRoomDeliverySchedule.OnShutterOpened(__instance);
+            LuoxiStory.OnShutterOpened(__instance);
+            JiangbaiStory.OnShutterOpened(__instance);
         }
     }
 }

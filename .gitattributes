@@ -10,3 +10,6 @@
 *.png binary
 *.jpg binary
 *.jpeg binary
+
+# Localization contracts hash the exact Chinese catalog bytes.
+/src/Infrastructure/translations.zh.json -text

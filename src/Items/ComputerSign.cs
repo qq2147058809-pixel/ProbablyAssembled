@@ -11,7 +11,7 @@ internal static class ComputerSign
     internal const string SpriteKey = "pcrepair.sign_computer_sprite";
     internal const string ShowcaseType = "PCREPAIR_COMPUTER_MATERIAL";
     internal const int SellerInviteChance = 75;
-    internal const int ThiefInviteChance = 40;
+    internal const int ThiefInviteChance = 30;
 
     internal static GameItem Create()
     {
@@ -50,7 +50,7 @@ internal static class ComputerSign
             try
             {
                 __instance.Set(Id, (Il2CppSystem.Func<GameItem>)(Func<GameItem>)Create);
-                Core.Log?.Msg("已注册 2×2 电脑灯牌。");
+                Core.Debug("已注册 2×2 电脑灯牌。");
             }
             catch (Exception ex) { Core.Log?.Error("注册电脑灯牌失败：" + ex); }
         }

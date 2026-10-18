@@ -9,6 +9,12 @@ namespace PCExpansion;
 /// <summary>机房会话与现金/双键发布。任何未决操作由本类保管；UI 与视图不是库存。</summary>
 internal static class ServerRoomRuntime
 {
+    // Only emitted after receipt recovery has restored and verified every before image.
+    internal sealed class CommitRolledBackException : InvalidOperationException
+    {
+        internal CommitRolledBackException(Exception cause) : base(cause.Message, cause) { }
+    }
+
     private sealed class Operation
     {
         internal PlayerStore Owner = null!;
@@ -35,7 +41,8 @@ internal static class ServerRoomRuntime
     {
         get
         {
-            try { return document != null && error == null && SameOwner() && WorkroomStorage.State.Ready && !Pending; }
+            try { return document != null && error == null && BoundOwner() && WorkroomStorage.State.Ready &&
+                checkedStorageRevision == WorkroomStorage.State.Revision && !Pending; }
             catch { return false; }
         }
     }
@@ -54,13 +61,34 @@ internal static class ServerRoomRuntime
         PlayerStore.instance.saveSlotId == operation.Receipt.Binding.Slot && operation.Owner.Pointer == operation.Receipt.Binding.Owner &&
         operation.Owner.runID == operation.Receipt.Binding.Run && operation.Owner.saveSlotId == operation.Receipt.Binding.Slot;
 
-    private static bool SameOwner() => owner != null && PlayerStore.IsInstanceExist() && PlayerStore.instance != null &&
-        PlayerStore.instance.Pointer == owner.Pointer && owner.runID == run && owner.saveSlotId == slot && SaveGeneration.IsSupported(owner);
+    private static bool BoundOwner() => owner != null && PlayerStore.IsInstanceExist() && PlayerStore.instance != null &&
+        PlayerStore.instance.Pointer == owner.Pointer && owner.runID == run && owner.saveSlotId == slot;
+    private static bool SameOwner() => BoundOwner() && SaveGeneration.IsSupported(owner!);
+
+    internal static bool NeedsWork => Pending || error == null && !Ready;
+
+    // UI reads use Ready. Asset/save/session boundaries still read the exact native envelope.
+    internal static bool ValidateCurrent()
+    {
+        if (owner == null) return !Pending;
+        try
+        {
+            if (!SameOwner() || document == null || error != null || Pending || !WorkroomStorage.State.Ready) return false;
+            if (!Equal(Raw(owner, ServerRoomState.SaveKey), moduleRaw))
+                throw new InvalidOperationException("机房原文在会话绑定后被外部改变。");
+            ValidateRacks(document, WorkroomStorage.State.Items);
+            checkedStorageRevision = WorkroomStorage.State.Revision;
+            return true;
+        }
+        catch (Exception ex) { Fail(ex); return false; }
+    }
 
     internal static void Update(PlayerStore store)
     {
         try
         {
+            if (BoundOwner() && (error != null || document != null &&
+                checkedStorageRevision == WorkroomStorage.State.Revision)) return;
             if (!SaveGeneration.IsSupported(store) || !PlayerStore.IsInstanceExist() || PlayerStore.instance == null ||
                 PlayerStore.instance.Pointer != store.Pointer) return;
             if (owner == null || owner.Pointer != store.Pointer || run != store.runID || slot != store.saveSlotId)
@@ -69,6 +97,8 @@ internal static class ServerRoomRuntime
                 epoch = checked(epoch + 1); document = null; moduleRaw = null; error = null; checkedStorageRevision = -1;
                 moduleRaw = Raw(store, ServerRoomState.SaveKey);
                 var present = store.modData != null && store.modData.ContainsKey(ServerRoomState.SaveKey);
+                if (!present && store.modData != null && store.modData.ContainsKey("pcexpansion.server-room.v1"))
+                    throw new InvalidOperationException("检测到旧机房记录；硬核规则不迁移旧档。");
                 document = ServerRoomState.Load(present, moduleRaw, run!, slot) ?? ServerRoomState.New(run!, slot);
                 document.RuntimeBinding = Binding();
             }
@@ -83,14 +113,14 @@ internal static class ServerRoomRuntime
         }
         catch (Exception ex)
         {
-            error = "data_error";
-            Core.Log?.Error("机房模块未加载或引用无效；保留原文并禁止资产操作：" + ex.Message);
+            Fail(ex);
         }
     }
 
     internal static bool AllowSessionChange()
     {
         RecoverActive();
+        if (BoundOwner() && !Pending && error == null && !ValidateCurrent()) return false;
         if (!ServerRoomDaily.AllowSessionChange) return false;
         if (!Pending) return true;
         Core.Log?.Warning("机房资产事务仍待恢复，暂不切档；原凭据保留。");
@@ -108,7 +138,7 @@ internal static class ServerRoomRuntime
 
     internal static void Commit(ServerRoomState.Change change, IReadOnlyList<WorkroomStorageState.Record>? storageNext)
     {
-        if (change == null || !Ready || document == null || owner == null || WorkroomStorage.Busy ||
+        if (change == null || !ValidateCurrent() || !Ready || document == null || owner == null || WorkroomStorage.Busy ||
             WorkroomItemCodec.CleanupPending || WorkroomStorage.State.PendingRecords.Count != 0 ||
             WorkroomCashRepair.Pending || ComputerSupplierNpcs.StockPending || NpcStockOffers.Pending)
             throw new InvalidOperationException("机房会话不可用或此前资产交付尚未完成。");
@@ -177,9 +207,17 @@ internal static class ServerRoomRuntime
             operation.Executing = false;
             Core.Log?.Warning("机房提交异常，按实际现金和两个原文恢复：" + ex.Message);
             Recover(operation);
-            if (!operation.Committed) throw;
+            if (!operation.Committed)
+            {
+                if (!operations.Contains(operation)) throw new CommitRolledBackException(ex);
+                throw;
+            }
         }
-        finally { operation.Executing = false; }
+        finally
+        {
+            operation.Executing = false;
+            if (Pending) ServerBusiness.Wake(operation.Owner);
+        }
     }
 
     internal static void RetryRecovery()
@@ -286,6 +324,13 @@ internal static class ServerRoomRuntime
         checkedStorageRevision = WorkroomStorage.State.Revision; error = null;
         operation.Committed = committed;
         operations.Remove(operation);
+        BusinessRuntime.Wake();
+    }
+
+    private static void Fail(Exception ex)
+    {
+        error = "data_error";
+        Core.Log?.Error("机房模块未加载或引用无效；保留原文并禁止资产操作：" + ex.Message);
     }
 
     private static ServerRoomState.Binding Binding() => new(owner?.Pointer ?? IntPtr.Zero, run ?? "", slot, epoch,
@@ -316,8 +361,12 @@ internal static class ServerRoomRuntime
             var matching = racks.Where(record => record.Id == reference.RecordId).ToArray();
             if (matching.Length != 1 || !WorkroomStorageState.TryRackIndex(matching[0].Slot, out var index) || index != reference.RackIndex ||
                 matching[0].Item.Nodes.Count == 0 || matching[0].Item.Nodes[0].UniqueId != reference.UniqueId ||
-                !ServerRoomMachine.TryDefinition(matching[0].Item.Identifier, out var definition) || definition.Kind != reference.Kind)
+                !ServerRoomMachine.TryDefinition(matching[0].Item.Identifier, out var definition) || definition.Kind != reference.Kind ||
+                definition.Tier > ServerRoomState.HighestTier(module))
                 throw new InvalidOperationException("机房机器引用、位置、身份或类型不一致。");
+            if (reference.Kind == ServerRoomMachine.Mining &&
+                module.Maintenance.Single(item => item.UniqueId == reference.UniqueId).Tier != definition.Tier)
+                throw new InvalidOperationException("机房维护记录的真实型号不一致。");
         }
     }
 }

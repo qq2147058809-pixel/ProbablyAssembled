@@ -1,9 +1,12 @@
 #nullable disable
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Il2CppTMPro;
 using UnityEngine;
 using UnityEngine.UI;
+
+using BrowserTone = PCExpansion.ServerRoomBrowserTheme.Tone;
 
 namespace PCExpansion;
 
@@ -14,12 +17,13 @@ internal sealed partial class ServerRoomView
 
     private void ApplyBrowserRoute(ServerRoomBrowserNavigation.Route route)
     {
-        ClearFocus(); CancelConfirmation(); CloseBrowserMenus(); browserMinimized = false;
+        SaveTradeInput(); ClearFocus(); CloseBrowserMenus(); browserMinimized = false;
+        hardcorePage = HardcorePage.None;
         switch (route.Kind)
         {
             case ServerRoomBrowserNavigation.Page.Catalog:
                 mode = PanelMode.Catalog;
-                catalogKind = route.Parameter == 0 ? ServerRoomMachine.Mining : ServerRoomMachine.Server;
+                catalogKind = route.Parameter == 0 ? "machines" : "components";
                 selectedRack = -1; break;
             case ServerRoomBrowserNavigation.Page.Rack:
                 if (selectedRack != route.Parameter) { sourcePage = installedPage = 0; partKind = "cpu"; }
@@ -31,9 +35,24 @@ internal sealed partial class ServerRoomView
                     ServerRoomBrowserNavigation.Page.Trading => 2,
                     ServerRoomBrowserNavigation.Page.Operation => 3, _ => 0
                 };
-                if (selectedPage == 2) selectedCoin = route.Parameter;
+                if (selectedPage == 2) { selectedCoin = route.Parameter; RestoreTradeInput(); }
                 break;
         }
+        hardcorePage = route.Kind switch {
+            ServerRoomBrowserNavigation.Page.Forecast => HardcorePage.Forecast,
+            ServerRoomBrowserNavigation.Page.Machine => HardcorePage.Machine,
+            ServerRoomBrowserNavigation.Page.Network => HardcorePage.Network,
+            ServerRoomBrowserNavigation.Page.AutoSale => HardcorePage.AutoSale,
+            ServerRoomBrowserNavigation.Page.Ledger => HardcorePage.Ledger,
+            ServerRoomBrowserNavigation.Page.Guide => HardcorePage.Guide,
+            ServerRoomBrowserNavigation.Page.TradeDetails => HardcorePage.Trade,
+            ServerRoomBrowserNavigation.Page.HardwarePerformance => HardcorePage.Hardware,
+            _ => HardcorePage.None
+        };
+        if (hardcorePage == HardcorePage.Machine) machineRecord = ServerRoomRuntime.Current?.Racks.FirstOrDefault(r => r.RackIndex == route.Parameter)?.RecordId ?? "";
+        if (hardcorePage == HardcorePage.Network) networkCoin = route.Parameter;
+        if (hardcorePage == HardcorePage.Guide) guidePage = route.Parameter;
+        if (hardcorePage == HardcorePage.Trade) { selectedPage = 2; selectedCoin = route.Parameter; RestoreTradeInput(); }
         notice = ""; noticeIsError = false; renderedRevision = "";
         RefreshContent(); SyncInteraction();
     }
@@ -42,12 +61,12 @@ internal sealed partial class ServerRoomView
 
     private void MinimizeBrowser()
     {
-        ClearFocus(); CancelConfirmation(); CloseBrowserMenus(); browserMinimized = true;
+        ClearFocus(); CloseBrowserMenus(); browserMinimized = true;
         RefreshContent(); SyncInteraction();
     }
 
     private void OpenBrowserCatalog() => NavigateBrowser(new ServerRoomBrowserNavigation.Route(
-        ServerRoomBrowserNavigation.Page.Catalog, catalogKind == ServerRoomMachine.Mining ? 0 : 1));
+        ServerRoomBrowserNavigation.Page.Catalog, catalogKind == "machines" ? 0 : 1));
 
     private void RefreshBrowserShell(ServerRoomState.Document current, bool navigationOnly = false)
     {
@@ -57,44 +76,47 @@ internal sealed partial class ServerRoomView
         {
             var target = i;
             Bind(browserSites[i], names[i], true, () => SelectBrowserSite(target));
-            StyleWidget(browserSites[i], i == site ? WebPaper : new Color(.91f, .914f, .925f, 1));
+            StyleWidget(browserSites[i], i == site ? WebPaper : BrowserTone.Tabs);
             Bind(desktopSites[i], names[i], true, () => SelectBrowserSite(target));
-            StyleWidget(desktopSites[i], new Color(.125f, .220f, .294f, 1), Color.white);
+            StyleWidget(desktopSites[i], BrowserTone.Desktop, BrowserTone.TaskInk);
             Bind(taskbarSites[i], "", true, () => SelectBrowserSite(target));
-            StyleWidget(taskbarSites[i], !browserMinimized && i == site ? new Color(.20f, .28f, .34f, 1) : new Color(.11f, .157f, .20f, 1));
+            StyleWidget(taskbarSites[i], !browserMinimized && i == site ? BrowserTone.TaskSelected : BrowserTone.Taskbar);
         }
         Bind(browserBack, "", browserNavigation.CanGoBack, () => ApplyBrowserRoute(browserNavigation.Back()));
         Bind(browserForward, "", browserNavigation.CanGoForward, () => ApplyBrowserRoute(browserNavigation.Forward()));
         Bind(browserRefresh, "", true, () =>
         {
-            ClearFocus(); CancelConfirmation(); CloseBrowserMenus(); renderedRevision = "";
+            ClearFocus(); CloseBrowserMenus(); renderedRevision = "";
             notice = Web("refreshed"); noticeIsError = false; RefreshContent(); SyncInteraction();
         });
         Bind(browserHome, "", true, () => SetPage(0));
+        Bind(browserTheme, Web("theme", ServerRoomBrowserTheme.Name), true, CycleBrowserTheme);
+        StyleWidget(browserTheme, BrowserTone.Tabs);
+        browserTheme.Root.SetActive(!browserMinimized);
         Bind(browserMinimize, "—", true, MinimizeBrowser);
         Bind(browserExit, "×", true, ClosePanels);
         Bind(taskbarExit, Web("exit"), true, ClosePanels);
         StyleWidget(browserBack); StyleWidget(browserForward); StyleWidget(browserRefresh); StyleWidget(browserHome);
-        StyleWidget(browserMinimize, new Color(.91f, .914f, .925f, 1)); StyleWidget(browserExit, new Color(.91f, .914f, .925f, 1));
-        StyleWidget(taskbarExit, new Color(.11f, .157f, .20f, 1), Color.white);
+        StyleWidget(browserMinimize, BrowserTone.Tabs); StyleWidget(browserExit, BrowserTone.Tabs);
+        StyleWidget(taskbarExit, BrowserTone.Taskbar, BrowserTone.TaskInk);
         var managementPages = new[] { 0, 1, 3 };
         var linkNames = new[] { Web("overview"), Web("mining"), Web("operation") };
         for (var i = 0; i < managementLinks.Count; i++)
         {
             var page = managementPages[i];
             Bind(managementLinks[i], linkNames[i], true, () => SetPage(page));
-            StyleWidget(managementLinks[i], mode == PanelMode.Computer && selectedPage == page ? WebSelected : new Color(.976f, .980f, .984f, 1),
-                mode == PanelMode.Computer && selectedPage == page ? WebBlue : WebMuted);
+            StyleWidget(managementLinks[i], mode == PanelMode.Computer && hardcorePage == HardcorePage.None && selectedPage == page ? WebSelected : BrowserTone.Sidebar,
+                mode == PanelMode.Computer && hardcorePage == HardcorePage.None && selectedPage == page ? WebBlue : WebMuted);
         }
         tabs.SetActive(true);
         browserFrame.SetActive(!browserMinimized); browserDesktop.SetActive(browserMinimized);
-        browserSidebar.SetActive(mode == PanelMode.Computer && selectedPage != 2);
+        browserSidebar.SetActive(mode == PanelMode.Computer && selectedPage != 2 && site == 0);
         browserCatalog.SetActive(mode == PanelMode.Catalog);
         if (mode == PanelMode.Catalog && (!ServerRoomRuntime.Ready || current == null)) catalogSummary.text = M2("order_unavailable");
         browserRack.SetActive(mode == PanelMode.Rack || mode == PanelMode.Computer &&
             (!ServerRoomRuntime.Ready || current == null || !current.Enabled));
         panelTitle.text = mode == PanelMode.Rack ? Text("slot_title", selectedRack + 1) : names[site];
-        panelTitle.color = site == 2 ? WebBrown : WebBlue;
+        SetBrowserTone(panelTitle, site == 2 ? WebBrown : WebBlue);
         var today = Today() < 0 ? "—" : Today().ToString();
         browserDay.text = site == 1 ? Web("quote_day", current?.Market.QuoteDay?.ToString() ?? "—", today) : Web("day", today);
         taskbarDay.text = Web("day", today);
@@ -106,6 +128,7 @@ internal sealed partial class ServerRoomView
                 3 => "room.pce.test/operation", _ => "room.pce.test/overview"
             }
         };
+        RefreshHardcoreNavigation();
         if (!navigationOnly)
         {
             RefreshBrowserCoinMenu(current);
@@ -117,11 +140,11 @@ internal sealed partial class ServerRoomView
     {
         overviewValues[0].text = Web("cash_unit", Cash());
         overviewValues[1].text = Web("cash_unit", forecast.Demand);
-        overviewValues[2].text = current.Racks.Count(r => r.Kind == "mining" && r.PoweredOn) + " / " + current.Leases.Count;
+        overviewValues[2].text = forecast.Plan.Machines.Count(m => m.Runs) + " / " + forecast.Stopped.Count;
         overviewValues[3].text = current.Market.Initialized ? Web("cash_unit", PriceNumber(Enumerable.Range(0, 5)
-            .Sum(i => current.Market.Prices[i] * (current.Coins[i].Units10 / 10m)))) : "—";
-        overviewNote.text = Web("overview_note", forecast.Payable, forecast.Unpaid.Count,
-            ServerRoomState.UnlockedSlots(current), current.Racks.Count);
+            .Sum(i => current.Market.Prices[i] * forecast.Produced[i]) - forecast.Payable)) : "—";
+        overviewNote.text = H("overview_note", forecast.Payable, current.Leases.Count, Number(forecast.Plan.DeviceWatts * 1.15m),
+            ServerRoomEconomy.PowerLimit(current), Number(forecast.Plan.DeviceWatts), ServerRoomEconomy.HeatLimit(current));
     }
 
     private void RefreshBrowserOverviewRow(int index, ServerRoomState.Document current, ServerRoomState.RackReference reference,
@@ -135,16 +158,20 @@ internal sealed partial class ServerRoomView
         overviewNames[index].text = locked ? Web("locked") : reference == null ? Web("empty") : name;
         overviewDetails[index].text = locked ? Web("product_locked") : reference == null ? M2("body_sources") :
             lease != null ? Web("row_lease", lease.RemainingDays, lease.DueDay) :
-            Web("row_detail", Number(fact.EffectiveCompute), fact.DailyFee, reference.Kind == "mining" ? CoinName(reference.CoinId) : "");
+            reference.Kind == "mining" ? H("row_detail", CoinName(reference.CoinId), ModeName(reference.Mode), Number(ServerRoomEconomy.Health(current, reference.UniqueId))) : H("server_idle");
         overviewStates[index].text = locked ? Web("locked") : reference == null ? Web("empty") :
             lease != null ? M3("leased") : !fact.CanRun ? M3("cannot_run") : !reference.PoweredOn ? M3("manual_stop") :
-            forecast.Unpaid.Contains(reference.RecordId) ? M3("unpaid") : M3("running");
-        overviewNames[index].color = locked ? WebMuted : WebBlue;
+            PlanReason(forecast, reference.RecordId);
+        SetBrowserTone(overviewNames[index], locked ? WebMuted : WebBlue);
         var marker = overviewMarkers[index];
-        var state = RackVisualState(locked, reference, lease != null, fact);
+        var state = RackVisualState(locked, reference, lease != null, fact, forecast);
         marker.sprite = ServerRoomStatusArt.SpriteFor(state);
         marker.type = Image.Type.Simple;
-        marker.color = ServerRoomStatusArt.ColorFor(state);
+        SetBrowserTone(marker, state switch {
+            ServerRoomStatusArt.State.Running => BrowserTone.Loss,
+            ServerRoomStatusArt.State.Stopped => BrowserTone.Gain,
+            ServerRoomStatusArt.State.Leased => WebBrown, _ => WebMuted
+        });
         overviewHoles[index].SetActive(false);
         StyleWidget(overviewCards[index], WebPaper);
     }
@@ -157,18 +184,19 @@ internal sealed partial class ServerRoomView
             var previous = current.Market.History[^2].Prices[selectedCoin];
             var percent = (price - previous) / previous * 100;
             dailyChange.text = Web("change", percent > 0 ? "+" : "", Number(percent));
-            dailyChange.color = percent >= 0 ? new Color(.61f, .33f, .18f, 1) : new Color(.14f, .51f, .40f, 1);
+            SetBrowserTone(dailyChange, percent >= 0 ? BrowserTone.Gain : BrowserTone.Loss);
         }
-        else dailyChange.text = Web("no_change");
+        else { dailyChange.text = Web("no_change"); SetBrowserTone(dailyChange, WebMuted); }
         tradeTitle.text = Web("trade_title", CoinName(wallet.Id));
-        tradeCash.text = Web("cash_unit", Cash());
-        walletValues[0].text = Web("coin_units", Quantity(wallet.Units10));
+        tradeCash.text = H("cash_available", Cash());
+        walletValues[0].text = Web("coin_units", Quantity(wallet.MicroUnits));
         walletValues[1].text = Web("cash_unit", PriceNumber(wallet.Cost));
         walletValues[2].text = Web("cash_unit", average);
-        walletValues[3].text = Web("cash_unit", PriceNumber(price * (wallet.Units10 / 10m)));
-        walletValues[4].text = Web("cash_unit", PriceNumber(price * (wallet.Units10 / 10m) - wallet.Cost));
-        walletValues[5].text = Progress(wallet.Progress) + "%";
-        StyleWidget(tradeBuy, WebBlue, Color.white); StyleWidget(tradeSell, WebPaper); StyleWidget(tradeAll, WebPaper);
+        walletValues[3].text = Web("cash_unit", PriceNumber(price * (wallet.MicroUnits / 1000000m)));
+        var maximum = TradingReady(current) ? ServerRoomOperations.MaximumTrade(wallet.Id, false) : 0;
+        walletValues[4].text = maximum > 0 ? H("sellable_value", Quantity(maximum), ServerRoomOperations.TradeQuote(wallet.Id, maximum, false).CashDelta) : H("no_sellable");
+        walletValues[5].text = PriceNumber(wallet.ResidueCoin);
+        StyleWidget(tradeBuy, WebBlue, BrowserTone.OnAccent); StyleWidget(tradeSell, WebPaper); StyleWidget(tradeAll, WebPaper);
         RefreshBrowserTradeAmount();
     }
 
@@ -179,10 +207,9 @@ internal sealed partial class ServerRoomView
         try
         {
             if (current == null || !current.Market.Initialized) { tradeAmount.text = "—"; return; }
-            var units = ServerRoomTradeMath.ParseUnits(quantity.text);
-            tradeAmount.text = Web("cash_unit", PriceNumber(checked(current.Market.Prices[selectedCoin] * (units / 10m))));
+            RefreshHardcoreTradeQuote(current);
         }
-        catch { tradeAmount.text = "—"; }
+        catch (Exception ex) { tradeAmount.text = H("invalid_quantity"); if (AssemblyDebugUi.Alive(tradingHint)) tradingHint.text = ex.Message; }
     }
 
     private void OpenBrowserCoinMenu(string record, int row)
@@ -212,7 +239,7 @@ internal sealed partial class ServerRoomView
         {
             Bind(bulkCoin, CoinName(ServerRoomState.CoinIds[bulkCoinIndex]), miners > 0, OpenBrowserBulkMenu);
             Bind(bulkApply, Web("bulk_apply"), miners > 0, () => Execute(() => ServerRoomOperations.MineAll(ServerRoomState.CoinIds[bulkCoinIndex])));
-            StyleWidget(bulkCoin); StyleWidget(bulkApply, WebBlue, Color.white);
+            StyleWidget(bulkCoin); StyleWidget(bulkApply, WebBlue, BrowserTone.OnAccent);
         }
         if (coinMenuRecord != "" && !current.Racks.Any(r => r.RecordId == coinMenuRecord && r.Kind == "mining")) CloseBrowserMenus();
         var open = mining && (bulkMenuOpen || coinMenuRecord != "");
@@ -234,73 +261,109 @@ internal sealed partial class ServerRoomView
     private void RefreshBrowserCatalog(ServerRoomState.Document current)
     {
         var ready = ServerRoomOrders.Ready;
+        if (ready && LuoxiStory.Unlocked) ServerRoomOrders.EnsureCatalog();
+        var catalog = ready ? ServerRoomOrders.Current : null;
         var orders = ready ? ServerRoomOrders.List() : Array.Empty<ServerRoomOrderState.Order>();
         var selectedOrder = orders.FirstOrDefault(o => o.Id == selectedOrderId);
+        catalogOrdersHeading.text = Web("orders");
         if (selectedOrder != null && !ServerRoomOrderStock.CanEdit(selectedOrder) || selectedOrder == null && selectedOrderId != "") selectedOrderId = "";
-        catalogSummary.text = ready ? Web("catalog_summary", current.Enabled ? ServerRoomState.HighestTier(current) : 0,
-            orders.Count, ServerRoomOrderState.Limit) : M2("order_unavailable");
-        for (var category = 0; category < 2; category++)
+        catalogSummary.text = ready ? Web("shared_summary", orders.Count, ServerRoomOrders.CurrentLimit,
+            current.Enabled ? ServerRoomState.HighestTier(current) : 0) : M2("order_unavailable");
+        for (var category = 0; category < catalogCategories.Count; category++)
         {
-            var parameter = category; var kind = category == 0 ? ServerRoomMachine.Mining : ServerRoomMachine.Server;
-            Bind(catalogCategories[category], M2(kind), true, () => NavigateBrowser(new ServerRoomBrowserNavigation.Route(ServerRoomBrowserNavigation.Page.Catalog, parameter)));
-            StyleWidget(catalogCategories[category], kind == catalogKind ? new Color(.933f, .886f, .827f, 1) : WebPaper, WebBrown);
+            var parameter = category; var kind = category == 0 ? "machines" : "components";
+            Bind(catalogCategories[category], Web(kind), true, () => NavigateBrowser(new ServerRoomBrowserNavigation.Route(ServerRoomBrowserNavigation.Page.Catalog, parameter)));
+            StyleWidget(catalogCategories[category], kind == catalogKind ? BrowserTone.CatalogSelected : WebPaper, WebBrown);
         }
         var highest = current.Enabled ? ServerRoomState.HighestTier(current) : 0;
-        for (var i = 0; i < 5; i++)
+        var components = catalogKind == "components";
+        // Read only when the catalog is opened/refreshed or its existing revision changes.
+        // Never scan native inventories from a frame callback.
+        var storedCounts = components ? WorkroomOwnedCounts.Read() : null;
+        var count = components ? LuoxiStory.Unlocked && catalog != null ? catalog.Catalog.Count : 0 : 10;
+        for (var i = 0; i < 10; i++)
         {
-            var definition = ServerRoomMachine.DefinitionFor(catalogKind, i + 1);
-            productImages[i].sprite = WorkroomArt.Get(ServerRoomHardware.ArtworkName(definition));
-            productImages[i].color = definition.Tier <= highest ? Color.white : new Color(1, 1, 1, .45f);
-            productNames[i].text = MachineName(definition);
-            productSlots[i].text = definition.Kind == ServerRoomMachine.Mining ? Web("catalog_slots_gpu", definition.GpuSlots) :
-                Web("catalog_slots_server", definition.CpuSlots, definition.RamSlots);
-            productPrices[i].text = Web("base_price", definition.BaseValue);
+            productCards[i].SetActive(i < count);
+            if (i >= count) continue;
             var replacement = selectedOrderId;
-            var unlocked = definition.Tier <= highest;
-            Bind(catalogProducts[i], !unlocked ? Web("product_locked") : Web(replacement == "" ? "add_order" : "replace_order"),
-                ready && current.Enabled && unlocked && (replacement != "" || orders.Count < ServerRoomOrderState.Limit),
+            // Cards are laid out row-first: each tier has mining on the left and a server on the right.
+            var kind = components ? catalog.Catalog[i].Kind : i % 2 == 0 ? ServerRoomMachine.Mining : ServerRoomMachine.Server;
+            var tier = components ? catalog.Catalog[i].Tier : i / 2 + 1;
+            productStoredCounts[i].gameObject.SetActive(components);
+            if (components)
+            {
+                var identifier = ServerRoomOrderCatalog.Identifier(kind, tier);
+                productStoredCounts[i].text = storedCounts == null ? Web("stored_unknown") :
+                    Web("stored_count", storedCounts.GetValueOrDefault(identifier));
+            }
+            var unlocked = components ? LuoxiStory.Unlocked : tier <= highest;
+            var available = !components || ServerRoomOrderState.Available(catalog, kind, tier, Today(), replacement);
+            long baseValue;
+            if (components)
+            {
+                var item = Components.Find(ServerRoomOrderCatalog.Identifier(kind, tier)) ?? throw new InvalidOperationException("配件目录型号未注册。");
+                productImages[i].sprite = SpriteAssets.Get(item.SpriteKey); productNames[i].text = item.DisplayName;
+                productSlots[i].text = Web(available ? "component_stock" : "component_taken"); baseValue = item.Value;
+            }
+            else
+            {
+                var definition = ServerRoomMachine.DefinitionFor(kind, tier);
+                productImages[i].sprite = WorkroomArt.Get(ServerRoomHardware.ArtworkName(definition));
+                productNames[i].text = MachineName(definition);
+                productSlots[i].text = definition.Kind == ServerRoomMachine.Mining ? Web("catalog_slots_gpu", definition.GpuSlots) : Web("catalog_slots_server", definition.CpuSlots, definition.RamSlots);
+                baseValue = definition.BaseValue;
+            }
+            productImages[i].color = unlocked && available ? Color.white : new Color(1, 1, 1, .45f);
+            productPrices[i].text = LuoxiStory.Unlocked ? Web("discount_price", PriceNumber(baseValue * .9m)) : Web("base_price", baseValue);
+            Bind(catalogProducts[i], !unlocked ? Web("product_locked") : !available ? Web("component_taken") : Web(replacement == "" ? "add_order" : "replace_order"),
+                ready && current.Enabled && unlocked && available && (replacement != "" || orders.Count < ServerRoomOrders.CurrentLimit),
                 () => Execute(() =>
                 {
-                    if (replacement == "") ServerRoomOrders.Add(definition.Kind, definition.Tier);
-                    else ServerRoomOrders.Replace(replacement, definition.Kind, definition.Tier);
+                    if (replacement == "") ServerRoomOrders.Add(kind, tier);
+                    else ServerRoomOrders.Replace(replacement, kind, tier);
                     selectedOrderId = "";
                 }));
-            StyleWidget(catalogProducts[i], WebBrown, Color.white);
+            StyleWidget(catalogProducts[i], WebBrown, BrowserTone.OnAccent);
         }
-        var changes = new[] { firstOrderAction, secondOrderAction, thirdOrderAction };
-        var cancels = new[] { firstOrderCancel, secondOrderCancel, thirdOrderCancel };
-        for (var i = 0; i < 3; i++)
+        for (var i = 0; i < 5; i++)
         {
+            emptyOrders[i].text = Web("empty_order", i + 1);
             emptyOrders[i].gameObject.SetActive(i >= orders.Count);
             if (i >= orders.Count) continue;
             var order = orders[i]; var editable = ServerRoomOrderStock.CanEdit(order); var selected = selectedOrderId == order.Id;
-            var definition = ServerRoomMachine.DefinitionFor(order.Kind, order.Tier);
-            Bind(changes[i], editable ? M2(selected ? "order_change_selected" : "order_change", i + 1, MachineName(definition)) :
-                M2("order_locked_short", i + 1), editable, () => { selectedOrderId = selected ? "" : order.Id; RefreshContent(); SyncInteraction(); });
-            StyleWidget(changes[i], selected ? new Color(.933f, .886f, .827f, 1) : WebPaper, WebBrown);
-            Bind(cancels[i], M2("order_cancel_short"), editable, () => Execute(() =>
+            var name = ServerRoomOrderCatalog.IsComponent(order.Kind) ? Components.Find(ServerRoomOrderCatalog.Identifier(order.Kind, order.Tier))!.DisplayName : MachineName(ServerRoomMachine.DefinitionFor(order.Kind, order.Tier));
+            Bind(orderActions[i], editable ? Web(selected ? "reservation_selected" : "reservation_change", i + 1, name) :
+                Web("reservation_locked", i + 1), editable, () => { selectedOrderId = selected ? "" : order.Id; RefreshContent(); SyncInteraction(); });
+            StyleWidget(orderActions[i], selected ? BrowserTone.CatalogSelected : WebPaper, WebBrown);
+            Bind(cancelActions[i], M2("order_cancel_short"), editable, () => Execute(() =>
             {
                 ServerRoomOrders.Cancel(order.Id); if (selectedOrderId == order.Id) selectedOrderId = "";
             }));
-            StyleWidget(cancels[i]);
+            StyleWidget(cancelActions[i]);
         }
-        catalogNote.text = selectedOrderId == "" ? Web("catalog_note") : M2("order_change_hint", Array.FindIndex(orders.ToArray(), o => o.Id == selectedOrderId) + 1) + "\n" + Web("catalog_note");
+        catalogNote.text = components && !LuoxiStory.Unlocked ? Web("component_locked") :
+            (selectedOrderId == "" ? "" : Web("reservation_hint", Array.FindIndex(orders.ToArray(), o => o.Id == selectedOrderId) + 1) + " ") +
+            (components ? Web("component_day", catalog?.CatalogDay ?? -1) + " " : "") + Web("catalog_terms");
     }
 
     private void ClearBrowserSelection()
     {
-        browserNavigation.Reset(); browserMinimized = false; CloseBrowserMenus(); catalogKind = ServerRoomMachine.Mining; bulkCoinIndex = 0;
+        browserNavigation.Reset(); browserMinimized = false; CloseBrowserMenus(); catalogKind = "machines"; bulkCoinIndex = 0;
     }
 
     private void ReleaseBrowserReferences()
     {
+        ReleaseBrowserThemeReferences();
+        ReleaseHardcoreReferences();
         ReleaseCoinArtworkReferences();
         browserFrame = browserDesktop = browserRack = browserCatalog = browserSidebar = coinMenu = null;
-        browserAddress = browserDay = taskbarDay = overviewNote = tradeTitle = tradeAmount = tradeCash = catalogSummary = catalogNote = dailyChange = null;
+        browserAddress = browserDay = taskbarDay = overviewNote = tradeTitle = tradeAmount = tradeCash = catalogSummary = catalogNote = catalogOrdersHeading = dailyChange = null;
         browserBack = browserForward = browserRefresh = browserHome = browserMinimize = browserExit = taskbarExit = bulkCoin = bulkApply = null;
         browserSites.Clear(); desktopSites.Clear(); taskbarSites.Clear(); managementLinks.Clear(); catalogCategories.Clear(); catalogProducts.Clear(); coinOptions.Clear(); browserIcons.Clear();
+        orderActions.Clear(); cancelActions.Clear(); productCards.Clear();
         overviewValues.Clear(); overviewNames.Clear(); overviewDetails.Clear(); overviewStates.Clear(); overviewMarkers.Clear(); overviewHoles.Clear();
         productImages.Clear(); productNames.Clear(); productSlots.Clear(); productPrices.Clear(); emptyOrders.Clear(); walletValues.Clear();
-        browserNavigation.Reset(); browserMinimized = bulkMenuOpen = false; coinMenuRecord = ""; catalogKind = ServerRoomMachine.Mining; bulkCoinIndex = 0;
+        productStoredCounts.Clear();
+        browserNavigation.Reset(); browserMinimized = bulkMenuOpen = false; coinMenuRecord = ""; catalogKind = "machines"; bulkCoinIndex = 0;
     }
 }

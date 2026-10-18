@@ -1,0 +1,46 @@
+NPC剧情配置使用说明
+
+运行位置：游戏目录/Mods/PCExpansion/Stories/npc-stories.json。
+首次启动时，文件不存在才自动创建默认配置；已有文件和个人修改会保留。请完全退出游戏后编辑，重新启动后生效，不会在运行中每帧读取文件。
+
+texts：洛夕寄存核心、江白藏身核心、十个小节点和神秘人电话的中文文本。键名不能增加、删除或重命名；{0}等格式参数须保留。默认正文与当前采用版本逐字一致。独立英文补丁继续单独加载；修改过的中文键以修改后的中文显示，避免误用原英文。
+
+parameters：只调整以后触发的门槛。
+luoxi.core.turnover：洛夕核心实成交额，默认5000。
+L2.turnover：洛夕第二个小节点实成交额，默认2500。
+L5.turnover：洛夕第五个小节点实成交额，默认10000。
+L4.delayDays：完成洛夕第三小节点后等待天数，默认3。
+L5.delayDays：完成洛夕第四小节点后等待天数，默认5。
+J5.delayDays：完成江白第四小节点后等待天数，默认7。
+金额须为1至100000000整数；等待天数须为1至365整数。已选定的节点/已生成访问/已完成节点保留原进度，修改门槛不会重置。
+
+smallGraph：十个小节点对白图，Next为后续节点，Choices为玩家选项。只能引用同一个小节点内的既有ID，不能有循环。Id、Player、Command、Complete是既有身份及交易/结算合同，不可修改；不能增删节点或加入脚本/任意命令。复杂改图前请自行备份配置。
+
+固定保存合同：治安声望25/50里程碑、洛夕寄存3天及宽限2天、江白藏身7天、神秘电话10天、委托75/30元、奖励种类/数量均保持现有值。现有存档没有足够快照支持这些值任意改动，因此本配置不开放，以免新配置使旧债务无法结算。
+
+配置格式、字段、引用或模板参数校验失败时，游戏日志会报警；本次整套回退内嵌默认配置，坏文件保留供修复，不会部分载入。可将坏文件自行改名保留，再启动生成默认文件。
+玩家进度继续保存于原游戏存档的modData；本JSON只保存静态内容，不保存物品、货款、身份或玩家进度。
+
+---
+NPC Story Settings — English Instructions
+
+Runtime location: <game folder>/Mods/PCExpansion/Stories/npc-stories.json.
+The first launch creates the default file only if it does not exist. Existing files and personal edits are preserved. Fully close the game before editing, then restart to apply changes. The file is not read every frame while playing.
+
+texts contains the Chinese text for Vesper's custody story, Jiang Bai's hideout story, ten small episodes, and the mysterious phone contact. Do not add, remove, or rename keys. Preserve format arguments such as {0}. The default wording matches the built-in stories. The independent English patch translates unchanged defaults; an edited Chinese entry displays the player's Chinese wording, including nested text templates, rather than an outdated English translation.
+
+parameters changes only future trigger requirements:
+luoxi.core.turnover: completed trade value required for Vesper's core story; default 5000.
+L2.turnover: completed trade value for Vesper's second small episode; default 2500.
+L5.turnover: completed trade value for Vesper's fifth small episode; default 10000.
+L4.delayDays: days after Vesper's third small episode; default 3.
+L5.delayDays: days after Vesper's fourth small episode; default 5.
+J5.delayDays: days after Jiang Bai's fourth small episode; default 7.
+Amounts must be integers from 1 to 100000000; delays must be integers from 1 to 365. Already selected episodes, generated visits, and completed episodes retain their progress. Changing a threshold does not reset them.
+
+smallGraph defines dialogue links for the ten small episodes: Next identifies a following node, and Choices defines player options. Links may refer only to existing IDs within the same episode, without cycles. Id, Player, Command, and Complete define existing identity and transaction/settlement rules and must not be changed. Do not add or delete nodes or insert scripts or arbitrary commands. Back up the file before changing dialogue links.
+
+Fixed save rules are not configurable: Security reputation milestones of 25/50, Vesper's three-day custody deadline and two-day grace period, Jiang Bai's seven-day stay, the ten-day phone cooldown, commission payments of 75/30, and reward types/quantities. Existing saves do not contain the snapshots needed to change these safely without disrupting pending obligations.
+
+If structure, fields, links, or template arguments are invalid, the game log reports a warning and the entire configuration falls back to built-in defaults for that run. The invalid file is retained for repair; partial loading is not used. Rename the bad file to keep a copy, then restart to generate a new default.
+Player progress remains in the game's save data. This JSON stores static content only; it does not store player progress, items, payments, or item identities. The supplied default npc-stories.json remains Chinese.

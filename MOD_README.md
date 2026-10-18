@@ -2,20 +2,20 @@
 
 **作者：** 阿铭
 **游戏：** Probably Stolen Demo
-**版本：** 2.0，2026-10-13 更新
-**测试状态：** 当前中文版本基本测试通过，暂未发现新增 bug；本次同步的英文内容仍需游戏内排版与字形复测。
+**版本：** 2.6（2026-10-19，中英文配套）
+**测试状态：** 机房完整经营流程、中英文界面与存读档仍需游戏内验证。
 
 ## 安装前必读
 
-- **2.0 沿用当前存档门禁：仅接受有效的 1.0 及以上版本标记。** 缺标记、无效或低版本的存档仍拒绝；版本号升级不提高存档门槛，不迁移或直接改写玩家存档。请单独保留备份。
-- 中文只需 `PCExpansion.dll`；英文另装同一发布版本的 `PCExpansionEnglishPatch.dll`。两个文件必须配套，英文补丁不能单独使用。
+- **2.6需要新档：新建存档写入2.6标记，仅接受有效的2.6及以上标记。** 不迁移旧档，不直接改写玩家存档。原1.0档请继续使用保留的2.3.1；2.6新档不要交给旧版继续游玩，也不要手改版本标记绕过检查。请分别保留备份。
+- 中文只需 `PCExpansion.dll`；英文另加同为2.6的 `PCExpansionEnglishPatch.dll`。本体与英文补丁请配套更新。
 - 开箱、拆装、维修、回收和报废都在工作间完成。点击店内桌面的 CPU 钥匙串进入；它是场景入口，不占玩家库存。
 
 ## Mod 简介
 
 《深空装机 / PC expansion》为《Probably Stolen Demo》加入电脑拾荒、拆检、维修、组装和交易玩法。打开破损机箱寻找配件，把坏件拆到更小的部件，再决定维修、更换、回收或报废；将合适的配置组装成主板和整机，检测、估价，并向不同买家出售。
 
-模组提供独立工作间、共用电脑储物箱、专属供应者和装机佬、十页游戏内手册，以及可扩建的机房。组装矿机挖取五种虚拟币，配置服务器签订租约，再通过机房电脑管理机器、交易和洛夕的硬件预订。在深空当铺，一只磕碰变形的机箱里，可能还藏着能用的配件；一台缺件的电脑，也可能在重新装配后成为值得出售的整机。
+模组提供独立工作间、共用电脑储物箱、专属供应者和装机佬、二十页游戏内手册，以及可扩建的机房。组装矿机挖取五种虚拟币，配置服务器签订租约，再通过机房电脑管理机器、交易和洛夕的硬件预订。在深空当铺，一只磕碰变形的机箱里，可能还藏着能用的配件；一台缺件的电脑，也可能在重新装配后成为值得出售的整机。
 
 ## 安装、更新与语言
 
@@ -25,20 +25,30 @@
 2. 尚未安装 MelonLoader 时，从[官方 GitHub 页面](https://github.com/LavaGang/MelonLoader)获取安装器，选择《Probably Stolen Demo》的游戏程序及上述版本安装。可在 Steam 中选择“管理 → 浏览本地文件”定位游戏程序。
 3. 安装加载器后启动一次游戏，再退出，让游戏目录生成 `Mods` 文件夹。
 4. 如果 `Mods` 中还有 `ProbablyAssembled.dll`、`PcRepairMod.dll`、`ProbablyAssembledEnglishPatch.dll` 或 `PcRepairEnglishPatch.dll`，先移出这些旧文件，避免重复加载。
-5. 将 `PCExpansion.dll` 放入 `Mods`；需要英文时，再放入配套的 `PCExpansionEnglishPatch.dll`。
-6. 启动游戏，新建存档或继续通过当前存档检查的存档。若模组未加载，检查 MelonLoader 日志。
+5. 将 `PCExpansion.dll` 放入 `Mods`。中文无需英文补丁；使用英文时另放入同版本 `PCExpansionEnglishPatch.dll`。
+6. 启动游戏并新建2.6存档；已有2.6测试档须通过版本检查。若模组未加载，检查 MelonLoader 日志。
 
-更新时先关闭游戏，再替换对应 DLL；使用英文时，本体和补丁一起更新。需要恢复中文时，移出英文补丁并完全重启。补丁只翻译本 Mod 的文字和手册，不改变游戏本身的语言设置；译文缺失、不匹配或手册无法正常显示时回退中文。
+更新时先完全关闭游戏，再替换DLL并重启。本体独立提供中文；配套英文补丁提供全部1287条文本与二十页英文手册。移出英文补丁并重启即可恢复中文。版本不匹配或译文无效时回退中文，手册版本不匹配时整本回退。
 
-2.0 本体与英文补丁各有 737 条配套文本，手册仍为十页 v14。英文补丁需要单独安装；中文本体不依赖它。
+## 开局特性
+
+新档可在原版特性界面选择以下三项，沿用原版点数、槽位和首次开局限制，三项之间没有互斥。
+
+- **高效利用（2点）：**工作间回收材料的价值预算从当前总价的50%提高至125%，其余回收资格、取整与余值规则不变。
+- **电脑学徒（1点）：**获得洛夕0504名片、电脑手册，以及电子零件、金属锭、金属螺丝、3D打印耗材、废金属、线缆各一份，并永久解锁洛夕的联系号码。
+- **虚拟币专家（1点）：**免费解锁基础T1机房，获得一台T1矿机及一张T1显卡；扩建与运行费用照常。
+
+只在选中特性的本次新档发放一次，旧档不补发，读档不重复发放。
 
 ## 硬件与内部拆装
 
-九类完整硬件为机箱、电源、主板、固态硬盘、内存、显卡、机箱风扇、CPU 和 CPU 散热器，均有 T1–T5 及完好／破损两态，共 90 种；另有 41 种拆机子件规格及两态，共 82 个子件 ID。加上辅助物品、两种收缴盒和矿机／服务器各 T1–T5 的 10 种专用机箱，当前合计 187 个注册物品。
+九类完整硬件为机箱、电源、主板、固态硬盘、内存、显卡、机箱风扇、CPU 和 CPU 散热器，均有 T1–T5 及完好／破损两态，共 90 种；另有 41 种拆机子件规格及两态，以及名片、灯牌、手册、两种收缴盒和矿机／服务器各 T1–T5 的 10 种专用机箱。整件名称按“类别 T档·型号”显示，如“CPU T4·Core i9-14900K”，并保留容量、破损及已装配标记。
 
 显卡、内存、固态硬盘、电源、风扇和 CPU 散热器可进一步拆成通用机体与内部子件；CPU 仍作为整件使用。破损配件首次拆检确定坏件分布，重试或读档不会重新抽取；已组装件拆开返回原来的实际子件。
 
-显卡、固态硬盘、电源、风扇和散热器的配置 T 由性能模块决定；内存按总额定容量分档。通用机体不压低配置 T，显存和存储颗粒不压低对应性能档位。显存／内存／存储颗粒最多装 6／6／4 组，至少一组即可装配。额定容量与完好容量分别显示。
+显卡、固态硬盘、风扇和散热器的配置 T 由性能模块决定；内存按总额定容量分档，电源按电容额定总功率分档。通用机体不压低配置 T，显存和存储颗粒不压低对应性能档位。显存／内存／存储颗粒最多装 6／6／4 组，至少一组即可装配。额定容量与完好容量分别显示。
+
+电源由通用机体和1～6组电容组成，可混装。额定总功率达到100／200／400／600／1000W对应T1–T5，超过1000W仍为T5；坏组计入额定功率，完好功率另列。首次拆解T1为100W×1、T2为100W×2，T3／T4／T5为200W×2／3／5；已有装配按实际组成拆出。
 
 ## 工作间与电脑储物箱
 
@@ -46,13 +56,19 @@
 
 - 物品逐件保管和取出，保留其身份、方向、状态、价格及已装配内容。未组装物品按当前名称、单件价格和完好／破损状态合并显示，数量表示实际件数，不是实体堆叠；悬停和取出始终对应一件实际物品。
 - 储物目录支持名称／型号／ID 搜索，类别、完好／破损与拆机／配件类型筛选及清空条件。各条件同时生效；同档关窗、离开工作间和重建界面后保留，切档或重启清空，条件不写入存档。搜索稍停后更新，Enter 立即应用。
-- 工作间支持拖放、按游戏绑定的 Q/E 旋转、双击放入兼容空槽，以及在空地框选后群拖入箱。
-- 自动填槽优先取工作间库存，再从储物箱补足；只取完好兼容件，按配置 T 与容量排序，只填空槽，不替换已安装件，最后仍需手动确认组装。
+- 工作间支持拖放、按游戏绑定的 Q/E 旋转、双击放入兼容空槽，以及在空地框选后群拖入箱。框选物件还可保持相对位置整体平移；越界或碰到未选物件时整组不移动，不自动重排或群体旋转。
+- 将配件单件拖到中央垫板并松手，可打开对应装配、拆卸或维修面板；完好配件只有在唯一兼容空槽明确时才自动入槽。替换面板目标时先归还旧物，放不下则保持原状；多件、材料和专用机箱不由垫板自动处理。
+- 在六类配件、主板或机箱装配窗展开“填空筛选”，可设档位、相关容量、最低必要／填满／自定数量、节省材料／性能优先及工作间／储物箱来源。八类各自记住本机偏好；自定数量包含已放入件。点击“自动填空槽”填入可用的完好兼容件，保留已有件，缺件时先放入其他能用的物品并在顶部提示。主板“最低必要”含1块固态，0GB仅表示容量不限；自定数量可选0块。冲突或库存变化时不执行，最后仍需手动组装。
+- 空槽单击选物，占槽单击查看、双击归还；来源可多选工作间／储存箱／店铺，支持名称、编号、配置搜索。浅黄描边提示当前适配件。
+- 按住E＋左键，在店铺或可取容器与工作间间快捷转移；从工作间返回时优先原位，再尝试随身库存。空间不足保持原状，拾荒、拖动或输入期间禁用。机箱、主板分别拖到各自场景装配区，中间垫板处理配件。维修默认归还原来源，原处满则保留修好物品，支持关闭自动放回。
+- 每日配件目录的库存数合计三来源同型号、同档位完好独立物品，已装在机器里的配件不计。
 - 面板可拖动；Esc 先收起筛选浮层，再关闭窗口。关闭装配面板保留槽内物品；切换类别或模式会归还相关物品，空间不足时保持原状。
 
 ## 开箱、主板与机箱装配
 
 破损机箱是上锁物资箱，内容和物品身份已经固定。放入工作间机箱面板主槽，选择“拆卸”，一次取出全部内容；库存空间不足时保留原箱，重试不重抽。开完的空破损机箱价值为零，开箱不需要拆机螺丝刀。
+
+新生成的 T1–T5 普通物资箱基础价依次为 550／800／1250／2000／2800。开出物基础总值为箱价的 30%–200%，长期目标平均约 96.5%；10% 的目标落在 30%–90%、70% 在 90%–100%、18% 在 100%–130%、2% 在 130%–200%，整数金额会产生边界取整。随机档位与内容仍受对应箱体规则约束，不保证高档或完好配件。这些比例不含购入折扣、零售加价、行情、议价、固定高端加价或拆修收益；已固定内容不重抽，江白收缴盒沿用自己的规则。
 
 主板安装 CPU、CPU 散热器、显卡、内存和固态硬盘；机箱安装主板、电源和风扇。T1–T3 主板支持单显卡，T4/T5 支持双显卡；T1/T2 有两个内存槽，T3–T5 有四个。SSD 槽按主板 T1–T5 为 1／1／1／2／2，支持各档 SSD；机箱风扇槽为 1／1／2／3／4。
 
@@ -69,11 +85,11 @@
 
 材料齐全后一次扣取，维修进度不跨次累计；修好的本体保留在当前主槽。T4/T5 主板与机箱本体不能用上述方式维修。
 
-**现金维修：**通用机体、风扇转子、导热组件与散热器风扇模块，费用为保存的完好价的 25%，向下取整；非零价值最低收费 1。电源模块按材料维修，电子零件和线缆各自的数量按 T1–T5 为 1／1／2／2／3。CPU、GPU 核心、SSD 主控及容量芯片不能直接维修。
+**现金维修：**通用机体、风扇转子、导热组件与散热器风扇模块，费用为保存的完好价的 25%，向下取整；非零价值最低收费 1。电源的每组损坏电容按额定功率维修：100／200W各需电子零件与线缆1份，400／600W各2份，1000W各3份；完好组不消耗材料。CPU、GPU 核心、SSD 主控及容量芯片不能直接维修。
 
-**批量回收：**一次处理指定正整数件数，数量包含当前目标。要求同物理规格、同完好／破损状态，来源、价格和朝向可以不同。工作间优先、储物箱补足，按本批实际当前总价的 50% 预算兑换材料；数量、残值或产出空间不足不扣物品，预算不跨次累计。破损 CPU 和拆空的 T4/T5 坏主板／坏机箱有对应材料回收路线；普通零价值空破损机箱不会凭空产出材料。
+**混合回收：**在原处理面板的“回收材料”页从工作间或储物箱选择物件，也可拖入工作间单件或框选多件；不同类别、规格与完好／破损状态可同时加入，逐组调整数量。逐件当前实价合计后取 50% 为预算；选中“高效利用”开局特性时提高至 125%，从电子零件、线缆、废金属、金属螺丝、3D 打印耗材中任选一种，按材料单价向下取整尽量多产出，不设每件／档位产量上限。余值不返现、不累计。拆机子件两态、破损 CPU 全档及拆空解锁的 T4/T5 坏裸主板／机箱沿用回收资格；完整配件须先拆解，零价值空坏箱不会凭空产出材料。
 
-残值不足时显示本次件数、至少所需总数和还差几件。现有同规格物件足够时，按实际残值及选件顺序计算；现有全部仍不够时，按目标单件残值估算并标注。零残值不能估算时另作说明。点击数量框后，鼠标移出窗口仍可输入，点击外部结束编辑。
+原面板内切换“可投入物件／本次回收清单”，显示来源、状态、单价和数量；下方选五种材料并预览总价、预算、材料单价、产量及余值，沿用原回收和取回按钮。确认前物件留在原位，只消耗明确选中的物件；关闭面板或切换处理模式清空本次清单。产物统一放工作间，先释放本批输入的占位；不足一份、全批空间不足或来源变化均不消耗，不自动部分回收或转存储物箱。数量框支持键盘输入，点击外部结束编辑。
 
 **报废：**不可维修的坏件，价值为零或单件回收无产物时，可点击“报废”再确认。仅删除当前目标，不产出金钱或材料；换件、切换模式或关闭面板会取消确认。
 
@@ -83,9 +99,9 @@
 
 裸的完好主板可作为散件出售；已装配主板须 CPU、散热器、显卡和内存齐全，并满足完好、内存同档和跨度条件，额外显卡／内存／SSD 槽可留空。
 
-通过检测的整机只获得一种机型加价：整机 20%、性价比机器 25% 或刀把机 10%。CPU 和显卡都比其他内部配件的最高档低至少一档时，判为刀把机；仅其中一个偏低不算。性价比机器要求除 CPU、显卡和电源以外的配件均低于 CPU 和显卡，电源要求不低于两者较高档减一；机型判定先检查刀把机。
+通过检测的整机只获得一种机型加价：整机 20%、性价比机器 30% 或刀把机 10%。CPU 和显卡都比其他内部配件的最高档低至少一档时，判为刀把机；仅其中一个偏低不算。性价比机器要求除 CPU、显卡和电源以外的配件均低于 CPU 和显卡，电源要求不低于两者较高档减一；机型判定先检查刀把机。
 
-下城区装机佬收购符合条件的完好 T1–T3 商品，不收刀把机或不完整整机；上城区收购商要求参与检测的实际内部配件全部完好且为 T3–T5。最终成交仍使用原版预算、声望与交易流程。
+下城区装机佬收购符合条件的完好 T1–T3 商品，不收刀把机或不完整整机；洛夕普通电话来访可收 T1–T5 完好整件配件及六类全部完好拆解件（含无 T 档公共件），已装配主板仍须完整且兼容。洛夕收购普通整机、性价比机器和刀把机时，要求机箱与全部内部配件均为完好T1–T3，并通过完整性与兼容检查；普通来访整次共用 18000 预算；上城区收购商要求参与检测的实际内部配件全部完好且为 T3–T5。最终成交仍使用原版预算、声望与交易流程。
 
 完好的 T4 CPU／显卡和 T5 配件有 20% 高端配件加价。装入完好机箱后，整机从合格内部配件继承一次，不按件数叠加；取出最后一件后取消。空机箱和破损物资箱不继承，机型与高端加价在不同计价阶段计算。
 
@@ -93,17 +109,25 @@
 
 街区拾荒仍可获得低档坏电脑物品；原版拾荒客和小偷不额外混入电脑配件，电脑货源由专属供应者与装机佬提供。
 
-博士在玩家未持有时出售 2×2 电脑灯牌，基础价值 100。电脑材料卖家从第 5 天起每日来访概率为 30%，展示灯牌后为 75%；电脑配件小偷从第 12 天起为 20%，展示后为 40%。两类开店时独立判定，各每天最多一位，可同日出现，追加到已有来客之后；同类灯牌不叠加，读档不重抽，也不显示在原版“预期的普通顾客”名单中。
+博士在玩家未持有时出售 2×2 电脑灯牌，基础价值 100。电脑材料卖家从第 5 天起每日来访概率为 30%，展示灯牌后为 75%；电脑配件小偷从第 12 天起为 15%，展示后为 30%。两类开店时独立判定，各每天最多一位，可同日出现，追加到已有来客之后；同类灯牌不叠加，读档不重抽，也不显示在原版“预期的普通顾客”名单中。
 
 **电脑材料卖家：**每访提供 1–2 件 T1–T3 完好随机配件、额外一颗 T1–T3 完好 CPU，以及四种维修材料各一份。随机配件与额外 CPU 的 T1／T2／T3 均按 50%／30%／20% 独立抽取；额外 CPU 不占随机名额，随机配件也是 CPU 时仍追加。材料固定带金属螺丝和电子零件，另两种从线缆、打印耗材、废金属和金属锭中不重复选择。
 
 **电脑配件小偷：**每访提供 2–3 件 T4/T5 配件，档位权重 90%／10%；首件完好，后续各自按完好／破损 50% 判定。破损货不含 CPU 与主板，货物按原版标为赃物。两类供应者都不直接出售机箱或拆机子件，访客货单及实际交付保存，重试或读档不重抽、不重复上柜。
 
-**下城区装机佬：**第 5 天首次安排，此后周五固定来访，同日随机来访合并。出售低档机箱，以及每访 3–4 类 T1–T3 坏配件，覆盖八类非机箱整件；名片和手册报价与机械货物分开。
+**下城区装机佬：**第 5 天首次安排，此后周五固定来访，同日随机来访合并。出售低档机箱，以及每访 3–4 类 T1–T3 坏配件；新货单从七类非 CPU 整件中抽取，不再出售坏 CPU。名片和手册报价与机械货物分开。
 
 **洛夕（Vesper，0504）：**首次购买或实际持有名片后，在当前新档永久解锁；只将名片上柜不会解锁，随后丢失或出售名片不会取消联系。电话来访有三天冷却，实际入队后才开始记录；到店带两只 T1–T3 破损机箱和一只随机档位完好机箱。洛夕、下层装机佬和上城区收购商使用各自的立绘；装机佬不再出售旧拆机工具或库存钥匙。
 
 **治安收缴商江白：** 每周四固定排在待访队首，大、小收缴配件盒独立供货，各最多一只。大盒售价850，小盒290；付款前看不到内部，玩家持有后随时可打开。大盒为 3×10 格，出 T2–T5；小盒为 5×3 格，出 T1–T4。每盒有一件完好电脑配件，另加最少可用拆机子件（大盒最多3件、小盒最多2件），不保证填满。单盒基础回款限制为售价的60%–170%；每盒最多三次装箱尝试，失败则本次缺货，另一盒仍独立供货。内容固定，已有盒子不重掷。物件逐件带赃物标记及10–50热度；开封后盒体价值为零，空盒仍可复用，购买增加治安部声望。
+
+## NPC 剧情与外部设置
+
+随着与洛夕的实际交易、治安部声望和相处进度推进，可遇到洛夕的寄存委托、江白的机房藏身故事，以及两人各五段日常小故事。核心故事和小节点有各自条件，每人每天最多一段小故事；包含少量物品委托、选择与后续来访。请留意对白中的交付要求与约定日期，相关进度随当前存档保存。
+
+归还洛夕寄存物时，可从暗格等玩家已拥有且允许取出的储存空间，以及工作间和电脑储物箱提交。装进其他机器的配件仍需先拆出，并保持原物与内部原件完好。缺件时可以选择先整理，再于本次来访重新提交；整理不会延长期限，原有宽限与最终失败规则保持。
+
+首次启动会在 `Mods/PCExpansion/Stories/npc-stories.json` 生成默认剧情设置；退出游戏后可修改开放的正文、对白分支和六项触发门槛，重启生效。已有自定义文件保留，修改不重置已进行的剧情。配置无效时整套使用内置默认并保留原文件；详见随附 `Stories/使用说明.txt`。配套英文补丁翻译默认剧情，玩家改过的中文正文继续显示自定义中文。
 
 ## 五日电脑行情事件
 
@@ -115,18 +139,30 @@
 
 矿机与服务器各有 T1–T5 专用机箱，占格 5×3。先在机房的开放机位选择工作间或储物箱中的专用机箱上架，再从机架面板选件安装。矿机自带主板、电源与散热，玩家另装显卡；服务器另装 CPU 和内存。专用机箱不能使用原版机箱界面直接拖入配件，须通过机房机架面板的专用装配流程操作。已装好的机器可以放入开放机位，取回时保留实际配件与物品身份。
 
-- 矿机可开关、选择币种和设置运行优先级。算力按实际显卡配置与显存计算；缺件、坏件不能运行。休息跨日时结算进度与运行费，现金不足按优先级安排可支付的机器，手动停机与预计欠费分开显示。
-- 服务器按实际 CPU、内存计算性能，可签订 3／5／7 日租约。签约时预收扣除运行费后的净租金，租期内锁定机器，不能取回或改装；到期后解除。报价以界面当前显示为准。
+- 矿机可选择币种、矿池、节能／标准／超频模式及运行优先级。锚点币和奇点币使用核心计算，每卡至少4GB显存；矩阵币和脉冲币使用显存吞吐，至少8GB、16GB发挥全部能力；星核币使用大显存算法，至少16GB、32GB发挥全部能力。同机可混卡，显存不跨卡共享；坏卡与显存不足的卡不参与挖矿，也不计GPU电费。
+- 产量由有效算力、网络竞争及当前难度共同决定。稳收池收取产币的2%；浮动池收0.5%，幸运系数为0.70–1.30，同日同币共享波动。切池次日生效，待清算产出不能提前卖；换币保留余额和细小产出余量。
+- 机房按实际功率与散热负荷排机，有效租约先占容量，再按矿机优先级和机位顺序安排。可启用容量不足自动降档。电费先由现有现金支付，次日卖币不能垫付今夜费用；现金或容量不足的矿机会跳过。节能／标准／超频的算力倍率为0.82／1／1.12，GPU功率倍率为0.70／1／1.35，基础拒绝率为0.2%／0.5%／2%。
+- 基础电价为每kW每运营日40 C，另计15%冷却；矿机整场电费向上取整。扩建一后可能提前公告次日起持续3–5日的±15%电价变化。请看今晚计划、储备现金和停机原因，再决定是否运行。
+- 矿机维护度随运行下降，节能／标准／超频每日磨损0.6／1／2；低于60预警，低于30禁超频并增加3个百分点拒绝率，降至0保护停机。停机保养按T1–T5消耗电子零件1／1／2／2／3份及5／8／12／18／25 C，材料取自工作间或储物箱，齐备后一次恢复至100。搬动机器或换卡不重置维护，保养不修复坏配件。
+- 服务器按实际CPU和内存决定容量，可签3／5／7日租约，租期加成为0%／3%／5%。签约预留供电与散热，锁定配置，按签约电价扣除全期电费后一次预收净款，整笔向下取整；租期内不重复收电费，不能取回或改装。账本逐日确认租金，尚未履约的预收不等于已赚利润。
 - 两个机柜显示十个机位及锁定、空位、运行、停机、出租状态；悬停查看用途、配置、停机原因或租期。
 - 洛夕可回收各档专用矿机与服务器，包括空机和未装满的机器；价格按实际本体、内部配件及当前行情／议价计算，不叠加普通整机机型加价。
 
 ## 机房电脑、五币与硬件预订
 
-点击机房电脑打开工作站浏览器，进入“机房管理”“币市交易所”或“洛夕硬件预订”。浏览器支持页面导航、刷新、最小化与任务栏恢复；管理页面查看配置、费用、租约、扩建和机器状态。
+点击机房电脑打开工作站浏览器，进入“机房管理”“币市交易所”或“洛夕硬件预订”。浏览器支持页面导航、刷新、最小化与任务栏恢复；管理页面查看配置、费用、租约、扩建和机器状态。地址栏右侧、首页图标左边的主题图标按钮可切换标准浅色、柔和与深色，默认柔和，记住本机选择。
 
-五种币为锚点、矩阵、星核、脉冲与奇点，各有独立图标和历史价格。矿机挖矿进度按币种汇总；交易按 0.1 枚的整数倍进行，买卖两侧各收 1% 手续费。钱包显示持有数量、持仓成本、平均成本、市值和盈亏；运行费用单独计算。币价会随游戏日变化，报价日与当前日分别显示，原有电脑行情事件也会影响币市；收益没有固定保证。
+五种币为锚点、矩阵、星核、脉冲与奇点，各有独立图标和历史价格。币价含持续数日的上涨、盘整、下跌与随机冲击，电脑行情事件也会影响币市。低价不自动触发回涨，高风险币可能大幅贬值并长期无法回本。
 
-洛夕硬件预订最多保留三个未购订单，预订本身免费，可订档位随机房扩建开放。下一游戏日开店时，洛夕优先送货，到店后按实际报价议价付款。柜台摆不下的订单逐日重带，本次买货腾出空间不会立即补摆；已经摆出但离店前未买的订单取消。订单进入送货队列后到本次离店前不能修改，未摆出的订单离店后可再改或取消。此送货安排与拨打 0504 的普通来访分别处理。
+**交易先看成交预览：**普通数量输入以0.0001枚为步长，钱包保留至0.000001枚，“全部卖出”可处理尾数。实际成交受当日深度和累计净买卖量影响，拆单不能消除滑点；买卖各收1%手续费，买入整笔向上、卖出整笔向下取整数C。净到账不足1 C的卖单拒绝，手动超深度订单须调整后重新确认，不自动部分成交。持仓参考市值不等于立即卖出可得的净现金。
+
+**自动出售默认关闭：**可选择留币、支付运营或按当夜新产量的固定比例出售，编辑后应用草稿才生效。支付运营按已知计划和指定币序补足未来三夜电费目标；固定比例为0%–100%，每档10%。最低价按含滑点、手续费和取整的整笔净均价判断。自动出售在支付费用、产币到账后按新日报价执行，深度不足可部分成交，余币保留；请查看未售原因，不把预期收入当现有现金。
+
+**经营账本：**保留最近90日明细与累计记录，区分现金流、生产、持币估值、未实现盈亏及未履约租金。买入币与矿币来源分别统计，但仍是同一钱包；电费、保养费、扩建和租约预收单列。硬件采购、修复及维护材料采购成本尚未完整归集，未知成本明确显示未知，不编造完整资产利润或精确回本日。硬件经济按约15个运营日回本的目标调校，实际会受行情、难度、配置、策略、停机和采购等待影响，没有回本保底。
+
+洛夕硬件预订初期最多保留三个未购机器订单；完成她的寄存剧情后，解锁每日从四十种中选出的十种配件目录，机器与配件共享五个订单名额，洛夕出售的商品享九折优惠。预订本身免费，可订机器档位随机房扩建开放。下一游戏日开店时，洛夕优先送货，到店后按实际报价议价付款。柜台摆不下的订单逐日重带，本次买货腾出空间不会立即补摆；已经摆出但离店前未买的订单取消。订单进入送货队列后到本次离店前不能修改，未摆出的订单离店后可再改或取消。此送货安排与拨打 0504 的普通来访分别处理。
+
+神秘人名片的用途说明显示在物品描述中，双击不再打开空白纸片。拨打27571，神秘人会清除当前犯罪计数与调查证据。成功处理后冷却10天；无记录或提前挂断不消耗冷却。已派出的执法人员和既成处罚不受影响。
 
 ## 工作间与机房声音
 
@@ -134,11 +170,11 @@
 
 工作间与机房使用各自的音乐和环境声音，进入时接管原版音乐，离开后恢复原曲及进度。修复磁带播放时进入工作间会跳到下一首并压掉区域音乐的问题；音轨采用压缩资源及异步加载。
 
-## 十页电脑装机交易手册
+## 二十页电脑装机交易手册
 
 下城区装机佬出售手册，占格 2×3，基础价值 25，实际售价按原版交易结算。已在店铺、工作间或储物箱持有手册时不补售。
 
-双击阅读，使用原版翻页、关闭、拖动与音效。十页介绍简介、开箱、可维修物品、维修与批量回收、开机检测、机型、示例和高端配件；中文正文使用原生文字与独立配图，保留纸张和页码。重开回到第一页；旧英文页面因契约不匹配时，整本回退中文。
+双击阅读，使用原版翻页、关闭、拖动与音效。二十页介绍简介、开箱、可维修物品、维修与混合回收、开机检测、机型、示例和高端配件，并新增机房快速上手、矿机与算法、网络竞争与矿池、容量／电价／维护、服务器与深度交易、自动出售与经营账本；中文正文使用原生文字与独立配图，保留纸张和页码。二十页英文使用原版文字和共用配图。重开回到第一页；补丁不匹配或页面无法显示时整本回退中文。
 
 ## 卸载
 
@@ -164,136 +200,68 @@
 
 ---
 
-# PC expansion
+## English Player Guide — 2.6
 
-**Author:** 阿铭
-**Game:** Probably Stolen Demo
-**Version:** 2.0, updated 2026-10-13.
-**Test status:** Basic tests of the current Chinese build have passed, with no newly reported bugs. The English content synchronized in this update still needs in-game layout and glyph checks.
+PC expansion adds PC salvage, modular repair and assembly, dedicated suppliers and buyers, a workroom, shared storage, and a server room with five game coins. Author: 阿铭. Requires MelonLoader 0.7.3 Open-Beta, IL2CPP x64; no other mod prerequisite.
 
-## Install and Save Requirements
+### Install, update and saves
 
-Use matching `PCExpansion.dll` and `PCExpansionEnglishPatch.dll`. Version 2.0 retains the current save checks: valid version markers of 1.0 or higher are accepted, while missing, invalid, or lower markers are rejected. The version update does not raise the save threshold. It does not migrate or directly rewrite player saves; keep separate backups.
+Close the game. Put `PCExpansion.dll` in `Mods`; add the matching **2.6** `PCExpansionEnglishPatch.dll` for English. The base alone uses Chinese. Remove the English DLL and restart to return to Chinese. Move old differently named base/patch DLLs out of `Mods` to avoid duplicate loading. A mismatched or invalid translation falls back to Chinese; incompatible manual pages fall back as a complete book.
 
-Close the game before replacing DLLs. Remove old-named base and language DLLs from `Mods` to prevent duplicate loading: `ProbablyAssembled.dll`, `PcRepairMod.dll`, `ProbablyAssembledEnglishPatch.dll`, and `PcRepairEnglishPatch.dll`.
+**Start a new save for 2.6.** Saves require a valid `pcexpansion.save-generation` marker of 2.6 or higher. Old saves are not migrated. Continue 1.0 saves with the retained 2.3.1 build. Keep separate backups; never edit markers to bypass checks or continue 2.6 saves with an older build.
 
-Install the base DLL in the game's `Mods` folder. For English, install the matching English patch alongside it. The patch changes only this mod's text and manual; it does not change the game's language setting or register gameplay. Without the patch, the mod uses Chinese. Remove the patch and fully restart to return to Chinese. Incompatible translations or manual pages fall back to Chinese.
+### Workroom and hardware
 
-This project uses MelonLoader **0.7.3 Open-Beta (IL2CPP x64)**; no other mod is required. Use the [official MelonLoader installer](https://github.com/LavaGang/MelonLoader) for the game executable. Launch and close the game once so `Mods` is created. Restart fully after installing or updating. Install the English patch only if you want English. Check the MelonLoader log if the mod does not load.
+Use the CPU keychain on the shop desk to enter the workroom, and the wall key there to enter the server room. Nine whole-hardware families have T1-T5 intact/broken variants. Six families dismantle into common bodies and modules; CPUs remain whole. Installed identities, state, capacity and value survive disassembly. Damaged crate contents are fixed when generated and never reroll.
 
-Version 2.0 provides 737 matching catalog entries per language and retains the ten-page manual under contract v14. English remains an optional separate patch; the Chinese base has no dependency on it.
+Common bodies do not lower the performance tier. GPU/RAM/SSD capacity modules have maxima of 6/6/4 and need at least one. RAM tier uses rated capacity. A PSU takes 1-6 mixed capacitor banks; total rated wattage thresholds are 100/200/400/600/1000W for T1-T5. Broken banks count toward rated wattage, with intact wattage listed separately. First disassembly gives 100W x1/x2 for T1/T2 and 200W x2/x3/x5 for T3/T4/T5; existing builds return actual contents.
 
-## Computer Items and the Workroom
+Click empty assembly slots to select items, or occupied slots to inspect; double-click occupied slots to return them. Search and combine Room, Box and Shop sources. E + left-click sends shop/container items to the workroom; workroom items try their original position, then carried inventory. Full inventories cancel transfers. Scavenging, active dragging and text input disable this shortcut. Cases and motherboards have separate scene work areas; the central mat handles parts.
 
-The mod adds 90 intact/broken whole computer items, 41 part specifications with both states (82 part IDs), three utility items, two confiscated-parts boxes, and ten dedicated mining/server cases across T1-T5: 187 registered items in total. Whole-item families are cases, PSUs, motherboards, SSDs, RAM, GPUs, fans, CPUs, and CPU coolers.
+Auto-fill supports tier/capacity/source preferences and minimum, full or custom counts. Missing stock does not block other compatible placements. Existing items stay. Minimum Necessary for a board includes one SSD even at a 0GB capacity floor; Custom can request zero. Filling never assembles automatically. Repairs return to their original inventory by default; if full, repaired items remain in the slot. Daily catalog Stock counts intact standalone items of the same model/tier across workroom, storage and shop; installed contents are excluded.
 
-Click the keychain on the shop desk to enter the workroom. It is a scene entrance, not an inventory key. The workroom has a 32x10 inventory (320 cells) and a fixed exit back to the shop. Storage admits whole PC parts, assembly subparts, and six repair/recycling materials: electronic parts, wire, screws, printer filament, scrap metal, and metal ingots. Manuals, contact cards, signs, and Energy Cells cannot be newly stored; existing stored items can still be withdrawn. Items are kept and transferred individually. Unassembled items with the same current name, unit price, and condition may share a catalog row; hovering and withdrawal always refer to an actual item with its own identity and contents.
+### Repair, recycle and sell
 
-The compact storage window supports name/model/ID search, category, condition, and subpart/whole-part filters, plus clearing filters. All conditions apply together. They persist across closing, leaving the workroom, and rebuilding the UI in the same session; changing saves or restarting clears them, and filters are not written to saves. Search updates after a short pause; Enter applies it immediately. Esc hides the filter popup first, then closes the window. Drag the title to move it. In the workroom, drag over empty space to select items; a selected group can be dragged into the box. Single-item dragging retains Q/E rotation.
+Empty T1-T3 board bodies use Electronic Parts, adding Wire at T2 and Nuts at T3. Empty T1-T3 cases use Scrap Metal, adding Metal Ingot at T2 and Printing Plastic at T3; one of each listed material. Repairs require the whole recipe at once and do not repair internal parts. Common bodies, rotors and thermal/cooler fan modules cost 25% of intact value, rounded down, minimum 1C for nonzero value. Damaged capacitor banks use Electronic Parts and Wire: one each for 100/200W, two for 400/600W, three for 1000W. CPUs, GPU cores, SSD controllers and capacity chips cannot be repaired.
 
-The parts workbench handles six families: GPU, RAM, SSD, PSU, fan, and cooler. Place a common body in the left slot to show its assembly slots. GPU, SSD, PSU, fan, and cooler tiers follow performance modules; RAM tier follows total rated capacity. Capacities add across actual matching modules. Common bodies and GPU/SSD capacity modules do not lower performance tiers. GPU/RAM/SSD capacity slots allow up to 6/6/4 modules; one is sufficient. Auto-fill uses empty compatible slots, and final assembly remains a manual confirmation.
+Batch recycling uses 50% of selected current value, or 125% with Efficient Use. Choose Electronic Parts, Wire, Scrap Metal, Nuts or Printing Plastic. Output rounds down; leftover value is neither refunded nor saved. All output must fit the workroom, or nothing is consumed. Whole modular parts must be dismantled first. Broken CPUs of any tier, eligible dismantled subparts and empty unlocked T4/T5 broken board/case bodies can be recycled; zero-value empty cases do not generate materials. Eligible irreparable items with no single-item output can be discarded without output.
 
-CPUs remain whole items. The first inspection of a damaged component fixes its faulty subparts; retries and reloads do not reroll them. Dismantling an assembled component returns its original actual subparts.
+A complete PC needs a board, CPU, cooler, GPU, RAM, storage, PSU and fans. Parts must be intact; installed RAM tiers must match, and internal tiers may span at most three. Extra parts are checked too. T1-T5 board SSD counts are 1/1/1/2/2; T4/T5 boards support two GPUs. Partial assemblies can be saved but do not qualify as complete PCs.
 
-Changing workbench family or mode returns slotted items together. Insufficient space leaves the session unchanged. A finished assembly returns to workroom inventory. Esc hides the panel while keeping its stored items.
+Profiles are exclusive: Complete PC +20%, Value Build +30%, Bottleneck Build +10%. A Bottleneck Build has both CPU and GPU at least one tier below the highest remaining internal tier. Value Builds require other parts below both core parts, excluding the PSU, which may be one tier below the higher core tier. Intact T4 CPUs/GPUs and T5 parts receive a separate 20% high-end premium, inherited once by an intact containing case. Profile and high-end percentages are not simply added.
 
-## Cases and Motherboards
+The lower-district builder refuses Bottleneck Builds. Vesper accepts ordinary cases and internal parts that are all intact T1-T3, including Bottleneck Builds; standalone intact parts/subparts retain her broader buying rules. Her ordinary visit shares an 18,000 budget. The upper-district buyer requires inspected internal parts to be intact T3-T5. All sales still use native budget, ownership and bargaining rules.
 
-Damaged cases are locked loot crates. Their contents and item identities are fixed at generation. Put one in the case panel's main slot and choose Disassemble. All contents move to workroom inventory together; insufficient space leaves the crate sealed. Retrying does not reroll loot. An opened empty damaged case is worth zero. No screwdriver or retired case UI is used.
+### Server-room operations
 
-Install CPU, cooler, GPU, RAM, and SSD on a motherboard; install the motherboard, PSU, and fans in a case. SSD slots by motherboard tier are 1/1/1/2/2 and accept any SSD tier. T4/T5 boards support two GPUs. T1/T2 boards have two RAM slots and T3-T5 have four; case fan slots across T1-T5 are 1/1/2/3/4. Partial or mixed-tier assemblies may be saved; trade eligibility is checked separately.
+Activate the basic room for 120C. Separate power/cooling upgrades unlock up to ten slots and higher case tiers. Rigs take GPUs; servers take CPUs and RAM. Use rack assembly, rather than the ordinary case interface. Removing machines retains actual contents and identities.
 
-Disassembly returns the actual stored parts with their identities, prices, capacities, condition, and orientation. A motherboard remains an assembly when removed from a case; disassemble the motherboard to access its internal parts, then use the parts workbench to split the six families into subparts.
+Anchor/Singularity use Core (4GB per GPU); Matrix/Pulse use Memory Bandwidth (8GB minimum, full at 16GB); Stellar uses Large VRAM (16GB minimum, full at 32GB). Mixed cards are allowed; VRAM never combines between GPUs. Broken or undersized cards contribute no work or GPU power cost. Network competition and difficulty affect production. Steady Pool deducts 2% of output; Variable deducts 0.5%, with same-day/same-coin shared luck of 0.70-1.30. Pool choices change next day. Output arrives at settlement; tiny remainders and balances persist.
 
-## Repairs, Recycling, and Discard
+Eco/Standard/Overclock hash-rate multipliers are 0.82/1/1.12, GPU power 0.70/1/1.35, base rejection 0.2%/0.5%/2%. Active leases reserve capacity first; rigs follow priority then slot number. Capacity-based auto-downshifting is optional. The shop's nightly costs are paid before rig scheduling. **Tomorrow's sale cannot pay tonight's power bill.** Unaffordable rigs are skipped while later affordable rigs may run.
 
-All repairs use the workroom. Motherboard and empty case body repairs are limited to T1-T3. Remove all internal items first. Motherboard: one electronic part at T1, plus wire at T2, plus screws at T3. Case: one scrap at T1, plus metal ingot at T2, plus printer filament at T3. All required materials are consumed together, with no progress carried between attempts. The repaired body stays in its main slot; internal faults are separate.
+Power costs 40C per kW per operating day plus 15% cooling, rounded up once across rigs. Announced power-price events after expansion 1 may change prices by +/-15% for 3-5 days. Maintenance wear is 0.6/1/2 per running day. Below 60 warns; below 30 disables overclock and adds 3 percentage points of rejection; zero stops the rig. T1-T5 servicing requires 1/1/2/2/3 Electronic Parts plus 5/8/12/18/25C, restoring maintenance to 100. Stop first. Moving machines or swapping cards does not reset maintenance; servicing does not repair damaged GPUs.
 
-Common bodies, fan rotors, thermal modules, and cooler fan modules use cash repair: 25% of saved intact value, rounded down, minimum 1 for nonzero value. A PSU power module includes capacitors and uses electronic parts plus wire: one each at T1/T2, two each at T3/T4, three each at T5. CPUs, GPU cores, SSD controllers, and capacity chips cannot be repaired.
+Server leases run 3/5/7 days with 0%/3%/5% bonuses. Signing locks configuration and reserves capacity; term power is prepaid at the signing-day rate, and net cash rounds down. No repeated power charge during the term. Prepaid cash is available to spend, but rent is earned over service days. Machines cannot be changed or removed until expiry. Vesper accepts dedicated rig/server cases at every tier, including empty or partial machines; their price uses actual contents and market/bargaining, without ordinary PC-profile premiums.
 
-Recycling takes a positive batch quantity including the target. Items must share physical specification and intact/broken state; origin, price, and orientation may differ. Use workroom stock first, then storage. The budget is 50% of the batch's actual current total value. Insufficient quantity or output space consumes nothing; unused budget does not carry over. Broken CPUs and empty broken T4/T5 motherboards/cases have their current material-recovery routes; a normal zero-value empty broken case does not gain free materials.
+### Coins, auto-selling and ledger
 
-When residual value is insufficient, the preview shows the current, required, and additional item counts. Exact counts follow actual owned values and selection order; beyond current stock, the target's unit value is used for an explicitly labeled estimate. Zero-value cases receive a separate explanation. Quantity input remains active when the pointer leaves the window and ends when clicking outside.
+The browser has room management, the exchange and Vesper's hardware orders. Standard Light, Soft and Dark themes are available; Soft is default. Prices follow persistent trends and shocks. Low prices do not ensure rebounds; high-risk coins can lose heavily and remain below purchase cost.
 
-An unrepairable broken item worth zero or yielding no materials from single-item recycling can be discarded. Click Discard, then Confirm Discard. Only the current target is removed, producing no cash or materials. Changing target or mode, or closing the panel, cancels confirmation.
+Normal quantity steps are 0.0001 coin; wallet precision is 0.000001. Sell All handles remainders. Limited daily depth and cumulative net buys affect execution; splitting orders does not remove slippage. Both sides pay 1%. Whole cash rounds up for buys and down for sells; sales netting below 1C are rejected. Manual orders execute entirely or require resizing, never silently partly. Confirm actual payment/proceeds and balance; expand details for fees and execution averages.
 
-## Power-on Checks and Trading
+Auto-sell is off by default. Hold Coins, Cover Operations or Fixed Share are edited as a draft and require Apply Draft plus confirmation. Cover Operations targets the next three nights' known rig power budget in your coin order. Fixed Share caps quantity at 0%-100% of new output, in 10% steps. Each minimum price checks actual net proceeds divided by whole quantity, including fees, slippage and rounding. Automatic sales follow cost payment and coin credit, may partly fill when depth is short, and retain leftovers.
 
-A complete PC requires its necessary part types and at least one storage device. All installed parts must be intact, all RAM configuration tiers must match, and the internal tier gap must be no more than three. Extra installed parts are checked too; the case tier is excluded from the internal comparison.
+The ledger retains 90 daily records and lifetime totals, separating cash, production, reference holdings value, purchased/mined sources and unearned rent. Fees are already included in cash amounts. Hardware, repair and material purchase costs are not fully tracked; include them yourself when judging returns. Reference value is not realizable cash, and no exact payback date is promised.
 
-A bare intact motherboard can be sold as a loose part. An assembled motherboard must pass its own check: CPU, cooler, GPU, and RAM present, all actual parts intact, matching RAM tiers, and a gap of three or less. Extra GPU, RAM, and SSD slots may stay empty.
+### Suppliers, stories and help
 
-A passing PC gets exactly one build profile: Complete PC (20%), Value Build (25%), or Bottleneck Build (10%). A Value Build has every part other than the CPU, GPU, and PSU below both CPU and GPU tiers, and the PSU must be at least the higher core tier minus one. A Bottleneck Build has both CPU and GPU at least one tier below the highest-tier other internal part. One low core alone is insufficient.
+The materials seller can visit from day 5 (30%, or 75% with the 100C Computer Sign); the parts thief from day 12 (15%, or 30% with the sign). Each appears at most once per day. The lower builder first arrives on day 5 and returns Fridays. Vesper's 0504 contact permanently unlocks after actually acquiring her card and uses a three-day ordinary-visit cooldown. Jiang Bai brings two independent confiscated-parts boxes on Thursdays.
 
-The Lower-District PC Builder buys eligible intact T1-T3 goods and rejects Bottleneck Builds. The Uptown PC Buyer requires every actual part, including nested and extra parts, to be intact and T3-T5. Trades still use the game's budgets, reputation, and deal rules.
+Vesper initially allows three machine reservations. Completing her custody story unlocks ten daily catalog parts selected from forty, five shared machine/part order slots, and 10% off her sales. Orders are free to reserve and paid by bargaining after next-day delivery. Undisplayed orders return later; displayed but unbought goods cancel on departure. Custody returns require original intact items and their original contents; accessible hidden/storage inventories count, while installed items must be dismantled first. Sorting and resubmission do not extend deadlines.
 
-Intact T4 CPUs/GPUs and intact T5 parts receive a 20% High-End Parts Markup. An intact case inherits it once from qualifying internal parts; multiple parts do not stack it, and removing the last qualifying part removes it. Empty cases and damaged crates do not inherit it. Build and high-end bonuses occur at separate price stages.
+Two core stories and five small episodes per character follow actual trade, reputation and story progress. Default story settings appear in `Mods/PCExpansion/Stories/npc-stories.json`. Quit before editing and read the accompanying guide. Existing custom wording is retained, including custom Chinese when English is active. The 27571 contact clears current crime count/investigation evidence after the full call, with a ten-day cooldown only on successful cleanup. Already dispatched officers and existing penalties remain.
 
-## Visitors, the Computer Sign, and 0504
+The 20-page in-game Computer Assembly and Trading Manual explains quick actions, builds, repairs and room operations. Efficient Use costs 2 starting points; Computer Apprentice and Crypto Expert cost 1 each. Gifts apply once to the chosen new game. Room speakers share music/ambience/effects settings. Complete native gameplay and English glyph/layout checks remain pending; source/build checks do not replace gameplay testing.
 
-District scavenging can yield broken low-tier computer goods. Computer stock now comes from dedicated mod suppliers and builders; the mod no longer adds bonus computer stock to vanilla scavengers or thieves.
-
-Dr. Jackson offers the 2x2 Computer Sign, base value 100, while you do not own one. From day 5, the PC Materials Seller has a 30% daily chance, raised to 75% by a displayed Computer Sign. From day 12, the PC Parts Thief has a 20% chance, raised to 40%. Multiple signs do not stack. Both rolls occur independently when the shop opens. Successful visitors join the day's queue and do not appear in the vanilla Expected Normal Customers list.
-
-The seller brings 1-2 random intact T1-T3 parts, one additional intact T1-T3 CPU, and one of each of four repair materials. The random parts and extra CPU independently use T1/T2/T3 weights of 50%/30%/20%. The extra CPU does not use a random-part slot and is still added if a random pick is also a CPU. Screws and electronic parts are guaranteed; two different additional materials are drawn from wire, filament, scrap, and ingots. The thief brings 2-3 T4/T5 parts (90%/10%): the first is intact and later picks independently roll intact/broken at 50% each. Broken CPUs and motherboards are excluded, and neither supplier sells cases or subparts directly. Thief goods receive the vanilla stolen-goods treatment. Per-visit plans and confirmed deliveries prevent re-rolling or duplicate stock after retries or reloads.
-
-The Lower-District PC Builder visits on day 5 and Fridays afterward, with same-day random appearances merged. The builder sells low-tier cases and 3-4 different T1-T3 broken part families per visit, covering the eight non-case whole-component families. Buying or actually owning Vesper's 0504 business card once unlocks the contact permanently in that new save. An unsold offer alone does not unlock it; losing the card afterward does not remove access.
-
-Vesper's phone visits have a three-day cooldown recorded only after the visitor actually enters the queue. She brings two broken T1-T3 cases and one intact case of a random tier. Builders do not sell retired screwdrivers or inventory workroom keys. Shared NPC portraits remain in the base mod; the patch supplies English names and dialogue.
-
-Jiang Bai visits at the front of the Thursday queue. Large and small sealed parts boxes are supplied independently, at most one each, for 850 and 290 respectively. Contents remain hidden until purchase. The 3x10 large box uses T2-T5 items; the 5x3 small box uses T1-T4. Each contains one intact whole PC part plus the minimum viable subparts, up to three in the large box and two in the small box; full occupancy is not guaranteed. Base returns are limited to 60%-170% of the purchase price. Each box gets at most three filling attempts; failure leaves that size out of stock without affecting the other. Generated contents are fixed. Items carry individual stolen-goods heat of 10-50. Opening makes the reusable box itself worth zero, and purchases raise Security Department reputation.
-
-## Five-Day PC Market Events
-
-AI Demand Surge and Crypto Boom join the vanilla ordinary event pool and cannot run together. AI Demand Surge doubles whole GPU and RAM prices; Crypto Boom triples whole GPU prices. Each lasts five in-game days including its starting day and affects buying, selling, and estimates. Intact and broken parts count both loose and installed in a PC. Dismantled subparts and unopened loot crates are excluded. Vanilla materials events apply first, followed by the PC market multiplier.
-
-## Server Room, Mining Rigs, and Servers
-
-Use the key on the workroom wall to enter the server room and its door to return. Activation costs 120 C and opens one rack slot. Complete both power and cooling upgrades at each stage to unlock more slots and higher-tier hardware, up to ten slots.
-
-Mining rigs and servers each have dedicated T1-T5 cases occupying 5x3 inventory cells. Select a case from workroom inventory or storage, place it in an unlocked server-room slot, then install parts through its rack panel. Rigs include the motherboard, PSU, and cooling but need installed GPUs; servers need CPUs and RAM. Dedicated cases reject direct part insertion through the vanilla case interface. Use their server-room rack assembly flow. Rack installation and retrieval preserve the actual machine and its parts.
-
-- Mining rigs support power controls, coin selection, and run priority. Compute follows actual GPU configuration and VRAM; incomplete or broken machines cannot run. Sleeping settles progress and running fees. When cash is short, priority determines which rigs can be paid for. Manual shutdown and projected fee shortfalls are shown separately.
-- Server performance follows actual CPUs and RAM. Lease for 3, 5, or 7 days, receiving net rent after prepaid running fees when signing. Leased machines are locked against retrieval and modification until expiry. Use the current quote shown in the UI.
-- Both cabinets show locked, empty, running, stopped, and leased states. Hover for configuration, purpose, shutdown reason, or lease details.
-- Vesper buys dedicated rigs and servers of all tiers, including empty and partially assembled machines. Quotes use the actual body, installed parts, current markets, and normal negotiation, without the ordinary complete-PC build bonus.
-
-## Workstation, Five Coins, and Hardware Orders
-
-Open the server-room computer to browse management, the coin exchange, and Vesper's hardware catalog. The workstation supports navigation, refresh, minimization, and taskbar restoration. Management shows configuration, fees, leases, upgrades, and machine state.
-
-Anchor, Matrix, Stellar, Pulse, and Singularity each have an icon and price history. Mining progress is pooled by coin. Trades use multiples of 0.1 coin, with a 1% fee on both purchases and sales. The wallet shows holdings, cost basis, average unit cost, value, and profit/loss; machine running fees are separate. Prices change with game days, and quote day is shown separately from current day. PC market events also affect coin prices. Returns are not fixed.
-
-Reserve up to three unpurchased machines from Vesper. Ordering is free; available tiers follow room upgrades. Vesper delivers at the front of the next in-game day's opening queue, with payment negotiated from the actual quote at arrival. Orders that do not fit on the counter return on later days. Making space by buying stock does not trigger another delivery that visit; delivered orders left unpurchased when Vesper leaves are canceled. Orders lock from delivery queue entry until that visit ends; undelivered orders can then be changed or canceled. Hardware delivery is separate from her ordinary 0504 phone visit.
-
-## Workroom and Server-Room Audio
-
-Click either desktop speaker to open shared music, ambience, and effects controls. Each ranges from 0-100%, with defaults of 60%/35%/70% and a reset button. Both rooms use the same locally saved preferences.
-
-The rooms use their own music and ambience, taking over vanilla music on entry and restoring the same track and position on exit. Fixed cassette playback skipping to the next track and suppressing room music when entering the workroom. Audio uses compressed assets and asynchronous loading.
-
-## Ten-Page Manual
-
-The Lower-District PC Builder offers the PC Assembly and Trading Manual, a 2x3 document with base value 25. It is offered only when you do not already hold one, including workroom and storage custody. Card/manual offers do not block normal mechanical stock.
-
-Double-click to read using the game's native book controls. Both languages use native text with separate component illustrations. The ten pages cover the introduction, case opening, repairable items, repairs and batch recycling, power-on checks, build profiles, examples, and high-end parts. Invalid, mismatched, or unrenderable English pages fall back to the complete Chinese manual. Reopening starts at page one.
-
-## Uninstall
-
-Close the game, then remove `PCExpansion.dll` and, if installed, `PCExpansionEnglishPatch.dll` from `Mods`. Keep a separate save backup; continued use of a save containing mod items is not guaranteed after uninstalling.
-
-## Bug Reports
-
-Third-party mods that replace the shop scene may still cover the desktop key. This compatibility issue remains unresolved.
-
-Email: qq2147058809@gmail.com
-QQ group: 157249439
-Discord: `qq2147058809`
-
-Include reproduction steps, game and MelonLoader versions, relevant logs, and the list of installed mods if the problem involves running mods together.
-
-## Voluntary Support and Credits
-
-[Support 阿铭 on 爱发电](https://afdian.com/a/aming567). Support is optional and does not change free access to the mod or unlock exclusive files.
-
-Thanks to the developers of Probably Stolen and MelonLoader. The game and original assets remain the property of their rights holders.
+For feedback, include reproduction steps, game/MelonLoader versions and logs, plus other enabled mods: qq2147058809@gmail.com; QQ group 157249439; Discord `qq2147058809`.

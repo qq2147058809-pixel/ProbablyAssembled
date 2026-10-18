@@ -38,6 +38,11 @@ internal static class SpriteAssets
     private static Dictionary<string, Spec> BuildSpecs()
     {
         var specs = new Dictionary<string, Spec>();
+        foreach (var key in new[] { "perk_efficient_recycling", "perk_computer_apprentice", "perk_crypto_expert" })
+        {
+            var resource = "PCExpansion.Assets." + key + ".png";
+            specs[key] = new Spec(resource, resource, 1, 1);
+        }
         foreach (var item in Components.AllItems())
         {
             var type = item.Owner;
@@ -59,6 +64,9 @@ internal static class SpriteAssets
         specs[ContactCard.SpriteKey] = new Spec(
             "PCExpansion.Assets.contact_card_0504.png",
             "PCExpansion.Assets.contact_card_0504.png", 2, 1);
+        specs[MysteriousContactCard.SpriteKey] = new Spec(
+            "PCExpansion.Assets.contact_card_27571.png",
+            "PCExpansion.Assets.contact_card_27571.png", 1, 2);
         specs[ComputerManual.SpriteKey] = new Spec(
             "PCExpansion.Assets.computer_manual_icon.png",
             "PCExpansion.Assets.computer_manual_icon.png", 2, 3);
@@ -125,6 +133,7 @@ internal static class SpriteAssets
         Texture2D? texture = null;
         Sprite? sprite = null;
         var published = false;
+        NpcVisitPerformance.Begin(NpcVisitPerformance.SpriteColdLoad);
         try
         {
             byte[]? bytes = LoadEmbedded(spec, out var usedResource);
@@ -148,8 +157,11 @@ internal static class SpriteAssets
             var pixelsPerUnit = PortraitWorldSizes.TryGetValue(key, out var referenceSize)
                 ? Math.Max(texture.width / referenceSize.x, texture.height / referenceSize.y)
                 : texture.width / (spec.GridWidth * 0.16f);
+            if (key is "perk_efficient_recycling" or "perk_computer_apprentice" or "perk_crypto_expert")
+                pixelsPerUnit = 100; // Match the native 32x32 perk sprites.
             var pivot = PortraitPivots.TryGetValue(key, out var referencePivot)
                 ? referencePivot : new Vector2(0.5f, 0.5f);
+            NpcPortraitLayout.Apply(key, ref pixelsPerUnit, ref pivot);
             UnityEngine.Object.DontDestroyOnLoad(texture);
             sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
                 pivot, pixelsPerUnit);
@@ -159,7 +171,7 @@ internal static class SpriteAssets
             published = true;
             if (key == LowerAssemblerNpc.SpriteKey || key == PhoneAssemblerNpc.SpriteKey ||
                 key == UpperComputerBuyerNpc.SpriteKey || key == SecuritySeizureMerchant.SpriteKey)
-                Core.Log?.Msg("[深空装机] NPC 立绘已加载：" + key + "，" + texture.width + "×" + texture.height +
+                Core.Debug("[深空装机] NPC 立绘已加载：" + key + "，" + texture.width + "×" + texture.height +
                     "，PPU=" + pixelsPerUnit + "，Point 过滤，原版尺寸参照=" + PortraitWorldSizes.ContainsKey(key));
             Core.Debug("已加载贴图：" + key + "（" + texture.width + "×" + texture.height + "，来源=" + usedResource + "）");
             return sprite;
@@ -171,6 +183,7 @@ internal static class SpriteAssets
         }
         finally
         {
+            NpcVisitPerformance.End(NpcVisitPerformance.SpriteColdLoad);
             if (!published)
             {
                 try { if (sprite != null) UnityEngine.Object.Destroy(sprite); }
