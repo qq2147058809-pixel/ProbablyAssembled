@@ -104,7 +104,9 @@ internal static class WorkroomPartProcessing
         }
     }
 
-    internal static bool IsDiscardConfirmationCurrent(DiscardConfirmation confirmation)
+    // Rendering only observes invalidation tokens. Complete snapshot validation
+    // remains at the destructive action boundary, including in-place changes.
+    internal static bool IsDiscardConfirmationPending(DiscardConfirmation confirmation)
     {
         try
         {
@@ -113,8 +115,18 @@ internal static class WorkroomPartProcessing
         var target = WorkroomComponentAssembly.At(WorkroomComponentAssembly.Disassembly);
         return state.Ready && owner != null && owner.Pointer == confirmation.Owner && owner.runID == confirmation.Run &&
             owner.saveSlotId == confirmation.SaveSlot && state.Epoch == confirmation.Epoch && state.Revision == confirmation.Revision &&
-            confirmation.Chinese == LanguageText.IsChinese && target != null && target.Id == confirmation.SourceId &&
-            SameSnapshot(confirmation.Target, target.Item);
+            confirmation.Chinese == LanguageText.IsChinese && target != null && target.Id == confirmation.SourceId;
+        }
+        catch { return false; }
+    }
+
+    internal static bool IsDiscardConfirmationCurrent(DiscardConfirmation confirmation)
+    {
+        try
+        {
+            if (!IsDiscardConfirmationPending(confirmation)) return false;
+            var target = WorkroomComponentAssembly.At(WorkroomComponentAssembly.Disassembly);
+            return target != null && SameSnapshot(confirmation.Target, target.Item);
         }
         catch { return false; }
     }
@@ -353,12 +365,10 @@ internal static class WorkroomPartProcessing
         _ => throw new InvalidOperationException("子件档位无效。") };
     private static WorkroomStorageState.Record Copy(WorkroomStorageState.Record record, WorkroomItemCodec.Snapshot item) =>
         WorkroomStorageState.Copy(record, item: item);
-    private static bool SameShape(WorkroomItemCodec.Shape a, WorkroomItemCodec.Shape b) =>
-        a.Width == b.Width && a.Height == b.Height && a.Cells.SequenceEqual(b.Cells);
     private static bool SameSnapshot(WorkroomItemCodec.Snapshot a, WorkroomItemCodec.Snapshot b) =>
         a.Version == b.Version && a.Name == b.Name && a.Value == b.Value && a.Sprite == b.Sprite && a.Atlas == b.Atlas &&
         a.Broken == b.Broken && a.Orientation == b.Orientation && a.Flipped == b.Flipped &&
-        SameShape(a.Footprint, b.Footprint) && WorkroomItemCodec.Equivalent(a, b) &&
+        WorkroomItemCodec.SameShape(a.Footprint, b.Footprint) && WorkroomItemCodec.Equivalent(a, b) &&
         a.Nodes.Zip(b.Nodes, (left, right) => ExactJson(
             JsonSerializer.SerializeToElement(left, WorkroomStorageState.JsonOptions),
             JsonSerializer.SerializeToElement(right, WorkroomStorageState.JsonOptions))).All(equal => equal);

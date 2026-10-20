@@ -325,46 +325,14 @@ internal static class JiangbaiStory
     }
 
 
-    private static bool VisitExists(PlayerStore store, string token)
-    {
-        bool Match(StoreClient? client) => IsStory(client) && client!.IsTag(VisitPrefix + token);
-        // Native GetNextClient removes the queue entry before the arrival
-        // animation. The current instance owns that visit until it is cleared,
-        // including entry and exit; only Update's arrival gate advances phases.
-        if (Match(store.currentClientInstance?.storeClient)) return true;
-        var queue = store.storeClientManager?.clientStack;
-        if (queue != null) foreach (var client in queue) if (Match(client)) return true;
-        return false;
-    }
-    private static bool HasExactVisit(StoreClient? client, string token)
-    {
-        if (token.Length == 0 || !IsStory(client) || client!.tag == null) return false;
-        var count = 0;
-        foreach (var rawTag in client.tag)
-        {
-            var tag = Core.Clean(rawTag);
-            if (!tag.StartsWith(VisitPrefix, StringComparison.Ordinal)) continue;
-            if (tag != VisitPrefix + token) return false;
-            count++;
-        }
-        return count == 1;
-    }
+    private static bool VisitExists(PlayerStore store, string token) =>
+        NpcVisitIdentity.Exists(store, token, VisitPrefix, IsStory);
 
-    private static void RemoveDuplicateQueuedVisits(PlayerStore store)
-    {
-        var token = document?.Visit;
-        var queue = store.storeClientManager?.clientStack;
-        if (string.IsNullOrEmpty(token) || queue == null) return;
-        // Keep the active visitor, otherwise the first queued one. Never remove
-        // the current instance, ordinary stock visits, or ambiguous identities.
-        var retained = HasExactVisit(store.currentClientInstance?.storeClient, token!);
-        for (var i = 0; i < queue.Count;)
-        {
-            if (!HasExactVisit(queue[i], token!)) { i++; continue; }
-            if (retained) queue.RemoveAt(i);
-            else { retained = true; i++; }
-        }
-    }
+    private static bool HasExactVisit(StoreClient? client, string token) =>
+        NpcVisitIdentity.HasExact(client, token, VisitPrefix, IsStory);
+
+    private static void RemoveDuplicateQueuedVisits(PlayerStore store) =>
+        NpcVisitIdentity.RemoveDuplicateQueued(store, document?.Visit, VisitPrefix, IsStory);
 
     private static void Change(Action<JiangbaiStoryState.Document> change)
     {

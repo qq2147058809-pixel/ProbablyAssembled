@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using HarmonyLib;
 using Il2Cpp;
 
@@ -29,20 +30,16 @@ internal static class ComponentRepair
         private static bool Prefix(GameItem __0, GameItem __1) => !ShouldBlock(__0, __1);
     }
 
-    [HarmonyPatch(typeof(GameItem), nameof(GameItem.MayTarget))]
-    private static class RepairMayTargetPatch
+    [HarmonyPatch]
+    private static class RepairTargetEligibilityPatch
     {
-        private static bool Prefix(GameItem __instance, GameItem __0, ref bool __result)
+        private static IEnumerable<MethodBase> TargetMethods()
         {
-            if (!ShouldBlock(__instance, __0)) return true;
-            __result = false;
-            return false;
+            var arguments = new[] { typeof(GameItem) };
+            yield return AccessTools.DeclaredMethod(typeof(GameItem), nameof(GameItem.MayTarget), arguments);
+            yield return AccessTools.DeclaredMethod(typeof(GameItem), nameof(GameItem.CanTarget), arguments);
         }
-    }
 
-    [HarmonyPatch(typeof(GameItem), nameof(GameItem.CanTarget))]
-    private static class RepairCanTargetPatch
-    {
         private static bool Prefix(GameItem __instance, GameItem __0, ref bool __result)
         {
             if (!ShouldBlock(__instance, __0)) return true;

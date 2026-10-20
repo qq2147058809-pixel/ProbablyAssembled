@@ -18,16 +18,31 @@ internal static class WorkroomNativeTooltip
     }
     private static readonly Dictionary<IntPtr, Source> sources = new();
     private static long warnAt;
+    private static bool pointerPass, pointerRead;
+    private static GameObject pointerHit;
+
+    // Share only this synchronous late-update pass. Native hover callbacks at
+    // other times must see the current UI, even within the same rendered frame.
+    internal static void BeginPointerPass() { pointerPass = true; pointerRead = false; pointerHit = null; }
+    internal static void EndPointerPass() { pointerPass = false; pointerRead = false; pointerHit = null; }
 
     internal static void Register(TooltipContainer source, bool inRoom) => sources.Add(source.Pointer,
         new Source { Container = source, InRoom = inRoom });
     private static bool Owns(Component source) => source != null &&
         sources.TryGetValue(source.Pointer, out var own) && WorkroomUiCleanup.IsAlive(own.Container);
-    private static bool InRoom(Component source) => source != null &&
-        sources.TryGetValue(source.Pointer, out var own) && own.InRoom && WorkroomUiCleanup.IsAlive(own.Container) &&
-        WorkroomUiCleanup.IsAlive(source) && source.gameObject.activeInHierarchy;
+    private static bool Active(Component source) => Owns(source) && WorkroomUiCleanup.IsAlive(source) &&
+        source.gameObject.activeInHierarchy && sources[source.Pointer].Container.interactable != null &&
+        sources[source.Pointer].Container.interactable.isAvailable;
+    private static bool InRoom(Component source) => Active(source) && sources[source.Pointer].InRoom;
 
     internal static GameObject PointerTarget()
+    {
+        if (!pointerPass) return FindPointerTarget();
+        if (!pointerRead) { pointerHit = FindPointerTarget(); pointerRead = true; }
+        return pointerHit;
+    }
+
+    private static GameObject FindPointerTarget()
     {
         var events = EventSystem.current;
         if (events == null || !events.isActiveAndEnabled) return null;
@@ -44,6 +59,7 @@ internal static class WorkroomNativeTooltip
         if (!Owns(source)) return true;
         try
         {
+            if (!Active(source)) { Hide(source); return false; }
             var current = TooltipManager._instance;
             var hit = PointerTarget();
             if (!WorkroomUiCleanup.IsAlive(source) || !source.gameObject.activeInHierarchy ||
@@ -61,6 +77,7 @@ internal static class WorkroomNativeTooltip
 
     internal static bool BeforeShow(TooltipManager current, Component nextOwner)
     {
+        if (Owns(nextOwner) && !Active(nextOwner)) { Hide(nextOwner); return false; }
         if (InRoom(nextOwner))
         {
             var source = sources[nextOwner.Pointer].Container;
@@ -93,17 +110,16 @@ internal static class WorkroomNativeTooltip
         var sceneOwner = SceneEntryTooltip.Owner;
         if (!ReferenceEquals(sceneOwner, null))
         {
-            var hit = PointerTarget();
-            if (!InRoom(sceneOwner) || hit == null || hit.Pointer != sceneOwner.gameObject.Pointer) SceneEntryTooltip.Hide();
+            var hit = InRoom(sceneOwner) ? PointerTarget() : null;
+            if (hit == null || hit.Pointer != sceneOwner.gameObject.Pointer) SceneEntryTooltip.Hide();
             else SceneEntryTooltip.Move();
         }
         var current = TooltipManager._instance;
         if (WorkroomUiCleanup.IsAlive(current) && Owns(current.tooltipOwner))
         {
             var owner = current.tooltipOwner;
-            var hit = PointerTarget();
-            if (!WorkroomUiCleanup.IsAlive(owner) || !owner.gameObject.activeInHierarchy ||
-                hit == null || hit.Pointer != owner.gameObject.Pointer) Hide(owner);
+            var hit = Active(owner) ? PointerTarget() : null;
+            if (hit == null || hit.Pointer != owner.gameObject.Pointer) Hide(owner);
         }
     }
 

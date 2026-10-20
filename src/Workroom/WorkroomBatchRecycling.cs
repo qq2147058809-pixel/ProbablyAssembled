@@ -153,7 +153,7 @@ internal static class WorkroomBatchRecycling
                     for (var i = 0; i < plan.OutputCount; i++)
                     {
                         var output = CaptureMaterial(plan.MaterialId);
-                        if (output.Value != plan.MaterialValue || !SameShape(output.Footprint, plan.Shape))
+                        if (output.Value != plan.MaterialValue || !WorkroomItemCodec.SameShape(output.Footprint, plan.Shape))
                             throw new InvalidOperationException("材料实价或占格已变化，请重新预览。");
                         outputs.Add(new WorkroomStorageState.Record { Item = output });
                         RequireContext(plan, true);
@@ -245,8 +245,6 @@ internal static class WorkroomBatchRecycling
             WorkroomStorageState.JsonOptions) ?? throw new InvalidOperationException("来源深快照未建立。");
     private static WorkroomItemCodec.Shape CloneShape(WorkroomItemCodec.Shape shape) =>
         new() { Width = shape.Width, Height = shape.Height, Cells = (byte[])shape.Cells.Clone() };
-    private static bool SameShape(WorkroomItemCodec.Shape a, WorkroomItemCodec.Shape b) =>
-        a.Width == b.Width && a.Height == b.Height && a.Cells.SequenceEqual(b.Cells);
     private static string SnapshotText(WorkroomItemCodec.Snapshot item) => JsonSerializer.Serialize(item, WorkroomStorageState.JsonOptions);
     private static string Facts(Plan plan) => Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(new
     {

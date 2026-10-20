@@ -278,8 +278,7 @@ internal sealed class WorkroomComponentUi
     internal int TopIndex => Windows.Where(window => window.Open)
         .Select(window => window.Root.transform.GetSiblingIndex()).DefaultIfEmpty(-1).Max();
     internal bool Dragging => Windows.Any(window => window.Dragging);
-    private WorkroomAssemblyWindow? TopAt(Vector2 point) => Windows.Where(window => window.Hit(point))
-        .OrderByDescending(window => window.Root.transform.GetSiblingIndex()).FirstOrDefault();
+    private WorkroomAssemblyWindow? TopAt(Vector2 point) => WorkroomWindowTools.TopAt(Windows, point);
     internal int SiblingIndex(Vector2 point) => TopAt(point)?.Root.transform.GetSiblingIndex() ?? -1;
 
     internal static string FontText => string.Join("", new[] { "entry_title", "processing_title", "workbench_processing", "workbench_assembly", "entry_hint", "assembly_hint", "assembly_title",
@@ -529,7 +528,7 @@ internal sealed class WorkroomComponentUi
     }
     internal void CloseTop()
     {
-        var top = Windows.Where(window => window.Open).OrderByDescending(window => window.Root.transform.GetSiblingIndex()).FirstOrDefault();
+        var top = WorkroomWindowTools.TopOpen(Windows);
         if (top != null) Hide(top);
     }
     internal bool Hit(Vector2 point) => TopAt(point) != null;
@@ -555,13 +554,7 @@ internal sealed class WorkroomComponentUi
         var slot = SlotAt(point);
         return slot == null ? null : WorkroomComponentAssembly.At(slot.Slot);
     }
-    private static Rect ScreenBounds(GameObject root)
-    {
-        var rect = AssemblyDebugUi.Rect(root);
-        var min = RectTransformUtility.WorldToScreenPoint(null, rect.TransformPoint(new Vector3(rect.rect.xMin, rect.rect.yMin, 0)));
-        var max = RectTransformUtility.WorldToScreenPoint(null, rect.TransformPoint(new Vector3(rect.rect.xMax, rect.rect.yMax, 0)));
-        return new Rect(min, max-min);
-    }
+    private static Rect ScreenBounds(GameObject root) => WorkroomWindowTools.ScreenBounds(root);
     private bool Exposed(WorkroomAssemblySlotUi slot, WorkroomAssemblyWindow owner)
     {
         var bounds = ScreenBounds(slot.Root);
@@ -607,7 +600,7 @@ internal sealed class WorkroomComponentUi
         foreach (var window in Windows) window.Update(allowPress && ReferenceEquals(window, top));
         epoch = WorkroomStorage.State.Epoch;
         if (discardConfirmation != null && (!disassemblyWindow.Open || mode != WorkroomPartProcessing.Mode.Discard ||
-            !WorkroomPartProcessing.IsDiscardConfirmationCurrent(discardConfirmation))) CancelDiscard();
+            !WorkroomPartProcessing.IsDiscardConfirmationPending(discardConfirmation))) CancelDiscard();
         if (revision != WorkroomStorage.State.Revision || generation != epoch)
         {
             var text = string.Join("", WorkroomStorage.State.Items.Where(record => record.Place == "slot").Select(record => record.Item.Name));
@@ -703,11 +696,6 @@ internal sealed class WorkroomComponentUi
         int orientation, bool flipped, bool visible)
     {
         if (!Open || !visible || !AssemblyDebugUi.Alive(sprite)) { CancelPreview(); return; }
-        ghost.sprite = sprite; ghost.color = color;
-        var rect = AssemblyDebugUi.Rect(ghostRoot);
-        rect.anchorMin = rect.anchorMax = new Vector2(.5f,.5f); rect.pivot = new Vector2(0,1);
-        rect.anchoredPosition = position; rect.sizeDelta = size;
-        WorkroomItemSprite.Pose(ghost, orientation, flipped, size);
-        ghostRoot.transform.SetAsLastSibling(); ghostRoot.SetActive(true);
+        WorkroomWindowTools.ShowPreview(ghostRoot, ghost, sprite, position, size, color, orientation, flipped);
     }
 }

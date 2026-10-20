@@ -271,14 +271,24 @@ internal sealed class WorkroomEntryHover : IDisposable
 
     internal static void LateUpdate()
     {
-        foreach (var owner in live) owner.Draw();
-        WorkroomNativeTooltip.Update();
+        WorkroomNativeTooltip.BeginPointerPass();
+        try
+        {
+            foreach (var owner in live) owner.Draw();
+            WorkroomNativeTooltip.Update();
+        }
+        finally { WorkroomNativeTooltip.EndPointerPass(); }
     }
 
     private void Draw()
     {
         if (!Alive) return;
-        var hit = WorkroomNativeTooltip.PointerTarget();
+        var active = false;
+        foreach (var entry in entries)
+            if (entry.Ready && WorkroomUiCleanup.IsAlive(entry.Button) && entry.Button.activeInHierarchy)
+            { active = true; break; }
+        // Passing no hit still clears any outline from the previous active pass.
+        var hit = active ? WorkroomNativeTooltip.PointerTarget() : null;
         Entry selected = null;
         foreach (var entry in entries)
         {

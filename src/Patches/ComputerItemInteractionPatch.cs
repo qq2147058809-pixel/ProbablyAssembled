@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Reflection;
 using HarmonyLib;
 using Il2Cpp;
 
@@ -23,21 +25,17 @@ internal static class ComputerItemInteraction
     }
 }
 
-[HarmonyPatch(typeof(ItemMouseDoubleClickHandler), nameof(ItemMouseDoubleClickHandler.DoubleClickAction))]
-internal static class ComputerDoubleClickPatch
+[HarmonyPatch]
+internal static class ComputerItemOpenPatch
 {
-    private static bool Prefix(GameItem newItem) => ComputerItemInteraction.Intercept(newItem);
-}
+    private static IEnumerable<MethodBase> TargetMethods()
+    {
+        var arguments = new[] { typeof(GameItem), typeof(UnityEngine.Vector2) };
+        yield return AccessTools.DeclaredMethod(typeof(ItemMouseDoubleClickHandler), nameof(ItemMouseDoubleClickHandler.DoubleClickAction), arguments);
+        yield return AccessTools.DeclaredMethod(typeof(ItemMouseDoubleClickHandler), nameof(ItemMouseDoubleClickHandler.OpenContentAction), arguments);
+        yield return AccessTools.DeclaredMethod(typeof(ItemMouseDoubleClickHandler), nameof(ItemMouseDoubleClickHandler.OpenExamineAction), arguments);
+    }
 
-[HarmonyPatch(typeof(ItemMouseDoubleClickHandler), nameof(ItemMouseDoubleClickHandler.OpenContentAction))]
-internal static class ComputerOpenContentPatch
-{
-    private static bool Prefix(GameItem newItem) => ComputerItemInteraction.Intercept(newItem);
-}
-
-[HarmonyPatch(typeof(ItemMouseDoubleClickHandler), nameof(ItemMouseDoubleClickHandler.OpenExamineAction))]
-internal static class ComputerOpenExaminePatch
-{
     private static bool Prefix(GameItem newItem) => ComputerItemInteraction.Intercept(newItem);
 }
 

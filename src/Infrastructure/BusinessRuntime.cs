@@ -105,8 +105,10 @@ internal static class BusinessWorldEventsPatch
         // Signatures verified in the installed Assembly-CSharp interop assembly.
         // These callbacks wake a later observation; leaving-start is not proof
         // that the visitor is gone, and SaveGame completion is not inferred here.
+        // Dismiss clears currentClientInstance before the nested UI callbacks;
+        // their unchanged snapshots can suppress Wake, so observe dismissal itself.
         foreach (var name in new[] { "BeginDay", "OnShutterOpened", "GetNextClient", "TryCallNextClient",
-            "OnItemBought", "OnItemsSold" })
+            "OnItemBought", "OnItemsSold", "DismissCurrentClient" })
             yield return AccessTools.DeclaredMethod(typeof(PlayerStore), name) ?? throw new MissingMethodException(name);
         foreach (var name in new[] { "OnArrived", "SetImmediatlyArrive", "StartLeavingStore", "StartLeavingStoreRight" })
             yield return AccessTools.DeclaredMethod(typeof(StoreClientMono), name) ?? throw new MissingMethodException(name);

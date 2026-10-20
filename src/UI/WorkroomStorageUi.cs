@@ -61,13 +61,6 @@ internal sealed class WorkroomStorageUi
     private long highlightedRevision = -1;
     private string? locale;
     private string displayedStatus = "";
-    private readonly Dictionary<string, string> textCache = new(StringComparer.Ordinal);
-
-    private string CachedText(string key)
-    {
-        if (!textCache.TryGetValue(key, out var value)) textCache[key] = value = WorkroomStorage.Text(key);
-        return value;
-    }
 
     internal WorkroomStorageUi(Canvas canvas, GameObject face, TMP_FontAsset font)
     {
@@ -374,7 +367,6 @@ internal sealed class WorkroomStorageUi
         var changed = catalogChanged || locale != newLocale;
         if (changed)
         {
-            if (locale != newLocale) textCache.Clear();
             if (catalogChanged)
             {
                 catalog = WorkroomStorageCatalog.Build(state.Items);

@@ -18,7 +18,7 @@ internal static class WorkroomMatTransfer
         internal string Family = "", Slot = "";
         internal WorkroomPartProcessing.Mode ProcessingMode;
         internal bool RepairMachine;
-        internal List<WorkroomStorageState.Record> Next = new();
+        internal WorkroomStorageState.Record[] Returning = Array.Empty<WorkroomStorageState.Record>();
         internal long Epoch, Revision;
         internal WorkroomStorageState.Record Source = null!;
         internal byte[] Baseline = Array.Empty<byte>();
@@ -43,7 +43,9 @@ internal static class WorkroomMatTransfer
             if (!MatchesTarget(current!.Target, target)) { reason = Prefix + "unsupported"; return; }
             if (!Current(current!, true)) { reason = Prefix + "changed"; return; }
             reason = Prefix + "invalid";
-            WorkroomStorage.State.Replace(current!.Next);
+            if (!WorkroomSelection.StageWithReturns(current.Source, current.Slot, current.Returning, epoch,
+                orientation, WorkroomSelection.Remember(current.Source), out var returnFailure, () => Current(current, true)))
+            { reason = Prefix + (returnFailure == "return_full" ? "full" : returnFailure == "changed" ? "changed" : "unavailable"); return; }
             committed = current;
             reason = "";
         });
@@ -179,17 +181,16 @@ internal static class WorkroomMatTransfer
             var staged = next.Where(record => record.Place == "slot").ToDictionary(record => record.Slot, StringComparer.Ordinal);
             WorkroomStorageState.Record? Find(string slot) => staged.TryGetValue(slot, out var record) ? record : null;
             if (!WorkroomComponentAssembly.Accepts(proposed.Slot, item, Find)) { failure = Prefix + "no_slot"; return false; }
-            // Fill first frees the incoming footprint. Old records and their
-            // complete snapshots are never mutated during speculative packing.
+            // Validate the incoming pose without mutating live records. The
+            // shared return planner excludes its footprint from room packing.
             WorkroomComponentAssembly.FillSlot(next, staged, incoming, proposed.Slot, orientation);
-            if (!WorkroomStorageState.PlaceAll(next, old.Select(record =>
-                new WorkroomStorageState.Record { Id = record.Id, Item = record.Item })))
+            if (!WorkroomSelection.CanReturn(old, incoming.Id))
             { failure = Prefix + "full"; return false; }
             // Original records were fully validated above. The only changed
-            // item is validated by Reorient; Accepts and PlaceAll establish the
-            // new slot/room relationships. Replace revalidates the full result
+            // item is validated by Reorient; Accepts and the return planner
+            // establish placement. Replace revalidates the full result
             // when publishing, so hover need not parse every payload twice.
-            proposed.Next = next;
+            proposed.Returning = old;
             if (!Current(proposed, insideRun)) { failure = Prefix + "changed"; return false; }
             plan = proposed; failure = ""; return true;
         }

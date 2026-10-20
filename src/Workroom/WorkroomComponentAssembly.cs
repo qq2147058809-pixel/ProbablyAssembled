@@ -63,30 +63,6 @@ internal static class WorkroomComponentAssembly
         return true;
     }
 
-    // Build detached replacement records only. Neither preflight nor a failed
-    // placement changes the live slot records, incoming footprint or snapshots.
-    private static bool PrepareBodyRoute(WorkroomStorageState.Record incoming, int? orientation,
-        out List<WorkroomStorageState.Record> next, out string failure)
-    {
-        next = new(); failure = "wrong_slot";
-        if (incoming.Place != "room" || !BodyFamily(incoming.Item, out var family)) return false;
-        var target = Slot(family, "body");
-        if (At(target) != null) return false;
-        var modeSlots = AssemblyModeSlots();
-        var returning = WorkroomStorage.State.Items.Where(record => record.Place == "slot" && modeSlots.Contains(record.Slot)).ToList();
-        var ids = returning.Select(record => record.Id).ToHashSet(StringComparer.Ordinal);
-        next = WorkroomStorage.State.Items.Where(record => !ids.Contains(record.Id)).ToList();
-        var staged = next.Where(record => record.Place == "slot").ToDictionary(record => record.Slot, StringComparer.Ordinal);
-        WorkroomStorageState.Record? Find(string slot) => staged.TryGetValue(slot, out var record) ? record : null;
-        if (!Accepts(target, incoming.Item, Find)) return false;
-        // Free the incoming room footprint before arranging all old components.
-        FillSlot(next, staged, incoming, target, orientation);
-        if (!WorkroomStorageState.PlaceAll(next, returning.Select(record =>
-            WorkroomStorageState.Copy(record, "box", ""))))
-        { failure = "full"; return false; }
-        return true;
-    }
-
     internal static bool CanRouteBody(WorkroomItemCodec.Snapshot item)
     {
         var epoch = WorkroomStorage.State.Epoch;
@@ -94,13 +70,16 @@ internal static class WorkroomComponentAssembly
         var revision = WorkroomStorage.State.Revision;
         try
         {
-            if (!BodyFamily(item, out _)) return false;
+            if (!BodyFamily(item, out var family) || At(Slot(family, "body")) != null) return false;
             // Drag previews may carry a reoriented copy, so match custody by the
             // unique root identity and model rather than Snapshot references.
             var sources = WorkroomStorage.State.Items.Where(record => record.Place == "room" &&
                 record.Item.Identifier == item.Identifier && record.Item.Nodes.Count == 1 &&
                 record.Item.Nodes[0].UniqueId == item.Nodes[0].UniqueId).Take(2).ToArray();
-            if (sources.Length != 1 || !PrepareBodyRoute(sources[0], null, out _, out _)) return false;
+            if (sources.Length != 1) return false;
+            var slots = AssemblyModeSlots();
+            var returning = WorkroomStorage.State.Items.Where(record => record.Place == "slot" && slots.Contains(record.Slot)).ToArray();
+            if (!WorkroomSelection.CanReturn(returning, sources[0].Id)) return false;
             Current(epoch, revision);
             return true;
         }

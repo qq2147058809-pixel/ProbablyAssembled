@@ -35,8 +35,7 @@ internal sealed class WorkroomMachineUi
         .Select(window => window.Root.transform.GetSiblingIndex()).DefaultIfEmpty(-1).Max();
     internal bool Dragging => Windows.Any(window => window.Dragging);
     internal bool Alive => AssemblyDebugUi.Alive(ghostRoot) && Windows.All(window => AssemblyDebugUi.Alive(window.Root));
-    private WorkroomAssemblyWindow? TopAt(Vector2 point) => Windows.Where(window => window.Hit(point))
-        .OrderByDescending(window => window.Root.transform.GetSiblingIndex()).FirstOrDefault();
+    private WorkroomAssemblyWindow? TopAt(Vector2 point) => WorkroomWindowTools.TopAt(Windows, point);
     internal int SiblingIndex(Vector2 point) => TopAt(point)?.Root.transform.GetSiblingIndex() ?? -1;
     internal bool OwnsRoot(GameObject root) => Windows.Any(window => window.Root.Pointer == root.Pointer);
 
@@ -174,7 +173,7 @@ internal sealed class WorkroomMachineUi
     internal void Close() { foreach (var window in Windows) window.Hide(); CancelPreview(); }
     internal void CloseTop()
     {
-        var top = Windows.Where(window => window.Open).OrderByDescending(window => window.Root.transform.GetSiblingIndex()).FirstOrDefault();
+        var top = WorkroomWindowTools.TopOpen(Windows);
         if (top != null) Hide(top);
     }
     internal bool Hit(Vector2 point) => TopAt(point) != null;
@@ -197,13 +196,7 @@ internal sealed class WorkroomMachineUi
         var slot = HitSlot(point);
         return slot == null ? null : WorkroomMachineAssembly.At(slot);
     }
-    private static Rect ScreenBounds(GameObject root)
-    {
-        var rect = AssemblyDebugUi.Rect(root);
-        var min = RectTransformUtility.WorldToScreenPoint(null, rect.TransformPoint(new Vector3(rect.rect.xMin, rect.rect.yMin, 0)));
-        var max = RectTransformUtility.WorldToScreenPoint(null, rect.TransformPoint(new Vector3(rect.rect.xMax, rect.rect.yMax, 0)));
-        return new Rect(min, max-min);
-    }
+    private static Rect ScreenBounds(GameObject root) => WorkroomWindowTools.ScreenBounds(root);
     private static bool Exposed(WorkroomAssemblySlotUi slot, WorkroomAssemblyWindow owner)
     {
         var bounds = ScreenBounds(slot.Root);
@@ -285,11 +278,6 @@ internal sealed class WorkroomMachineUi
     internal void RoomPreview(Sprite? sprite, Vector2 position, Vector2 size, Color color, int orientation, bool flipped, bool visible)
     {
         if (!Open || !visible || !AssemblyDebugUi.Alive(sprite)) { CancelPreview(); return; }
-        ghost.sprite = sprite; ghost.color = color;
-        var rect = AssemblyDebugUi.Rect(ghostRoot);
-        rect.anchorMin = rect.anchorMax = new Vector2(.5f,.5f); rect.pivot = new Vector2(0,1);
-        rect.anchoredPosition = position; rect.sizeDelta = size;
-        WorkroomItemSprite.Pose(ghost, orientation, flipped, size);
-        ghostRoot.transform.SetAsLastSibling(); ghostRoot.SetActive(true);
+        WorkroomWindowTools.ShowPreview(ghostRoot, ghost, sprite, position, size, color, orientation, flipped);
     }
 }

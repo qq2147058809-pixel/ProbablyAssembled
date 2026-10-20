@@ -254,6 +254,13 @@ internal static class WorkroomSelection
                     WorkroomItemCodec.Destroy(part.Candidate);
         }
     }
+    internal static bool CanReturn(IReadOnlyList<WorkroomStorageState.Record> selected, string? incoming = null)
+    {
+        // Hover/previews check managed capacity and native destination access.
+        // Native restore/placement is deferred to the actual command boundary.
+        using var plan = PlanReturns(selected, incoming, native: false);
+        return plan != null;
+    }
     private static ReturnPlan? PlanReturns(IReadOnlyList<WorkroomStorageState.Record> selected, string? incoming = null, bool native = true)
     {
         var plan = new ReturnPlan(); var success = false;
@@ -362,6 +369,56 @@ internal static class WorkroomSelection
         });
         return result;
     }
+
+    // Called under WorkroomStorage.Run by selection and scene-mat commands.
+    // Keep one return planner and one partial-native-return custody protocol.
+    internal static bool StageWithReturns(WorkroomStorageState.Record record, string target,
+        IReadOnlyList<WorkroomStorageState.Record> selected, long epoch, int? orientation,
+        WorkroomStorageState.Origin returnTo, out string failure, Func<bool>? current = null)
+    {
+        failure = "changed";
+        var revision = State.Revision;
+        bool Fresh() => WorkroomGameAdapter.InventoryTransferAllowed() && State.Ready && State.Epoch == epoch &&
+            State.Revision == revision && ReferenceEquals(State.Find(record.Id), record) &&
+            record.Place is "room" or "box" && selected.All(p => p.Place == "slot" && ReferenceEquals(State.Find(p.Id), p)) &&
+            (current == null || current());
+        if (!Fresh()) return false;
+        // Reorientation can reject malformed geometry. Do that before native
+        // return callbacks or even the incoming box-custody publication.
+        if (orientation is { } turn) WorkroomItemCodec.Reorient(record.Item, turn);
+        using var plan = PlanReturns(selected, record.Id);
+        if (plan == null) { failure = "return_full"; return false; }
+        if (!Fresh()) return false;
+        var returning = selected.Select(r => r.Id).ToHashSet(StringComparer.Ordinal);
+        if (!WorkroomComponentAssembly.Accepts(target, record.Item,
+            slot => State.Items.FirstOrDefault(r => r.Place == "slot" && r.Slot == slot && !returning.Contains(r.Id))))
+        { failure = "incompatible"; return false; }
+        if (plan.Native.Count == 0)
+        {
+            var atomic = State.Items.Where(r => !returning.Contains(r.Id)).ToList();
+            atomic.AddRange(plan.Managed);
+            var slots = atomic.Where(r => r.Place == "slot").ToDictionary(r => r.Slot, StringComparer.Ordinal);
+            WorkroomComponentAssembly.FillSlot(atomic, slots, record, target, orientation, returnTo);
+            if (!Fresh()) return false;
+            State.Replace(atomic); failure = ""; return true;
+        }
+        // Free the incoming footprint before native callbacks. If one fails,
+        // this box record and each remaining slot keep their unique custody.
+        var next = State.Items.ToList();
+        var held = WorkroomStorageState.Copy(record, "box", "");
+        held.ReturnTo = returnTo;
+        next[next.FindIndex(r => r.Id == record.Id)] = held;
+        State.Replace(next);
+        failure = "unavailable";
+        if (!CommitReturns(plan, epoch)) return false;
+        if (!WorkroomGameAdapter.InventoryTransferAllowed() || State.Epoch != epoch ||
+            !ReferenceEquals(State.Find(record.Id), held) || held.Place != "box" ||
+            !WorkroomComponentAssembly.Accepts(target, held.Item, State.FindSlot)) return false;
+        next = State.Items.ToList();
+        var staged = next.Where(r => r.Place == "slot").ToDictionary(r => r.Slot, StringComparer.Ordinal);
+        WorkroomComponentAssembly.FillSlot(next, staged, held, target, orientation, held.ReturnTo);
+        State.Replace(next); failure = ""; return true;
+    }
     internal static bool Select(Candidate candidate, string slot, long epoch, bool repair = false, int? orientation = null)
     {
         if (!WorkroomGameAdapter.InventoryTransferAllowed() || !WorkroomComponentAssembly.Ready(epoch) || epoch != candidate.Epoch) return false;
@@ -391,33 +448,9 @@ internal static class WorkroomSelection
             var record = State.Find(id);
             if (!WorkroomGameAdapter.InventoryTransferAllowed() || record == null || State.Epoch != epoch || record.Place is not ("room" or "box") || !Suitable(slot, record.Item, true, repair)) return;
             var selected = State.Items.Where(r => r.Place == "slot" && Replaced(slot, record.Item).Contains(r.Slot)).ToArray();
-            using var plan = PlanReturns(selected, id);
-            if (plan == null) { Notice("return_full"); return; }
-            if (plan.Native.Count == 0)
-            {
-                var returning = selected.Select(r => r.Id).ToHashSet(StringComparer.Ordinal);
-                var atomic = State.Items.Where(r => !returning.Contains(r.Id)).ToList();
-                atomic.AddRange(plan.Managed);
-                var atomicSlots = atomic.Where(r => r.Place == "slot").ToDictionary(r => r.Slot, StringComparer.Ordinal);
-                WorkroomComponentAssembly.FillSlot(atomic, atomicSlots, record, Target(slot, record.Item), orientation, returnTo:
-                    candidate.Origin == Source.Shop ? record.ReturnTo : Remember(record));
-                if (!WorkroomGameAdapter.InventoryTransferAllowed()) return;
-                State.Replace(atomic); result = true; Notice("selected"); return;
-            }
-            // Remove the incoming room footprint in the same publication as
-            // managed returns, allowing its old position to receive an old part.
-            var next = State.Items.ToList();
-            var staged = next.Where(r => r.Place == "slot").ToDictionary(r => r.Slot, StringComparer.Ordinal);
-            var held = WorkroomStorageState.Copy(record, "box", "");
-            held.ReturnTo = candidate.Origin == Source.Shop ? record.ReturnTo : Remember(record);
-            next[next.FindIndex(r => r.Id == id)] = held;
-            State.Replace(next);
-            if (!CommitReturns(plan, epoch)) { Notice("unavailable"); return; }
-            next = State.Items.ToList();
-            staged = next.Where(r => r.Place == "slot").ToDictionary(r => r.Slot, StringComparer.Ordinal);
-            WorkroomComponentAssembly.FillSlot(next, staged, State.Find(id)!, Target(slot, record.Item), orientation, returnTo: held.ReturnTo);
-            if (!WorkroomGameAdapter.InventoryTransferAllowed()) return;
-            State.Replace(next); result = true; Notice("selected");
+            result = StageWithReturns(record, Target(slot, record.Item), selected, epoch, orientation,
+                candidate.Origin == Source.Shop ? record.ReturnTo! : Remember(record), out var failure);
+            Notice(result ? "selected" : failure);
         });
         return result;
     }

@@ -176,7 +176,7 @@ internal static class WorkroomMachineRepair
             if (result.Identifier != plan.IntactId || result.Broken || result.Value != plan.IntactValue ||
                 result.Count != source.Count || !Bare(result) ||
                 result.Orientation != source.Orientation || result.Flipped != source.Flipped ||
-                !SameShape(result.Footprint, source.Footprint) ||
+                !WorkroomItemCodec.SameShape(result.Footprint, source.Footprint) ||
                 !WorkroomItemCodec.Identities(result).SequenceEqual(WorkroomItemCodec.Identities(source)) ||
                 result.Nodes[0].State.Keys.Concat(result.Nodes[0].ModifiedState.Keys).Any(RepairTag))
                 throw new InvalidOperationException("修后本体、形状、身份或价值不符合原记录。");
@@ -243,8 +243,6 @@ internal static class WorkroomMachineRepair
                 throw new InvalidOperationException("维修改变了本体永久标记：" + tag.Key);
         }
     }
-    private static bool SameShape(WorkroomItemCodec.Shape a, WorkroomItemCodec.Shape b) =>
-        a.Width == b.Width && a.Height == b.Height && a.Cells.SequenceEqual(b.Cells);
     private static bool UsableMaterial(WorkroomStorageState.Record record, string id) => WorkroomComponentParts.UsableMaterial(record, id);
     private static WorkroomStorageState.Record Copy(WorkroomStorageState.Record record, WorkroomItemCodec.Snapshot item) =>
         WorkroomStorageState.Copy(record, item: item);

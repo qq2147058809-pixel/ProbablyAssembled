@@ -24,22 +24,16 @@ namespace PCExpansionEnglishPatch;
 public sealed class Patch : MelonMod
 {
     private bool finished;
-    private bool waitingLogged;
-    private int retryFrames;
 
-    public override void OnInitializeMelon() => TryApply();
+    public override void OnInitializeMelon() => TryApply(false);
 
-    public override void OnUpdate()
+    // MelonLoader invokes this after initialization and Unity's first Start
+    // messages. These two startup opportunities form the entire retry budget.
+    public override void OnLateInitializeMelon() => TryApply(true);
+
+    private void TryApply(bool finalAttempt)
     {
-        if (!finished && ++retryFrames >= 60)
-        {
-            retryFrames = 0;
-            TryApply();
-        }
-    }
-
-    private void TryApply()
-    {
+        if (finished) return;
         try
         {
             foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
@@ -61,10 +55,10 @@ public sealed class Patch : MelonMod
                 return;
             }
 
-            if (!waitingLogged)
+            if (finalAttempt)
             {
+                finished = true;
                 LoggerInstance.Warning("Base mod is missing. No translations or gameplay have been enabled. Install PCExpansion.dll alongside this patch.");
-                waitingLogged = true;
             }
         }
         catch (Exception ex)

@@ -36,7 +36,31 @@ internal static class NpcSmallStories
     }
     private static Playback? playback;
     internal static bool WorkPending => publishing || afterWrite != null || binding != null ||
-        document != null && (document.Luoxi.Token.Length != 0 || document.Jiangbai.Token.Length != 0) || NpcSmallStoryExchange.RecoveryPending;
+        NpcSmallStoryExchange.RecoveryPending || VisitObservationPending;
+    private static bool VisitObservationPending => document != null && owner != null && SameOwner() &&
+        (VisitNeedsObservation(owner, document.Luoxi) || VisitNeedsObservation(owner, document.Jiangbai));
+
+    private static bool VisitNeedsObservation(PlayerStore store, NpcSmallStoryState.Visit visit)
+    {
+        if (visit.Token.Length == 0) return false;
+        var current = store.currentClientInstance?.storeClient;
+        if (current != null && ExactVisit(current, visit.Token))
+        {
+            // A visit receipt remains valid throughout an ordinary conversation.
+            // Only transitions need polling; native departure leaves Arrived set
+            // until the next visitor, so also inspect the actual animation state.
+            var mono = StoreUIManager.Instance?.clientGameObject;
+            return !store.isClientArrived || mono == null || mono.walkingIn || mono.fadeMode != 0;
+        }
+        var queue = store.storeClientManager?.clientStack;
+        if (queue != null)
+            foreach (var queued in queue)
+                if (queued != null && ExactVisit(queued, visit.Token)) return false;
+        // An absent visit still needs FinishDeparted to publish its completion.
+        // Keep retrying if that publication failed; never discard its receipt.
+        return true;
+    }
+
     internal static PlayerStore? Store => Ready ? owner : null;
     internal static NpcSmallStoryState.Document Data => document ?? throw new InvalidOperationException("小剧情尚未绑定。");
     internal static bool Ready

@@ -4,7 +4,7 @@
 游戏 / Game：Probably Stolen Demo  
 [Mod 下载 / Download](https://www.nexusmods.com/probablystolen/mods/385) · [爱发电 / Support](https://afdian.com/a/aming567)
 
-本仓库已同步 **PC expansion 2.6正式源码（2026-10-19）**。仓库名`ProbablyAssembled`保留，本体和独立英文补丁程序集分别为`PCExpansion`、`PCExpansionEnglishPatch`。
+本仓库已同步 **PC expansion 2.6正式源码（2026-10-20）**。仓库名`ProbablyAssembled`保留，本体和独立英文补丁程序集分别为`PCExpansion`、`PCExpansionEnglishPatch`。
 
 ## 代码使用与署名
 
@@ -42,7 +42,7 @@ pwsh -NoProfile -File .\build.ps1 -GameDir "D:\Games\Probably Stolen Demo" -Upda
 
 ## English
 
-This repository contains the **PC expansion 2.6 source dated 2026-10-19**. Base/patch assembly and file versions are `2.6.0.0`; both Melon versions are `2.6`.
+This repository contains the **PC expansion 2.6 source dated 2026-10-20**. Base/patch assembly and file versions are `2.6.0.0`; both Melon versions are `2.6`.
 
 **Prior written permission from 阿铭 is required before reusing, modifying, or adapting the code.** If authorized code is used to make a mod, credit “阿铭”, “PC expansion”, and [this repository](https://github.com/qq2147058809-pixel/ProbablyAssembled) in a player-visible public description, distributed documentation, or in-game acknowledgements. Source comments and commit history alone are insufficient. Attribution alone is not permission. See [LICENSE](LICENSE) for the terms and [COPYRIGHT.md](COPYRIGHT.md) for the copyright notice. This is not an MIT, GPL, or other general open-source grant.
 
@@ -57,3 +57,11 @@ AI assisted development; 阿铭 is the author and maintainer. See the bilingual 
 公开树提供正式构建入口 build.ps1 及其依赖脚本；本机部署、打包脚本和内部工作区资料不随本次源码同步。中文译表按原字节保存以匹配独立英文补丁的 SHA256 契约；请保留 .gitattributes 中对应的换行保护。
 
 The public tree includes the official build.ps1 entry and its required helper scripts. Local deployment/packaging scripts and internal workspace documents are outside this source snapshot. Preserve the Chinese catalog bytes and its .gitattributes override so the English patch fingerprint remains valid.
+
+## 2026-10-20 同步说明 / Source update
+
+版本仍为2.6。本次包含游戏0.46D恢复接口适配、NPC稳定访问与离场恢复修复、英文补丁改为初始化/晚初始化至多两次尝试，以及确认等待、场景悬停射线和三来源归还优化与重复实现合并。中文/英文1287对文本、v27二十页手册及新档门槛2.6保持。收藏室仍在设计阶段，未包含在本次实现中。
+
+Version remains 2.6. This snapshot includes the game 0.46D restore API adjustment, stable NPC visit/departure recovery fixes, bounded English patch initialization through two Loader lifecycle callbacks, lighter confirmation/hover checks, shared three-source returns, and implementation consolidation. The 1,287 translation pairs, twenty v27 manual pages and save generation 2.6 remain unchanged. The collection room is still being designed and is not implemented in this snapshot.
+
+本次同步复用已完成的正式配套构建及托管验证；Unity显示、完整流程和组合Mod验证缺口仍保留。This source synchronization reuses the completed official paired build and managed checks; native rendering, complete gameplay and combined-mod validation remain pending.

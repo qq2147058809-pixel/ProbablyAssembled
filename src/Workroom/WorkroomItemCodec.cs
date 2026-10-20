@@ -306,7 +306,7 @@ internal static class WorkroomItemCodec
         throw new InvalidOperationException("物品保存形状缺少方向字段。");
     }
 
-    private static bool SameShape(Shape a, Shape b) =>
+    internal static bool SameShape(Shape a, Shape b) =>
         a.Width == b.Width && a.Height == b.Height && a.Cells.SequenceEqual(b.Cells);
 
     internal static Candidate Restore(Snapshot snapshot)
@@ -336,7 +336,6 @@ internal static class WorkroomItemCodec
             foreach (var item in candidate.Nodes)
             {
                 MachineHelper.LoadUpgrade(item);
-                MachineHydroponic.LoadHydroponicModuleInvData(item);
                 SpriteHelper.UpdateWaterContainerSprite(item);
                 GeneralHelper.LoadLockItem(item);
                 GeneralHelper.LoadNonOwnedToolTag(item);

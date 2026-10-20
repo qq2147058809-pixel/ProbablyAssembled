@@ -346,11 +346,6 @@ internal sealed partial class ServerRoomView
             (components ? Web("component_day", catalog?.CatalogDay ?? -1) + " " : "") + Web("catalog_terms");
     }
 
-    private void ClearBrowserSelection()
-    {
-        browserNavigation.Reset(); browserMinimized = false; CloseBrowserMenus(); catalogKind = "machines"; bulkCoinIndex = 0;
-    }
-
     private void ReleaseBrowserReferences()
     {
         ReleaseBrowserThemeReferences();

@@ -55,7 +55,6 @@ internal static class ServerRoomMiningModel
     }
 
     internal static decimal BasePrice(int coin) { RequireCoin(coin); return Bases[coin]; }
-    internal static decimal AlgorithmFactor(int coin) { RequireCoin(coin); return Algorithms[coin]; }
     internal static void RequireCoin(int coin)
     {
         if (coin < 0 || coin >= 5) throw new ArgumentOutOfRangeException(nameof(coin));
